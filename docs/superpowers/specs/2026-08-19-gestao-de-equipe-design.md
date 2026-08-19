@@ -13,25 +13,25 @@ O cadastro permanece com quatro etapas:
 3. Administrador;
 4. Revisão.
 
-A etapa de administrador pede somente nome, e-mail e senha da conta administrativa. Não cria usuários dos módulos contratados. A revisão exibe apenas o acesso de administrador criado.
+A etapa de administrador pede somente nome, usuário e senha da conta administrativa. Não cria usuários dos módulos contratados. A revisão exibe apenas o acesso de administrador criado.
 
 ## Gestão de equipe
 
 Uma página `Equipe`, visível somente para administradores, permite:
 
-- listar usuários do estabelecimento, com nome, e-mail, cargo e estado;
-- criar novos usuários com nome, e-mail, senha inicial e cargo;
+- listar usuários do estabelecimento, com nome, usuário, cargo e estado;
+- criar novos usuários com nome, usuário, senha inicial e cargo;
 - editar nome e cargo;
 - redefinir a senha;
 - desativar e reativar acessos.
 
 Vários usuários podem ocupar o mesmo cargo. A seleção de cargos aceita somente papéis correspondentes aos módulos ativos do estabelecimento. O administrador não pode remover ou desativar o último administrador ativo do próprio estabelecimento.
 
-As rotas de API autenticam a sessão e verificam o papel `admin` no servidor. Validam nome, e-mail único, senha com no mínimo seis caracteres e cargo disponível para aquele estabelecimento. Senhas são armazenadas apenas como hash bcrypt.
+As rotas de API autenticam a sessão e verificam o papel `admin` no servidor. Validam nome, usuário único em toda a plataforma, senha com no mínimo seis caracteres e cargo disponível para aquele estabelecimento. Senhas são armazenadas apenas como hash bcrypt.
 
 ## Conta de teste online
 
-Depois da publicação da mudança, será criado no ambiente de produção um estabelecimento de demonstração separado, chamado `Restaurante Teste`. Ele terá um administrador definido no momento da criação, produtos básicos e três pedidos ativos em estado `novo`:
+Depois da publicação da mudança, será criado no ambiente de produção um estabelecimento de demonstração separado, chamado `Restaurante Teste`. A conta de administrador usará o usuário `teste123` e a senha inicial fornecida no momento do provisionamento; a senha não será gravada no código ou no repositório. O estabelecimento terá produtos básicos e três pedidos ativos em estado `novo`:
 
 - um pedido de balcão;
 - um pedido de mesa;
