@@ -17,6 +17,7 @@ interface EstabelecimentoSessao {
   tipoComida: string;
   slug: string;
   modulosAtivos: ModuloSistema[];
+  onboardingConcluido: boolean;
 }
 
 interface RegistroInput {
@@ -33,6 +34,7 @@ interface TenantContextValue {
   entrar: (usuario: string, senha: string) => Promise<string | null>;
   sair: () => Promise<void>;
   registrar: (dados: RegistroInput) => Promise<string | null>;
+  concluirOnboarding: () => Promise<void>;
 }
 
 const TenantContext = createContext<TenantContextValue | null>(null);
@@ -94,8 +96,13 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     return null;
   }, []);
 
+  const concluirOnboarding = useCallback(async () => {
+    setEstabelecimento((atual) => (atual ? { ...atual, onboardingConcluido: true } : atual));
+    await fetch("/api/estabelecimento/onboarding", { method: "PATCH" });
+  }, []);
+
   return (
-    <TenantContext.Provider value={{ carregando, estabelecimento, usuarioAtual, entrar, sair, registrar }}>
+    <TenantContext.Provider value={{ carregando, estabelecimento, usuarioAtual, entrar, sair, registrar, concluirOnboarding }}>
       {children}
     </TenantContext.Provider>
   );

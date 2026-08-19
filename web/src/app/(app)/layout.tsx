@@ -7,6 +7,7 @@ import { MobileNav } from "@/components/layout/MobileNav";
 import { useTenant } from "@/lib/tenant-context";
 import { modulosPermitidos } from "@/lib/tenant-types";
 import { OhFomeMark } from "@/components/ui/OhFomeLogo";
+import { OnboardingFlow } from "@/components/onboarding/OnboardingFlow";
 
 export default function AppLayout({ children }: LayoutProps<"/">) {
   const { carregando, estabelecimento, usuarioAtual } = useTenant();
@@ -48,6 +49,7 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
       <Sidebar />
       <main className="min-w-0 flex-1 overflow-x-hidden">{children}</main>
       <MobileNav />
+      <OnboardingFlow />
     </div>
   );
 }

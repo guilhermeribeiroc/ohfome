@@ -138,6 +138,10 @@ html.lenis, html.lenis body { height: auto; }
 @keyframes of-fade { from { opacity: 0; } }
 @keyframes of-sheet { from { opacity: 0; transform: translateY(24px); } }
 @keyframes of-shimmer { to { transform: translateX(100%); } }
+@keyframes onb-pop { from { opacity: 0; transform: translateY(10px) scale(.97); } }
+@keyframes onb-ring { 0%, 100% { box-shadow: 0 0 0 0 rgba(232,93,63,.35); } 50% { box-shadow: 0 0 0 10px rgba(232,93,63,0); } }
+@keyframes onb-dot { 0%, 100% { opacity: .3; transform: scale(.8); } 50% { opacity: 1; transform: scale(1); } }
+@keyframes onb-item { from { opacity: 0; transform: translateX(-6px); } }
 
 @media (min-width: 640px) { .of-modal-backdrop { align-items: center; padding: 1.5rem; } .of-modal-panel { border-radius: 1.6rem; } }
 @media (min-width: 768px) { .of-page { padding: 2.25rem 2rem 3rem; } }

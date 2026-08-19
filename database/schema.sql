@@ -78,6 +78,7 @@ create table estabelecimentos (
   slug text not null unique,
   logo_url text,
   whatsapp_atendimento text,
+  onboarding_concluido boolean not null default false,
   ativo boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
