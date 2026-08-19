@@ -11,6 +11,11 @@ alter table usuarios alter column usuario set not null;
 create unique index if not exists uq_usuarios_usuario on usuarios(usuario);
 alter table usuarios alter column email drop not null;
 
+-- PostgreSQL não permite renomear parâmetros em CREATE OR REPLACE FUNCTION.
+-- A função não possui dependências por OID, então a recriamos com o novo
+-- identificador de acesso antes de publicar a versão por usuário.
+drop function if exists fn_autenticar(text);
+
 create or replace function fn_autenticar(p_usuario text)
 returns table (
   usuario_id uuid,
