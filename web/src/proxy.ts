@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 const APEX_DOMAIN = "ohfome.app";
 const RESERVADOS = new Set(["www", "app", "api", "admin"]);
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const host = request.headers.get("host") ?? "";
   const hostname = host.split(":")[0];
 

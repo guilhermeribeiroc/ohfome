@@ -36,6 +36,7 @@ export function MesasModule() {
 
   const [mesaAbertaId, setMesaAbertaId] = useState<string | null>(null);
   const [itensPorMesa, setItensPorMesa] = useState<Record<string, ItemLancado[]>>({});
+  const [obsPorMesa, setObsPorMesa] = useState<Record<string, string>>({});
   const [enviando, setEnviando] = useState(false);
   const [enviados, setEnviados] = useState<Record<string, boolean>>({});
   const [gerenciarAberto, setGerenciarAberto] = useState(false);
@@ -43,6 +44,7 @@ export function MesasModule() {
 
   const mesaAberta = (mesas ?? []).find((m) => m.id === mesaAbertaId) ?? null;
   const itensAtuais = useMemo(() => mesaAbertaId ? itensPorMesa[mesaAbertaId] ?? [] : [], [itensPorMesa, mesaAbertaId]);
+  const obsAtual = mesaAbertaId ? obsPorMesa[mesaAbertaId] ?? "" : "";
   const totalAtual = useMemo(
     () => itensAtuais.reduce((soma, item) => soma + item.precoUnitario * item.quantidade, 0),
     [itensAtuais]
@@ -83,22 +85,24 @@ export function MesasModule() {
     });
   }
 
-  async function enviarParaCozinha() {
+  async function lancarPedido() {
     if (!mesaAbertaId || itensAtuais.length === 0) return;
     setEnviando(true);
+    const observacoes = obsPorMesa[mesaAbertaId]?.trim();
     const res = await fetch("/api/pedidos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         tipo: "mesa",
         mesaId: mesaAbertaId,
-        itens: itensAtuais.map((i) => ({ produtoId: i.produtoId, quantidade: i.quantidade })),
+        itens: itensAtuais.map((i) => ({ produtoId: i.produtoId, quantidade: i.quantidade, observacoes: observacoes || undefined })),
       }),
     });
     setEnviando(false);
     if (!res.ok) return;
 
     setItensPorMesa((atual) => ({ ...atual, [mesaAbertaId]: [] }));
+    setObsPorMesa((atual) => ({ ...atual, [mesaAbertaId]: "" }));
     setEnviados((atual) => ({ ...atual, [mesaAbertaId]: true }));
     recarregarMesas();
     setTimeout(() => setEnviados((atual) => ({ ...atual, [mesaAbertaId]: false })), 2500);
@@ -203,13 +207,25 @@ export function MesasModule() {
           </div>
 
           <div className="border-t border-cream-200 bg-surface/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur sm:p-5">
+            {itensAtuais.length > 0 && (
+              <label className="mb-3 block">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[.1em] text-ink-400">Observações desta rodada (opcional)</span>
+                <textarea
+                  value={obsAtual}
+                  onChange={(e) => mesaAbertaId && setObsPorMesa((atual) => ({ ...atual, [mesaAbertaId]: e.target.value }))}
+                  placeholder="Ex.: sem cebola, ponto da carne, tirar pimenta..."
+                  rows={2}
+                  className="of-field resize-none text-sm"
+                />
+              </label>
+            )}
             <div className="mb-3 flex items-center justify-between">
               <span className="text-sm text-ink-400">{itensAtuais.length} item(ns) nesta rodada · Total da mesa</span>
               <span className="font-display text-lg font-bold text-ink-900">
                 R$ {totalComanda.toFixed(2).replace(".", ",")}
               </span>
             </div>
-            <div className="flex gap-2"><button onClick={imprimirComanda} className="of-btn-secondary min-h-12 shrink-0 px-4" aria-label="Imprimir comanda"><Printer size={17} /><span className="hidden sm:inline">Imprimir</span></button><button onClick={enviarParaCozinha} disabled={itensAtuais.length === 0 || enviando} className="of-btn-primary flex-1">{enviando ? "Enviando..." : enviados[mesaAbertaId ?? ""] ? <><Check size={17} /> Enviado para a cozinha</> : <>Enviar para a cozinha <ArrowRight size={17} /></>}</button></div>
+            <div className="flex gap-2"><button onClick={imprimirComanda} className="of-btn-secondary min-h-12 shrink-0 px-4" aria-label="Imprimir comanda"><Printer size={17} /><span className="hidden sm:inline">Imprimir</span></button><button onClick={lancarPedido} disabled={itensAtuais.length === 0 || enviando} className="of-btn-primary flex-1">{enviando ? "Lançando..." : enviados[mesaAbertaId ?? ""] ? <><Check size={17} /> Pedido lançado</> : <>Lançar pedido <ArrowRight size={17} /></>}</button></div>
           </div>
         </div>
       )}
