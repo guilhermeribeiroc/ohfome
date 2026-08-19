@@ -25,7 +25,11 @@ export function SiteModule() {
   const [salvandoWhatsapp, setSalvandoWhatsapp] = useState(false);
   const [erroWhatsapp, setErroWhatsapp] = useState("");
 
-  const link = estabelecimento ? `${origem}/cardapio/${estabelecimento.slug}` : "";
+  const link = estabelecimento
+    ? origem.includes("ohfome.app")
+      ? `${origem.replace("://", `://${estabelecimento.slug}.`)}`
+      : `${origem}/cardapio/${estabelecimento.slug}`
+    : "";
 
   useEffect(() => {
     fetch("/api/estabelecimento/logo")
