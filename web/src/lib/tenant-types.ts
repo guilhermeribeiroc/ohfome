@@ -83,35 +83,43 @@ export interface PlanoComercialInfo {
   id: PlanoComercialId;
   label: string;
   descricao: string;
+  precoMensal: number;
 }
 
 export const MODULOS_DE_VENDA: ModuloSistema[] = ["balcao", "garcom", "cozinha", "site"];
+
+export const DIAS_TESTE_GRATIS = 7;
 
 export const PLANOS_COMERCIAIS: Record<PlanoComercialId, PlanoComercialInfo> = {
   basico: {
     id: "basico",
     label: "Plano Básico",
     descricao: "Administração e Balcão para centralizar a operação.",
-  },
-  basico_2: {
-    id: "basico_2",
-    label: "Plano Básico 2.0",
-    descricao: "Administração, Balcão, Cardápio Digital e controle de Delivery para pedidos online.",
+    precoMensal: 89,
   },
   profissional: {
     id: "profissional",
     label: "Plano Profissional",
     descricao: "Administração, Balcão e Garçom para uma operação conectada no salão.",
+    precoMensal: 129,
   },
   intermediario: {
     id: "intermediario",
     label: "Plano Intermediário",
     descricao: "Administração, Balcão, Garçom e Cozinha integrados em tempo real.",
+    precoMensal: 139,
+  },
+  basico_2: {
+    id: "basico_2",
+    label: "Plano Básico 2.0",
+    descricao: "Administração, Balcão, Cardápio Digital e controle de Delivery para pedidos online.",
+    precoMensal: 159,
   },
   plus: {
     id: "plus",
     label: "Plano Plus",
     descricao: "Administração, Balcão, Garçom, Cardápio Digital e controle de Delivery, com Cozinha opcional.",
+    precoMensal: 199,
   },
 };
 

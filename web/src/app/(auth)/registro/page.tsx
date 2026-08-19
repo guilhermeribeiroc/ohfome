@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTenant } from "@/lib/tenant-context";
-import { MODULOS, MODULOS_DE_VENDA, SEGMENTOS, planoParaModulos } from "@/lib/tenant-types";
+import { DIAS_TESTE_GRATIS, MODULOS, MODULOS_DE_VENDA, SEGMENTOS, planoParaModulos } from "@/lib/tenant-types";
 import type { ModuloSistema, TipoEstabelecimento } from "@/lib/tenant-types";
 import { Check } from "lucide-react";
 import { ModuleIcon, SegmentIcon } from "@/components/ui/AppIcons";
@@ -190,7 +190,28 @@ export default function RegistroPage() {
 
           <div className={`rounded-2xl p-4 ring-1 transition-all ${planoSelecionado ? "bg-coral-050 ring-coral-100" : "bg-cream-50 ring-cream-200"}`}>
             <p className="text-[10px] font-bold uppercase tracking-[.14em] text-ink-400">Plano identificado</p>
-            {planoSelecionado ? <><p className="mt-1 font-display text-xl font-bold text-coral-600">{planoSelecionado.label}</p><p className="mt-1 text-xs leading-5 text-ink-600">{planoSelecionado.descricao}</p><div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-[11px] font-semibold text-ink-600 ring-1 ring-cream-200"><Check size={13} className="text-coral-600" /> Administração incluída</div></> : <p className="mt-1 text-xs leading-5 text-ink-400">Selecione Balcão para visualizar o plano correspondente.</p>}
+            {planoSelecionado ? (
+              <>
+                <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <p className="font-display text-xl font-bold text-coral-600">{planoSelecionado.label}</p>
+                  <p className="text-sm font-semibold text-ink-600">
+                    R$ {planoSelecionado.precoMensal}
+                    <span className="text-xs font-normal text-ink-400">/mês</span>
+                  </p>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-ink-600">{planoSelecionado.descricao}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-[11px] font-semibold text-ink-600 ring-1 ring-cream-200">
+                    <Check size={13} className="text-coral-600" /> Administração incluída
+                  </div>
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-[11px] font-semibold text-ink-600 ring-1 ring-cream-200">
+                    <Check size={13} className="text-coral-600" /> {DIAS_TESTE_GRATIS} dias grátis para testar
+                  </div>
+                </div>
+              </>
+            ) : (
+              <p className="mt-1 text-xs leading-5 text-ink-400">Selecione Balcão para visualizar o plano correspondente.</p>
+            )}
           </div>
 
           <div className="flex gap-3">
@@ -305,7 +326,21 @@ export default function RegistroPage() {
               <SegmentIcon segmento={tipo} size={15} /> {SEGMENTOS.find((s) => s.id === tipo)?.label}
             </p>
 
-            {planoSelecionado && <div className="mt-4 rounded-xl bg-coral-050 px-3 py-2.5 ring-1 ring-coral-100"><p className="text-[10px] font-bold uppercase tracking-[.14em] text-coral-600">Plano contratado</p><p className="mt-0.5 font-display text-base font-bold text-ink-900">{planoSelecionado.label}</p></div>}
+            {planoSelecionado && (
+              <div className="mt-4 rounded-xl bg-coral-050 px-3 py-2.5 ring-1 ring-coral-100">
+                <p className="text-[10px] font-bold uppercase tracking-[.14em] text-coral-600">Plano contratado</p>
+                <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2">
+                  <p className="font-display text-base font-bold text-ink-900">{planoSelecionado.label}</p>
+                  <p className="text-sm font-semibold text-ink-600">
+                    R$ {planoSelecionado.precoMensal}
+                    <span className="text-xs font-normal text-ink-400">/mês</span>
+                  </p>
+                </div>
+                <p className="mt-1 text-[11px] font-semibold text-coral-600">
+                  {DIAS_TESTE_GRATIS} dias grátis antes da primeira cobrança
+                </p>
+              </div>
+            )}
 
             <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-ink-400">Módulos ativos</p>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
