@@ -1,0 +1,159 @@
+@import "tailwindcss";
+
+:root {
+  --color-cream-50: #faf9f7;
+  --color-cream-100: #f5f2ee;
+  --color-cream-200: #eae5df;
+  --color-cream-300: #d9d1c8;
+  --color-surface: #ffffff;
+  --color-ink-900: #191714;
+  --color-ink-600: #615b54;
+  --color-ink-400: #918a82;
+  --color-coral-050: #fff1ed;
+  --color-coral-100: #ffddd3;
+  --color-coral-400: #f47d62;
+  --color-coral-500: #e85d3f;
+  --color-coral-600: #c94329;
+  --color-basil-050: #eaf8f0;
+  --color-basil-400: #56b982;
+  --color-basil-500: #299765;
+  --color-basil-600: #177a4e;
+  --color-mango-400: #eebf5b;
+  --color-mango-500: #cc8b19;
+  --color-danger-050: #fff0ef;
+  --color-danger-400: #ed756c;
+  --color-danger-500: #dc4b43;
+  --color-danger-600: #b9322d;
+  --color-status-novo: #d89524;
+  --color-status-em_preparo: #cf6a3f;
+  --color-status-pronto: #299765;
+  --color-status-saiu_para_entrega: #477cc7;
+  --color-status-finalizado: #827b73;
+  --color-status-cancelado: #dc4b43;
+  --shadow-panel: 0 1px 2px rgba(25,23,20,.04), 0 14px 36px -24px rgba(25,23,20,.22);
+  --shadow-float: 0 24px 70px -24px rgba(25,23,20,.38);
+}
+
+@theme inline {
+  --color-cream-50: var(--color-cream-50);
+  --color-cream-100: var(--color-cream-100);
+  --color-cream-200: var(--color-cream-200);
+  --color-cream-300: var(--color-cream-300);
+  --color-surface: var(--color-surface);
+  --color-ink-900: var(--color-ink-900);
+  --color-ink-600: var(--color-ink-600);
+  --color-ink-400: var(--color-ink-400);
+  --color-coral-050: var(--color-coral-050);
+  --color-coral-100: var(--color-coral-100);
+  --color-coral-400: var(--color-coral-400);
+  --color-coral-500: var(--color-coral-500);
+  --color-coral-600: var(--color-coral-600);
+  --color-basil-050: var(--color-basil-050);
+  --color-basil-400: var(--color-basil-400);
+  --color-basil-500: var(--color-basil-500);
+  --color-basil-600: var(--color-basil-600);
+  --color-mango-400: var(--color-mango-400);
+  --color-mango-500: var(--color-mango-500);
+  --color-danger-050: var(--color-danger-050);
+  --color-danger-400: var(--color-danger-400);
+  --color-danger-500: var(--color-danger-500);
+  --color-danger-600: var(--color-danger-600);
+  --color-status-novo: var(--color-status-novo);
+  --color-status-em_preparo: var(--color-status-em_preparo);
+  --color-status-pronto: var(--color-status-pronto);
+  --color-status-saiu_para_entrega: var(--color-status-saiu_para_entrega);
+  --color-status-finalizado: var(--color-status-finalizado);
+  --color-status-cancelado: var(--color-status-cancelado);
+  --font-sans: var(--font-lexend);
+  --font-display: var(--font-bricolage);
+}
+
+* { box-sizing: border-box; scrollbar-color: #cfc7bd transparent; scrollbar-width: thin; }
+html { background: var(--color-cream-50); }
+body {
+  min-width: 320px;
+  background: radial-gradient(circle at 4% 0%, rgba(232,93,63,.055), transparent 25rem), linear-gradient(180deg, #fbfaf8 0%, var(--color-cream-50) 42%);
+  color: var(--color-ink-900);
+}
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+button, a { outline: none; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid rgba(232,93,63,.42); outline-offset: 2px; }
+::selection { background: var(--color-coral-100); color: var(--color-coral-600); }
+
+.of-page { width: 100%; max-width: 1600px; margin: 0 auto; padding: 1.25rem 1rem 6.5rem; }
+.of-page-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
+.of-eyebrow { color: var(--color-coral-600); font-size: .68rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.of-title { margin-top: .25rem; font-family: var(--font-bricolage); font-size: clamp(1.65rem, 4vw, 2.35rem); font-weight: 700; letter-spacing: -.045em; line-height: 1.05; }
+.of-subtitle { max-width: 42rem; margin-top: .4rem; color: var(--color-ink-400); font-size: .82rem; line-height: 1.6; }
+.of-panel { border: 1px solid rgba(217,209,200,.68); border-radius: 1.35rem; background: rgba(255,255,255,.9); box-shadow: var(--shadow-panel); }
+.of-panel-header { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: 1rem 1.1rem; border-bottom: 1px solid rgba(234,229,223,.8); }
+.of-btn-primary, .of-btn-secondary, .of-btn-danger, .of-icon-btn { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: .5rem; border-radius: .85rem; padding: .68rem 1rem; font-size: .78rem; font-weight: 650; transition: transform .2s ease, box-shadow .2s ease, background .2s ease, color .2s ease, border-color .2s ease; }
+.of-btn-primary { color: white; background: var(--color-ink-900); box-shadow: 0 10px 24px -14px rgba(25,23,20,.7); }
+.of-btn-primary:hover { transform: translateY(-1px); background: #2b2824; box-shadow: 0 16px 30px -16px rgba(25,23,20,.72); }
+.of-btn-primary:active, .of-btn-secondary:active, .of-icon-btn:active { transform: scale(.97); }
+.of-btn-secondary { color: var(--color-ink-600); border: 1px solid var(--color-cream-200); background: rgba(255,255,255,.86); }
+.of-btn-secondary:hover { border-color: var(--color-cream-300); color: var(--color-ink-900); background: white; }
+.of-btn-danger { color: var(--color-danger-600); background: var(--color-danger-050); }
+.of-icon-btn { width: 44px; padding: 0; color: var(--color-ink-600); border: 1px solid var(--color-cream-200); background: white; }
+.of-btn-primary:disabled, .of-btn-secondary:disabled { cursor: not-allowed; opacity: .42; transform: none; }
+.of-field { width: 100%; min-height: 46px; border: 1px solid var(--color-cream-200); border-radius: .85rem; background: rgba(255,255,255,.92); padding: .72rem .85rem; color: var(--color-ink-900); font-size: .82rem; outline: none; transition: border-color .2s ease, box-shadow .2s ease, background .2s ease; }
+.of-field::placeholder { color: #aaa39c; }
+.of-field:focus { border-color: rgba(232,93,63,.55); background: white; box-shadow: 0 0 0 4px rgba(232,93,63,.1); }
+.of-label { display: block; margin-bottom: .42rem; color: var(--color-ink-600); font-size: .69rem; font-weight: 650; }
+.of-modal-backdrop { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-end; justify-content: center; background: rgba(25,23,20,.52); backdrop-filter: blur(8px); animation: of-fade .2s ease both; }
+.of-modal-panel { width: 100%; max-height: 91dvh; overflow: hidden; border: 1px solid rgba(255,255,255,.55); border-radius: 1.6rem 1.6rem 0 0; background: var(--color-cream-50); box-shadow: var(--shadow-float); animation: of-sheet .32s cubic-bezier(.2,.8,.2,1) both; }
+.of-tabs { display: flex; gap: .25rem; padding: .28rem; overflow-x: auto; border: 1px solid var(--color-cream-200); border-radius: 1rem; background: rgba(255,255,255,.62); }
+.of-tab { min-height: 42px; flex: 1 0 auto; border-radius: .72rem; padding: .62rem .9rem; color: var(--color-ink-400); font-size: .75rem; font-weight: 650; transition: .2s ease; }
+.of-tab[data-active="true"] { color: var(--color-ink-900); background: white; box-shadow: 0 4px 14px -10px rgba(25,23,20,.5); }
+.of-status { display: inline-flex; align-items: center; gap: .35rem; border-radius: 999px; padding: .28rem .58rem; font-size: .65rem; font-weight: 650; line-height: 1; }
+.of-skeleton { position: relative; overflow: hidden; background: var(--color-cream-200); }
+.of-skeleton::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255,255,255,.8), transparent); animation: of-shimmer 1.4s infinite; }
+.menu-field { width: 100%; min-height: 50px; border: 1px solid var(--color-cream-200); border-radius: 1rem; background: rgba(255,255,255,.72); padding: .85rem 1rem; color: var(--color-ink-900); font-size: .85rem; outline: none; transition: border-color .2s ease, box-shadow .2s ease, background .2s ease; }
+.menu-field::placeholder { color: var(--color-ink-400); }
+.menu-field:focus { border-color: rgba(201,67,41,.5); background: white; box-shadow: 0 0 0 4px rgba(201,67,41,.1); }
+
+/* Cardápio público: mesmos tokens de cor utilizados no aplicativo administrativo. */
+.cardapio-theme { background-color: var(--color-cream-50) !important; color: var(--color-ink-900) !important; }
+.cardapio-theme [class*="bg-[#eee8df]"] { background-color: var(--color-cream-50) !important; }
+.cardapio-theme [class*="border-[#eee8df]"], .cardapio-theme [class*="ring-[#eee8df]"] { border-color: var(--color-cream-50) !important; --tw-ring-color: var(--color-cream-50) !important; }
+.cardapio-theme [class*="bg-[#f4eee6]"] { background-color: var(--color-cream-100) !important; }
+.cardapio-theme [class*="bg-[#181714]"] { background-color: var(--color-ink-900) !important; }
+.cardapio-theme [class*="text-[#181714]"] { color: var(--color-ink-900) !important; }
+.cardapio-theme [class*="bg-[#0e7775]"] { background-color: var(--color-coral-600) !important; }
+.cardapio-theme [class*="text-[#0e7775]"] { color: var(--color-coral-600) !important; }
+.cardapio-theme [class*="border-[#0e7775]"] { border-color: var(--color-coral-600) !important; }
+.cardapio-theme [class*="ring-[#0e7775]"] { --tw-ring-color: rgba(201,67,41,.14) !important; }
+.cardapio-theme [class*="shadow-[#0e7775]"] { --tw-shadow-color: rgba(201,67,41,.24) !important; }
+.cardapio-theme [class*="bg-[#941c42]"] { background-color: var(--color-coral-500) !important; }
+.cardapio-theme [class*="text-[#d7b58b]"] { color: var(--color-mango-400) !important; }
+.cardapio-theme [class*="bg-[#d8d0c6]"] { background-color: var(--color-cream-300) !important; }
+
+/* Lenis controla a rolagem apenas no cardápio público. Sem estas regras o
+   navegador pode concorrer com a animação no desktop e travar o scroll. */
+html.lenis, html.lenis body { height: auto; }
+.lenis.lenis-smooth { scroll-behavior: auto !important; }
+.lenis.lenis-stopped { overflow: hidden; }
+.lenis [data-lenis-prevent] { overscroll-behavior: contain; }
+
+@keyframes of-fade { from { opacity: 0; } }
+@keyframes of-sheet { from { opacity: 0; transform: translateY(24px); } }
+@keyframes of-shimmer { to { transform: translateX(100%); } }
+
+@media (min-width: 640px) { .of-modal-backdrop { align-items: center; padding: 1.5rem; } .of-modal-panel { border-radius: 1.6rem; } }
+@media (min-width: 768px) { .of-page { padding: 2.25rem 2rem 3rem; } }
+@media (max-width: 767px) {
+  .responsive-table, .responsive-table tbody { display: block; width: 100%; }
+  .responsive-table thead { display: none; }
+  .responsive-table tbody { display: grid; gap: .75rem; padding: .75rem; }
+  .responsive-table tr { display: grid; overflow: hidden; border: 1px solid var(--color-cream-200); border-radius: 1rem; background: white; box-shadow: 0 6px 20px -18px rgba(25,23,20,.45); }
+  .responsive-table td { display: flex; min-height: 42px; align-items: center; justify-content: space-between; gap: 1rem; padding: .65rem .8rem !important; border-bottom: 1px solid var(--color-cream-100); text-align: right; }
+  .responsive-table td::before { color: var(--color-ink-400); font-size: .64rem; font-weight: 650; text-transform: uppercase; letter-spacing: .08em; }
+  .responsive-table td:nth-child(1)::before { content: "Insumo"; }
+  .responsive-table td:nth-child(2)::before { content: "Saldo"; }
+  .responsive-table td:nth-child(3)::before { content: "Mínimo"; }
+  .responsive-table td:nth-child(4)::before { content: "Custo"; }
+  .responsive-table td:nth-child(5)::before { content: "Fornecedor"; }
+  .responsive-table td:last-child { border-bottom: 0; }
+  .responsive-table td:last-child::before { content: none; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
