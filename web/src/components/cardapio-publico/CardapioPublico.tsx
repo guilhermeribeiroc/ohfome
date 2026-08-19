@@ -12,6 +12,8 @@ import { CategoryIcon, SegmentIcon } from "@/components/ui/AppIcons";
 import { OhFomeMark } from "@/components/ui/OhFomeLogo";
 import { SEGMENTOS } from "@/lib/tenant-types";
 import { mascararMoeda, numeroDaMoeda } from "@/lib/moeda";
+import { usePolling } from "@/lib/use-polling";
+import { Bell, ChefHat, PackageCheck, PackageSearch } from "lucide-react";
 
 interface ProdutoPublico {
   id: string;
@@ -33,7 +35,23 @@ interface CardapioData {
 }
 
 type GrupoMenu = "comidas" | "bebidas";
-type Overlay = "produto" | "carrinho" | "info" | "sucesso" | "menu" | null;
+type Overlay = "produto" | "carrinho" | "info" | "sucesso" | "menu" | "pedidos" | null;
+
+interface PedidoAtivo { id: string; codigo: number }
+
+function chavePedidoAtivo(slug: string) {
+  return `ohfome_pedido_ativo_${slug}`;
+}
+
+function carregarPedidoAtivo(slug: string): PedidoAtivo | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const bruto = window.localStorage.getItem(chavePedidoAtivo(slug));
+    return bruto ? (JSON.parse(bruto) as PedidoAtivo) : null;
+  } catch {
+    return null;
+  }
+}
 
 const BEBIDA = /bebida|suco|refri|refrigerante|drink|cerveja|vinho|água|agua|café|cafe|chá|cha/i;
 const ATLAS_POSITIONS = ["0% 0%", "50% 0%", "100% 0%", "0% 100%", "50% 100%", "100% 100%"];
@@ -79,7 +97,11 @@ export function CardapioPublico({ slug }: { slug: string }) {
   const [busca, setBusca] = useState("");
   const [codigoPedido, setCodigoPedido] = useState<number | null>(null);
   const [linkWhatsapp, setLinkWhatsapp] = useState<string | null>(null);
-  const [linkAcompanhamento, setLinkAcompanhamento] = useState<string | null>(null);
+  const [pedidoAtivo, setPedidoAtivo] = useState<PedidoAtivo | null>(null);
+
+  useEffect(() => {
+    setPedidoAtivo(carregarPedidoAtivo(slug));
+  }, [slug]);
   const refsCategoria = useRef<Record<string, HTMLElement | null>>({});
   const lenisRef = useRef<Lenis | null>(null);
 
@@ -288,22 +310,27 @@ export function CardapioPublico({ slug }: { slug: string }) {
         <div className="mx-auto grid max-w-xl grid-cols-4 px-2">
           <BottomAction ativo label="Menu" icon={BookOpenText} onClick={irParaTopo} />
           <BottomAction label="Pedido" icon={ShoppingBag} badge={totalItens} onClick={() => setOverlay("carrinho")} />
-          <BottomAction label="Atendimento" icon={MessageCircle} onClick={() => setOverlay("info")} />
+          {pedidoAtivo ? (
+            <BottomAction label="Meus pedidos" icon={PackageSearch} destaque onClick={() => setOverlay("pedidos")} />
+          ) : (
+            <BottomAction label="Atendimento" icon={MessageCircle} onClick={() => setOverlay("info")} />
+          )}
           <BottomAction label="Info" icon={CircleHelp} onClick={() => setOverlay("info")} />
         </div>
       </nav>
 
       {overlay === "produto" && produtoSelecionado && <ProdutoDetalhe produto={produtoSelecionado} quantidade={carrinho[produtoSelecionado.id] ?? 0} ajustar={ajustar} onFechar={() => setOverlay(null)} onAbrirCarrinho={() => setOverlay("carrinho")} />}
-      {overlay === "carrinho" && <CarrinhoSheet slug={slug} dados={dados} carrinho={carrinho} ajustar={ajustar} totalValor={totalValor} onFechar={() => setOverlay(null)} onConfirmado={(codigo, whatsapp, acompanhamento) => { setCarrinho({}); setCodigoPedido(codigo); setLinkWhatsapp(whatsapp); setLinkAcompanhamento(acompanhamento); if (acompanhamento) window.open(acompanhamento, "_blank", "noopener,noreferrer"); setOverlay("sucesso"); }} />}
+      {overlay === "carrinho" && <CarrinhoSheet slug={slug} dados={dados} carrinho={carrinho} ajustar={ajustar} totalValor={totalValor} onFechar={() => setOverlay(null)} onConfirmado={(codigo, whatsapp, pedidoId) => { setCarrinho({}); setCodigoPedido(codigo); setLinkWhatsapp(whatsapp); const ativo = { id: pedidoId, codigo }; setPedidoAtivo(ativo); try { window.localStorage.setItem(chavePedidoAtivo(slug), JSON.stringify(ativo)); } catch { /* localStorage indisponível */ } setOverlay("sucesso"); }} />}
       {overlay === "info" && <InfoSheet dados={dados} onFechar={() => setOverlay(null)} />}
       {overlay === "menu" && <MenuLateral dados={dados} categorias={categorias} categoriaAtiva={categoriaAtivaExibida} carrinhoItens={totalItens} onFechar={() => setOverlay(null)} onSelecionar={(nome) => { setOverlay(null); requestAnimationFrame(() => requestAnimationFrame(() => irParaCategoria(nome))); }} onAbrirPedido={() => setOverlay("carrinho")} onAbrirInfo={() => setOverlay("info")} />}
-      {overlay === "sucesso" && <TelaSucesso codigo={codigoPedido} whatsappUrl={linkWhatsapp} acompanhamentoUrl={linkAcompanhamento} onNovoPedido={() => setOverlay(null)} />}
+      {overlay === "sucesso" && <TelaSucesso codigo={codigoPedido} whatsappUrl={linkWhatsapp} temAcompanhamento={Boolean(pedidoAtivo)} onAcompanhar={() => setOverlay("pedidos")} onNovoPedido={() => setOverlay(null)} />}
+      {overlay === "pedidos" && pedidoAtivo && <PedidoSheet slug={slug} pedidoId={pedidoAtivo.id} onFechar={() => setOverlay(null)} />}
     </div>
   );
 }
 
-function BottomAction({ label, icon: Icon, onClick, ativo, badge = 0 }: { label: string; icon: typeof BookOpenText; onClick: () => void; ativo?: boolean; badge?: number }) {
-  return <button onClick={onClick} className={`relative flex min-h-[62px] flex-col items-center justify-center gap-1 text-[10px] font-medium transition active:scale-95 ${ativo ? "text-[#0e7775]" : "text-black/58"}`}><span className="relative"><Icon size={21} strokeWidth={1.7} />{badge > 0 && <i className="absolute -right-3 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#941c42] px-1 text-[9px] font-bold not-italic text-white">{badge}</i>}</span>{label}</button>;
+function BottomAction({ label, icon: Icon, onClick, ativo, destaque, badge = 0 }: { label: string; icon: typeof BookOpenText; onClick: () => void; ativo?: boolean; destaque?: boolean; badge?: number }) {
+  return <button onClick={onClick} className={`relative flex min-h-[62px] flex-col items-center justify-center gap-1 text-[10px] font-medium transition active:scale-95 ${ativo ? "text-[#0e7775]" : "text-black/58"}`}><span className="relative"><Icon size={21} strokeWidth={1.7} />{badge > 0 && <i className="absolute -right-3 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#941c42] px-1 text-[9px] font-bold not-italic text-white">{badge}</i>}{destaque && badge === 0 && <i className="absolute -right-1 -top-1 h-2.5 w-2.5 animate-pulse rounded-full bg-[#0e7775] ring-2 ring-[#eee8df]" />}</span>{label}</button>;
 }
 
 function MenuLateral({ dados, categorias, categoriaAtiva, carrinhoItens, onFechar, onSelecionar, onAbrirPedido, onAbrirInfo }: { dados: CardapioData; categorias: { nome: string; grupo: GrupoMenu; itens: ProdutoPublico[] }[]; categoriaAtiva: string | null; carrinhoItens: number; onFechar: () => void; onSelecionar: (nome: string) => void; onAbrirPedido: () => void; onAbrirInfo: () => void }) {
@@ -360,7 +387,7 @@ function carregarClienteSalvo(slug: string): ClienteSalvo | null {
   }
 }
 
-function CarrinhoSheet({ slug, dados, carrinho, ajustar, totalValor, onFechar, onConfirmado }: { slug: string; dados: CardapioData; carrinho: Record<string, number>; ajustar: (id: string, delta: number) => void; totalValor: number; onFechar: () => void; onConfirmado: (codigo: number, whatsappUrl: string | null, acompanhamentoUrl: string | null) => void }) {
+function CarrinhoSheet({ slug, dados, carrinho, ajustar, totalValor, onFechar, onConfirmado }: { slug: string; dados: CardapioData; carrinho: Record<string, number>; ajustar: (id: string, delta: number) => void; totalValor: number; onFechar: () => void; onConfirmado: (codigo: number, whatsappUrl: string | null, pedidoId: string) => void }) {
   const [etapa, setEtapa] = useState<"itens" | "dados">("itens");
   const clienteSalvo = useMemo(() => carregarClienteSalvo(slug), [slug]);
   const [nome, setNome] = useState(() => clienteSalvo?.nome ?? ""); const [telefone, setTelefone] = useState(() => clienteSalvo?.telefone ?? ""); const [cpf, setCpf] = useState(() => clienteSalvo?.cpf ?? ""); const [notificar, setNotificar] = useState(() => clienteSalvo?.notificar ?? true); const [endereco, setEndereco] = useState(""); const [formaRecebimento, setFormaRecebimento] = useState<"entrega" | "retirada">("entrega"); const [formaPagamento, setFormaPagamento] = useState<"cartao" | "dinheiro">("cartao"); const [tipoCartao, setTipoCartao] = useState<"credito" | "debito">("credito"); const [precisaTroco, setPrecisaTroco] = useState(false); const [trocoPara, setTrocoPara] = useState(""); const [observacoes, setObservacoes] = useState(""); const [enviando, setEnviando] = useState(false); const [erro, setErro] = useState("");
@@ -381,9 +408,7 @@ function CarrinhoSheet({ slug, dados, carrinho, ajustar, totalValor, onFechar, o
     const numero = (dados.whatsappAtendimento ?? "").replace(/\D/g, "");
     const pagamento = formaPagamento === "cartao" ? `Cartão · ${tipoCartao === "credito" ? "Crédito" : "Débito"}` : "Dinheiro";
     const mensagem = [`Olá! Acabei de fazer o pedido *#${pedido.codigo}* pelo cardápio digital.`, "", `*Cliente:* ${nome.trim()}`, `*WhatsApp:* ${telefone.trim()}`, `*Recebimento:* ${formaRecebimento === "entrega" ? "Entrega" : "Retirada no estabelecimento"}`, `*Pagamento:* ${pagamento}`, formaPagamento === "dinheiro" && precisaTroco ? `*Troco para:* ${moeda(numeroDaMoeda(trocoPara))}` : "", formaRecebimento === "entrega" ? `*Endereço:* ${endereco.trim()}` : "", observacoes.trim() ? `*Observações:* ${observacoes.trim()}` : "", "", "*Itens:*", ...itens.map((item) => `${item.quantidade}× ${item.produto.nome} — ${moeda(item.produto.precoVenda * item.quantidade)}`), "", `*Total:* ${moeda(totalValor)}`].filter(Boolean).join("\n");
-    const naSubdominio = window.location.hostname.startsWith(`${slug}.`);
-    const acompanhamento = notificar ? `${window.location.origin}${naSubdominio ? "" : `/cardapio/${slug}`}/pedido/${pedido.id}` : null;
-    onConfirmado(pedido.codigo, numero.length >= 10 ? `https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}` : null, acompanhamento);
+    onConfirmado(pedido.codigo, numero.length >= 10 ? `https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}` : null, pedido.id);
   }
 
   const entregaSelecionada = formaRecebimento === "entrega";
@@ -407,14 +432,67 @@ function InfoSheet({ dados, onFechar }: { dados: CardapioData; onFechar: () => v
   return <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center sm:p-6"><section className="w-full max-w-lg rounded-t-[2rem] bg-[#eee8df] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-[2rem] sm:p-7"><div className="flex items-start justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#0e7775]">Sobre a casa</p><h2 className="mt-1 font-display text-2xl font-semibold tracking-[-.05em]">{dados.nome}</h2></div><button onClick={onFechar} className="flex h-11 w-11 items-center justify-center rounded-full bg-white" aria-label="Fechar"><X size={18} /></button></div><p className="mt-5 text-sm leading-7 text-black/65">{dados.tipoComida}. Consulte a equipe para horários, ingredientes, alergênicos e condições de entrega.</p><div className="mt-6 grid gap-2"><button onClick={onFechar} className="flex min-h-12 items-center justify-center gap-2 rounded-full bg-[#0e7775] text-sm font-semibold text-white"><BookOpenText size={16} /> Voltar ao menu</button><button className="flex min-h-12 items-center justify-center gap-2 rounded-full bg-white text-sm font-semibold text-[#181714]"><MessageCircle size={16} /> Falar com atendimento</button></div></section></div>;
 }
 
-function TelaSucesso({ codigo, whatsappUrl, acompanhamentoUrl, onNovoPedido }: { codigo: number | null; whatsappUrl: string | null; acompanhamentoUrl: string | null; onNovoPedido: () => void }) {
+function TelaSucesso({ codigo, whatsappUrl, temAcompanhamento, onAcompanhar, onNovoPedido }: { codigo: number | null; whatsappUrl: string | null; temAcompanhamento: boolean; onAcompanhar: () => void; onNovoPedido: () => void }) {
   useEffect(() => {
     if (!whatsappUrl) return;
     const temporizador = window.setTimeout(() => { window.location.assign(whatsappUrl); }, 900);
     return () => window.clearTimeout(temporizador);
   }, [whatsappUrl]);
 
-  return <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#eee8df] px-6 text-center"><span className="flex h-24 w-24 items-center justify-center rounded-full bg-[#0e7775] text-white shadow-xl shadow-[#0e7775]/20"><Check size={44} strokeWidth={2.2} /></span><p className="mt-7 font-display text-3xl font-semibold tracking-[-.055em]">Pedido enviado</p><p className="mt-3 max-w-sm text-sm leading-6 text-black/55">{codigo ? `Seu código é #${codigo}. ` : ""}O estabelecimento recebeu seu pedido e dará andamento em instantes.</p>{whatsappUrl ? <><p className="mt-3 inline-flex items-center gap-2 text-xs font-medium text-[#0e7775]"><MessageCircle size={15} /> Abrindo WhatsApp...</p><a href={whatsappUrl} className="mt-4 flex min-h-12 items-center gap-2 rounded-full bg-[#0e7775] px-6 text-sm font-semibold text-white"><MessageCircle size={16} /> Abrir WhatsApp agora</a></> : <p className="mt-3 max-w-sm text-xs leading-5 text-black/45">O WhatsApp deste estabelecimento ainda não foi configurado.</p>}{acompanhamentoUrl && <a href={acompanhamentoUrl} target="_blank" rel="noopener noreferrer" className="mt-3 flex min-h-12 items-center gap-2 rounded-full bg-white px-6 text-sm font-semibold text-[#181714] shadow-sm"><Sparkles size={16} className="text-[#0e7775]" /> Acompanhar meu pedido</a>}<button onClick={onNovoPedido} className="mt-4 flex min-h-12 items-center gap-2 rounded-full bg-[#181714] px-6 text-sm font-semibold text-white"><ArrowLeft size={16} /> Voltar ao menu</button></div>;
+  return <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#eee8df] px-6 text-center"><span className="flex h-24 w-24 items-center justify-center rounded-full bg-[#0e7775] text-white shadow-xl shadow-[#0e7775]/20"><Check size={44} strokeWidth={2.2} /></span><p className="mt-7 font-display text-3xl font-semibold tracking-[-.055em]">Pedido enviado</p><p className="mt-3 max-w-sm text-sm leading-6 text-black/55">{codigo ? `Seu código é #${codigo}. ` : ""}O estabelecimento recebeu seu pedido e dará andamento em instantes.</p>{whatsappUrl ? <><p className="mt-3 inline-flex items-center gap-2 text-xs font-medium text-[#0e7775]"><MessageCircle size={15} /> Abrindo WhatsApp...</p><a href={whatsappUrl} className="mt-4 flex min-h-12 items-center gap-2 rounded-full bg-[#0e7775] px-6 text-sm font-semibold text-white"><MessageCircle size={16} /> Abrir WhatsApp agora</a></> : <p className="mt-3 max-w-sm text-xs leading-5 text-black/45">O WhatsApp deste estabelecimento ainda não foi configurado.</p>}{temAcompanhamento && <button onClick={onAcompanhar} className="mt-3 flex min-h-12 items-center gap-2 rounded-full bg-white px-6 text-sm font-semibold text-[#181714] shadow-sm"><Sparkles size={16} className="text-[#0e7775]" /> Acompanhar meu pedido</button>}<button onClick={onNovoPedido} className="mt-4 flex min-h-12 items-center gap-2 rounded-full bg-[#181714] px-6 text-sm font-semibold text-white"><ArrowLeft size={16} /> Voltar ao menu</button></div>;
+}
+
+interface PedidoStatusPublico {
+  codigo: number;
+  status: "novo" | "em_preparo" | "pronto" | "saiu_para_entrega" | "finalizado" | "cancelado";
+  formaRecebimento: "entrega" | "retirada" | null;
+  notificadoMensagem: string | null;
+  itens: { produtoNome: string; quantidade: number }[];
+}
+
+const ETAPAS_PEDIDO: { status: PedidoStatusPublico["status"]; label: string; icon: typeof Bell }[] = [
+  { status: "novo", label: "Recebido", icon: Bell },
+  { status: "em_preparo", label: "Em preparo", icon: ChefHat },
+  { status: "pronto", label: "Pronto", icon: PackageCheck },
+  { status: "saiu_para_entrega", label: "Saiu p/ entrega", icon: Truck },
+  { status: "finalizado", label: "Entregue", icon: Check },
+];
+
+function PedidoSheet({ slug, pedidoId, onFechar }: { slug: string; pedidoId: string; onFechar: () => void }) {
+  const { dados } = usePolling<PedidoStatusPublico>(`/api/publico/${slug}/pedidos/${pedidoId}`, 5000);
+  const etapas = dados?.formaRecebimento === "retirada" ? ETAPAS_PEDIDO.filter((e) => e.status !== "saiu_para_entrega") : ETAPAS_PEDIDO;
+  const indiceAtual = dados ? etapas.findIndex((e) => e.status === dados.status) : -1;
+
+  return <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 backdrop-blur-sm sm:items-center sm:p-6"><section className="flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-[2rem] bg-[#eee8df] shadow-2xl sm:rounded-[2rem]">
+    <header className="flex items-center justify-between border-b border-black/[.08] p-5"><div><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#0e7775]">Meus pedidos</p><h2 className="mt-1 font-display text-2xl font-semibold tracking-[-.05em]">{dados ? `Pedido #${dados.codigo}` : "Acompanhando..."}</h2></div><button onClick={onFechar} className="flex h-11 w-11 items-center justify-center rounded-full bg-white/70" aria-label="Fechar"><X size={18} /></button></header>
+
+    <div data-lenis-prevent className="flex-1 overflow-y-auto p-5">
+      {!dados ? (
+        <div className="flex min-h-52 flex-col items-center justify-center text-center text-black/40"><PackageSearch size={26} /><p className="mt-3 text-sm font-medium">Carregando status...</p></div>
+      ) : dados.status === "cancelado" ? (
+        <div className="rounded-2xl bg-white/60 p-6 text-center"><p className="font-display text-lg font-semibold text-black/70">Pedido cancelado</p><p className="mt-2 text-sm text-black/45">Fale com o estabelecimento se isso não era esperado.</p></div>
+      ) : (
+        <>
+          {dados.notificadoMensagem && <div className="mb-6 flex items-start gap-3 rounded-2xl bg-[#0e7775] p-4 text-white shadow-lg shadow-[#0e7775]/20"><MessageCircle size={17} className="mt-0.5 shrink-0" /><p className="text-sm leading-6">{dados.notificadoMensagem}</p></div>}
+          <ol>
+            {etapas.map((etapa, i) => {
+              const alcancado = i <= indiceAtual;
+              const atual = i === indiceAtual;
+              const Icon = etapa.icon;
+              return (
+                <li key={etapa.status} className="relative flex gap-4 pb-8 last:pb-0">
+                  {i < etapas.length - 1 && <span className={`absolute left-[19px] top-10 h-full w-[3px] rounded-full transition-colors duration-500 ${i < indiceAtual ? "bg-[#0e7775]" : "bg-black/[.08]"}`} />}
+                  <span className={`relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-all duration-500 ${alcancado ? "bg-[#0e7775] text-white shadow-lg shadow-[#0e7775]/25" : "bg-white text-black/25"} ${atual ? "ring-4 ring-[#0e7775]/20" : ""}`}><Icon size={17} /></span>
+                  <div className="pt-2"><p className={`text-sm font-semibold transition-colors ${alcancado ? "text-black/85" : "text-black/35"}`}>{etapa.label}</p>{atual && <p className="mt-0.5 text-xs font-medium text-[#0e7775]">Agora</p>}</div>
+                </li>
+              );
+            })}
+          </ol>
+          <div className="mt-2 rounded-2xl border border-black/[.08] bg-white/50 p-4"><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-black/40">Itens</p><ul className="space-y-1.5">{dados.itens.map((item, i) => <li key={i} className="text-sm text-black/70"><b className="mr-1.5 text-black">{item.quantidade}×</b>{item.produtoNome}</li>)}</ul></div>
+        </>
+      )}
+    </div>
+  </section></div>;
 }
 
 function CardapioSkeleton() {
