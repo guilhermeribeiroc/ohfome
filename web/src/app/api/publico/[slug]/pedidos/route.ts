@@ -21,6 +21,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const tipoCartao = body?.tipoCartao === "credito" ? "credito" : body?.tipoCartao === "debito" ? "debito" : "";
   const trocoPara = body?.trocoPara === null || body?.trocoPara === undefined || body?.trocoPara === "" ? null : Number(body.trocoPara);
   const observacoes = typeof body?.observacoes === "string" ? body.observacoes.trim() : "";
+  const cpf = typeof body?.cpf === "string" ? body.cpf.replace(/\D/g, "") : "";
+  const notificar = body?.notificar === true;
   const itens = Array.isArray(body?.itens) ? body.itens : [];
 
   if (clienteNome.length < 2) return NextResponse.json({ erro: "Informe seu nome." }, { status: 400 });
@@ -34,9 +36,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (itens.length === 0) return NextResponse.json({ erro: "Adicione ao menos um item ao pedido." }, { status: 400 });
 
   try {
-    const linhas = await queryPublico<{ fn_criar_pedido_publico: { id: string; codigo: number } }>(
-      "select fn_criar_pedido_publico($1, $2, $3, $4, $5, $6, $7, $8, $9::numeric, $10::jsonb)",
-      [slug, clienteNome, telefone, formaRecebimento, endereco, observacoes, formaPagamento, tipoCartao || null, trocoPara, JSON.stringify(itens)]
+    const linhas = await queryPublico<{ fn_criar_pedido_publico: { id: string; codigo: number; notificar: boolean } }>(
+      "select fn_criar_pedido_publico($1, $2, $3, $4, $5, $6, $7, $8, $9::numeric, $10::jsonb, $11, $12)",
+      [slug, clienteNome, telefone, formaRecebimento, endereco, observacoes, formaPagamento, tipoCartao || null, trocoPara, JSON.stringify(itens), cpf || null, notificar]
     );
     return NextResponse.json(linhas[0].fn_criar_pedido_publico, { status: 201 });
   } catch (erro) {

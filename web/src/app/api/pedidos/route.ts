@@ -4,7 +4,7 @@ import { comEstabelecimento } from "@/lib/db";
 
 const PEDIDOS_ATIVOS_QUERY = `
   select
-    p.id, p.codigo, p.tipo, p.origem, p.status, p.total, p.observacoes, p.forma_recebimento as "formaRecebimento", p.forma_pagamento as "formaPagamento", p.tipo_cartao as "tipoCartao", p.troco_para as "trocoPara", p.pagamento_status as "pagamentoStatus", p.created_at as "createdAt",
+    p.id, p.codigo, p.tipo, p.origem, p.status, p.total, p.observacoes, p.forma_recebimento as "formaRecebimento", p.forma_pagamento as "formaPagamento", p.tipo_cartao as "tipoCartao", p.troco_para as "trocoPara", p.pagamento_status as "pagamentoStatus", p.created_at as "createdAt", p.notificado_em as "notificadoEm",
     m.numero as "mesaNumero",
     c.nome as "clienteNome",
     c.telefone as "clienteTelefone",

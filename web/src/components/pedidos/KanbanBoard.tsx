@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, type DragEvent } from "react";
-import { ArrowRight, Bell, BellOff, Check, ChefHat, Clock3, MapPin, MessageSquareText, Minus, PackageCheck, PackageSearch, Plus, Printer, Search, ShoppingBag, Truck, X } from "lucide-react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
+import { ArrowRight, Bell, BellOff, BellRing, Check, ChefHat, Clock3, MapPin, MessageSquareText, Minus, PackageCheck, PackageSearch, Plus, Printer, Search, ShoppingBag, Truck, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Mesa, Pedido, PedidoStatus, Produto } from "@/lib/types";
 import { MESA_STATUS_LABEL, PEDIDO_STATUS_LABEL } from "@/lib/types";
@@ -34,6 +34,12 @@ function descricaoPagamento(pedido: Pedido) {
   return "PIX";
 }
 
+function linkWhatsapp(telefone: string, mensagem: string) {
+  const digitos = telefone.replace(/\D/g, "");
+  const comDdi = digitos.length <= 11 ? `55${digitos}` : digitos;
+  return `https://wa.me/${comDdi}?text=${encodeURIComponent(mensagem)}`;
+}
+
 function playBeep() {
   try {
     const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -54,13 +60,36 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Balcão
   const [pedidoArrastado, setPedidoArrastado] = useState<string | null>(null);
   const [colunaDestino, setColunaDestino] = useState<PedidoStatus | null>(null);
   const [pedidoDetalhe, setPedidoDetalhe] = useState<Pedido | null>(null);
+  const [promptNotificar, setPromptNotificar] = useState<{ pedido: Pedido; status: PedidoStatus } | null>(null);
+  const [notificando, setNotificando] = useState(false);
 
   async function moverPedido(pedidoId: string, status: PedidoStatus) {
     const pedidoAtual = pedidos.find((pedido) => pedido.id === pedidoId);
     if (!pedidoAtual || pedidoAtual.status === status) return;
     setDados((lista) => (lista ?? []).map((pedido) => pedido.id === pedidoId ? { ...pedido, status } : pedido));
     const resposta = await fetch(`/api/pedidos/${pedidoId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
-    if (!resposta.ok) recarregar();
+    if (!resposta.ok) { recarregar(); return; }
+    if (pedidoAtual.clienteTelefone && status !== "cancelado") {
+      setPromptNotificar({ pedido: { ...pedidoAtual, status }, status });
+    }
+  }
+
+  useEffect(() => {
+    if (!promptNotificar) return;
+    const t = setTimeout(() => setPromptNotificar(null), 7000);
+    return () => clearTimeout(t);
+  }, [promptNotificar]);
+
+  async function confirmarNotificacao() {
+    if (!promptNotificar) return;
+    setNotificando(true);
+    const resposta = await fetch(`/api/pedidos/${promptNotificar.pedido.id}/notificar`, { method: "POST" });
+    setNotificando(false);
+    setPromptNotificar(null);
+    if (!resposta.ok) return;
+    const { telefone, mensagem } = await resposta.json();
+    window.open(linkWhatsapp(telefone, mensagem), "_blank", "noopener,noreferrer");
+    recarregar();
   }
 
   async function avancarStatus(pedidoId: string, atual: PedidoStatus) {
@@ -124,17 +153,32 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Balcão
       </div>
 
       {modalAberto && <NovoPedidoModal onFechar={() => setModalAberto(false)} onCriado={() => { setModalAberto(false); if (somAtivo) playBeep(); recarregar(); }} />}
-      {pedidoDetalhe && <PedidoDetalheModal pedido={pedidoDetalhe} onFechar={() => setPedidoDetalhe(null)} />}
+      {pedidoDetalhe && <PedidoDetalheModal pedido={pedidoDetalhe} onFechar={() => setPedidoDetalhe(null)} onNotificar={(pedido) => { setPedidoDetalhe(null); setPromptNotificar({ pedido, status: pedido.status }); }} />}
+
+      {promptNotificar && (
+        <div className="fixed inset-x-4 bottom-4 z-[60] mx-auto flex max-w-sm items-start gap-3 overflow-hidden rounded-2xl bg-ink-900 p-4 text-white shadow-2xl sm:right-4 sm:left-auto" style={{ animation: "onb-pop .3s cubic-bezier(.2,.8,.2,1) both" }}>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 text-mango-400"><BellRing size={17} /></span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold leading-tight">Avisar {promptNotificar.pedido.clienteNome || "o cliente"}?</p>
+            <p className="mt-0.5 text-xs leading-5 text-white/60">Pedido #{promptNotificar.pedido.codigo} agora está &ldquo;{PEDIDO_STATUS_LABEL[promptNotificar.status]}&rdquo;.</p>
+            <div className="mt-3 flex gap-2">
+              <button onClick={confirmarNotificacao} disabled={notificando} className="flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-white px-3 text-xs font-bold text-ink-900 transition active:scale-95 disabled:opacity-60">{notificando ? "Enviando..." : <><Bell size={13} /> Notificar</>}</button>
+              <button onClick={() => setPromptNotificar(null)} className="min-h-9 rounded-lg px-3 text-xs font-semibold text-white/60 transition hover:text-white">Agora não</button>
+            </div>
+          </div>
+          <button onClick={() => setPromptNotificar(null)} className="shrink-0 text-white/40 transition hover:text-white" aria-label="Fechar aviso"><X size={15} /></button>
+        </div>
+      )}
     </section>
   );
 }
 
-function PedidoDetalheModal({ pedido, onFechar }: { pedido: Pedido; onFechar: () => void }) {
+function PedidoDetalheModal({ pedido, onFechar, onNotificar }: { pedido: Pedido; onFechar: () => void; onNotificar: (pedido: Pedido) => void }) {
   const pagamento = descricaoPagamento(pedido);
   return <div className="of-modal-backdrop z-50" role="dialog" aria-modal="true" aria-label={`Detalhes do pedido ${pedido.codigo}`}>
     <section className="of-modal-panel flex max-h-[90dvh] max-w-lg flex-col overflow-hidden">
       <header className="flex items-start justify-between border-b border-cream-200 p-5"><div><p className="of-eyebrow">Pedido #{pedido.codigo}</p><h2 className="font-display text-xl font-bold tracking-tight text-ink-900">Detalhes do pedido</h2></div><button onClick={onFechar} className="of-icon-btn" aria-label="Fechar detalhes"><X size={17} /></button></header>
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5"><div className="rounded-2xl bg-cream-50 p-3.5 text-sm"><p className="font-semibold text-ink-900">{pedido.clienteNome || (pedido.mesaNumero ? `Mesa ${pedido.mesaNumero}` : "Pedido no balcão")}</p>{pedido.clienteTelefone && <p className="mt-1 text-xs text-ink-500">WhatsApp: {pedido.clienteTelefone}</p>}{pedido.enderecoEntrega && <p className="mt-2 flex gap-1.5 text-xs leading-5 text-ink-600"><MapPin size={13} className="mt-0.5 shrink-0 text-coral-600" />{pedido.enderecoEntrega}</p>}{pagamento && <p className="mt-2 text-xs font-medium text-ink-700">Pagamento: {pagamento}</p>}{pedido.observacoes && <p className="mt-2 flex gap-1.5 text-xs leading-5 text-ink-600"><MessageSquareText size={13} className="mt-0.5 shrink-0 text-coral-600" />{pedido.observacoes}</p>}</div><div><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-ink-400">Itens do pedido</p><ul className="divide-y divide-cream-100 rounded-2xl border border-cream-200 bg-surface px-3.5">{pedido.itens.map((item) => <li key={item.id} className="py-3"><div className="flex items-center justify-between gap-3 text-sm"><span><b className="mr-2 text-ink-900">{item.quantidade}×</b>{item.produtoNome}</span><b className="shrink-0 text-ink-900">R$ {(item.precoUnitario * item.quantidade).toFixed(2).replace(".", ",")}</b></div>{item.observacoes && <p className="mt-1 pl-6 text-xs text-ink-500">Obs.: {item.observacoes}</p>}</li>)}</ul></div></div>
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5"><div className="rounded-2xl bg-cream-50 p-3.5 text-sm"><p className="font-semibold text-ink-900">{pedido.clienteNome || (pedido.mesaNumero ? `Mesa ${pedido.mesaNumero}` : "Pedido no balcão")}</p>{pedido.clienteTelefone && <p className="mt-1 text-xs text-ink-500">WhatsApp: {pedido.clienteTelefone}</p>}{pedido.enderecoEntrega && <p className="mt-2 flex gap-1.5 text-xs leading-5 text-ink-600"><MapPin size={13} className="mt-0.5 shrink-0 text-coral-600" />{pedido.enderecoEntrega}</p>}{pagamento && <p className="mt-2 text-xs font-medium text-ink-700">Pagamento: {pagamento}</p>}{pedido.observacoes && <p className="mt-2 flex gap-1.5 text-xs leading-5 text-ink-600"><MessageSquareText size={13} className="mt-0.5 shrink-0 text-coral-600" />{pedido.observacoes}</p>}{pedido.clienteTelefone && <button onClick={() => onNotificar(pedido)} className="mt-3 flex min-h-9 items-center gap-1.5 rounded-lg bg-ink-900 px-3 text-xs font-semibold text-white transition active:scale-95"><Bell size={13} /> Notificar cliente</button>}</div><div><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-ink-400">Itens do pedido</p><ul className="divide-y divide-cream-100 rounded-2xl border border-cream-200 bg-surface px-3.5">{pedido.itens.map((item) => <li key={item.id} className="py-3"><div className="flex items-center justify-between gap-3 text-sm"><span><b className="mr-2 text-ink-900">{item.quantidade}×</b>{item.produtoNome}</span><b className="shrink-0 text-ink-900">R$ {(item.precoUnitario * item.quantidade).toFixed(2).replace(".", ",")}</b></div>{item.observacoes && <p className="mt-1 pl-6 text-xs text-ink-500">Obs.: {item.observacoes}</p>}</li>)}</ul></div></div>
       <footer className="flex items-center justify-between gap-3 border-t border-cream-200 bg-surface p-5"><button onClick={() => imprimirPedido(pedido, pedido.mesaNumero ? "Comanda da mesa" : "Via do pedido")} className="of-btn-secondary min-h-11 px-3"><Printer size={16} /> Imprimir</button><div className="text-right"><span className="block text-xs text-ink-400">{pedido.formaRecebimento === "entrega" ? "Entrega" : pedido.formaRecebimento === "retirada" ? "Retirada" : TIPO_LABEL[pedido.tipo]}</span><strong className="font-display text-xl font-bold text-ink-900">R$ {pedido.total.toFixed(2).replace(".", ",")}</strong></div></footer>
     </section>
   </div>;

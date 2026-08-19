@@ -396,6 +396,8 @@ create table clientes (
   telefone text not null,
   endereco text,
   ponto_referencia text,
+  cpf text,
+  notificar_pedido boolean not null default false,
   created_at timestamptz not null default now(),
   unique (estabelecimento_id, telefone)
 );
@@ -425,6 +427,8 @@ create table pedidos (
   tipo_cartao text check (tipo_cartao is null or tipo_cartao in ('credito', 'debito')),
   troco_para numeric(10, 2) check (troco_para is null or troco_para > 0),
   pagamento_status text not null default 'pendente' check (pagamento_status in ('pendente', 'pago', 'falhou', 'estornado')),
+  notificado_em timestamptz,
+  notificado_mensagem text,
   subtotal numeric(10, 2) not null default 0,
   taxa_entrega numeric(10, 2) not null default 0,
   desconto numeric(10, 2) not null default 0,
@@ -834,7 +838,9 @@ create function fn_criar_pedido_publico(
   p_forma_pagamento text,
   p_tipo_cartao text,
   p_troco_para numeric,
-  p_itens jsonb
+  p_itens jsonb,
+  p_cpf text default null,
+  p_notificar_pedido boolean default false
 )
 returns jsonb
 language plpgsql
@@ -852,6 +858,7 @@ declare
   v_preco numeric(10,2);
   v_endereco text := nullif(btrim(coalesce(p_endereco, '')), '');
   v_observacoes text := nullif(btrim(coalesce(p_observacoes, '')), '');
+  v_cpf text := nullif(btrim(coalesce(p_cpf, '')), '');
   v_troco_para numeric(10,2) := case when p_troco_para > 0 then p_troco_para else null end;
 begin
   select id into v_estabelecimento_id from estabelecimentos where slug = p_slug and ativo;
@@ -883,11 +890,13 @@ begin
     raise exception 'Pedido sem itens' using errcode = '22023';
   end if;
 
-  insert into clientes (estabelecimento_id, nome, telefone, endereco)
-  values (v_estabelecimento_id, p_cliente_nome, p_telefone, case when p_forma_recebimento = 'entrega' then v_endereco else null end)
+  insert into clientes (estabelecimento_id, nome, telefone, endereco, cpf, notificar_pedido)
+  values (v_estabelecimento_id, p_cliente_nome, p_telefone, case when p_forma_recebimento = 'entrega' then v_endereco else null end, v_cpf, p_notificar_pedido)
   on conflict (estabelecimento_id, telefone) do update
     set nome = excluded.nome,
-        endereco = coalesce(excluded.endereco, clientes.endereco)
+        endereco = coalesce(excluded.endereco, clientes.endereco),
+        cpf = coalesce(excluded.cpf, clientes.cpf),
+        notificar_pedido = excluded.notificar_pedido
   returning id into v_cliente_id;
 
   insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, cliente_id, observacoes, forma_recebimento, forma_pagamento, tipo_cartao, troco_para)
@@ -918,11 +927,48 @@ begin
     insert into entregas (pedido_id, endereco) values (v_pedido_id, v_endereco);
   end if;
 
-  return jsonb_build_object('id', v_pedido_id, 'codigo', v_codigo);
+  return jsonb_build_object('id', v_pedido_id, 'codigo', v_codigo, 'notificar', p_notificar_pedido);
 end;
 $$;
 
-revoke all on function fn_criar_pedido_publico(text, text, text, text, text, text, text, text, numeric, jsonb) from public;
+revoke all on function fn_criar_pedido_publico(text, text, text, text, text, text, text, text, numeric, jsonb, text, boolean) from public;
+
+-- Consulta publica de status: usada pela aba de acompanhamento do cliente.
+-- So enxerga pedidos com origem='app' (feitos pelo cardapio) do slug pedido,
+-- e o proprio uuid do pedido (imprevisivel) funciona como o "token" de acesso.
+create function fn_pedido_publico_status(p_slug text, p_pedido_id uuid)
+returns jsonb
+language sql
+security definer
+set search_path = public
+as $$
+  select jsonb_build_object(
+    'id', p.id,
+    'codigo', p.codigo,
+    'status', p.status,
+    'formaRecebimento', p.forma_recebimento,
+    'createdAt', p.created_at,
+    'notificadoEm', p.notificado_em,
+    'notificadoMensagem', p.notificado_mensagem,
+    'estabelecimentoNome', e.nome,
+    'itens', coalesce(
+      (select jsonb_agg(jsonb_build_object('produtoNome', pr.nome, 'quantidade', ip.quantidade) order by ip.created_at)
+       from itens_pedido ip join produtos pr on pr.id = ip.produto_id
+       where ip.pedido_id = p.id),
+      '[]'::jsonb
+    ),
+    'historico', coalesce(
+      (select jsonb_agg(jsonb_build_object('status', h.status_novo, 'em', h.created_at) order by h.created_at)
+       from historico_status_pedido h where h.pedido_id = p.id),
+      '[]'::jsonb
+    )
+  )
+  from pedidos p
+  join estabelecimentos e on e.id = p.estabelecimento_id
+  where e.slug = p_slug and p.id = p_pedido_id and p.origem = 'app';
+$$;
+
+revoke all on function fn_pedido_publico_status(text, uuid) from public;
 
 -- ============================================================================
 -- ROLE DE APLICACAO (privilegio minimo)
@@ -956,7 +1002,8 @@ grant select on vw_estoque_baixo, vw_painel_pedidos to ohfome_app;
 grant execute on function fn_autenticar(text) to ohfome_app;
 grant execute on function fn_registrar_estabelecimento(text, tipo_estabelecimento, text, modulo_sistema[], jsonb, text) to ohfome_app;
 grant execute on function fn_cardapio_publico(text) to ohfome_app;
-grant execute on function fn_criar_pedido_publico(text, text, text, text, text, text, text, text, numeric, jsonb) to ohfome_app;
+grant execute on function fn_pedido_publico_status(text, uuid) to ohfome_app;
+grant execute on function fn_criar_pedido_publico(text, text, text, text, text, text, text, text, numeric, jsonb, text, boolean) to ohfome_app;
 
 -- Colunas serial (ex.: pedidos.codigo) usam uma sequence por baixo; inserir
 -- nelas exige USAGE/SELECT na sequence, nao so privilegio na tabela.

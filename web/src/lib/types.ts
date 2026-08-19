@@ -109,6 +109,7 @@ export interface Pedido {
   enderecoEntrega?: string;
   total: number;
   createdAt: string;
+  notificadoEm?: string;
 }
 
 export interface Produto {
