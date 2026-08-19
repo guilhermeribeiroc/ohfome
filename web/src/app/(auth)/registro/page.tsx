@@ -11,13 +11,13 @@ import { ModuleIcon, SegmentIcon } from "@/components/ui/AppIcons";
 
 interface CampoUsuario {
   nome: string;
-  email: string;
+  usuario: string;
   senha: string;
 }
 
-const CAMPO_VAZIO: CampoUsuario = { nome: "", email: "", senha: "" };
+const CAMPO_VAZIO: CampoUsuario = { nome: "", usuario: "", senha: "" };
 
-const PASSOS = ["Estabelecimento", "Módulos", "Equipe", "Revisão"];
+const PASSOS = ["Estabelecimento", "Módulos", "Administrador", "Revisão"];
 
 const GRADIENTE_CORAL = "linear-gradient(120deg, var(--color-coral-600), var(--color-coral-500), var(--color-mango-500))";
 
@@ -35,7 +35,6 @@ export default function RegistroPage() {
   const [tipo, setTipo] = useState<TipoEstabelecimento | null>(null);
   const [modulos, setModulos] = useState<ModuloSistema[]>([]);
   const [admin, setAdmin] = useState<CampoUsuario>(CAMPO_VAZIO);
-  const [equipe, setEquipe] = useState<Record<ModuloSistema, CampoUsuario>>({} as Record<ModuloSistema, CampoUsuario>);
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
 
@@ -51,22 +50,17 @@ export default function RegistroPage() {
     });
   }
 
-  function atualizarEquipe(id: ModuloSistema, campo: keyof CampoUsuario, valor: string) {
-    setEquipe((atual) => ({ ...atual, [id]: { ...(atual[id] ?? CAMPO_VAZIO), [campo]: valor } }));
-  }
-
   const planoSelecionado = planoParaModulos(modulos);
   const modulosAtivos = modulos.includes("site") ? [...modulos, "delivery" as ModuloSistema] : modulos;
   const passo1Valido = nome.trim().length > 1 && tipo !== null;
   const passo2Valido = Boolean(planoSelecionado);
-  const passo3Valido =
-    admin.nome && admin.email && admin.senha && modulos.every((m) => equipe[m]?.nome && equipe[m]?.email && equipe[m]?.senha);
+  const passo3Valido = admin.nome && admin.usuario && admin.senha;
 
   async function finalizar() {
     if (!tipo) return;
     setErro("");
     setEnviando(true);
-    const erroApi = await registrar({ nome, tipo, modulos, admin, equipe });
+    const erroApi = await registrar({ nome, tipo, modulos, admin });
     setEnviando(false);
     if (erroApi) {
       setErro(erroApi);
@@ -247,10 +241,10 @@ export default function RegistroPage() {
                 className={CAMPO_CLASSE_SM}
               />
               <input
-                type="email"
-                value={admin.email}
-                onChange={(e) => setAdmin({ ...admin, email: e.target.value })}
-                placeholder="E-mail"
+                value={admin.usuario}
+                onChange={(e) => setAdmin({ ...admin, usuario: e.target.value.toLowerCase() })}
+                placeholder="Usuário"
+                autoComplete="username"
                 className={CAMPO_CLASSE_SM}
               />
               <input
@@ -263,39 +257,7 @@ export default function RegistroPage() {
             </div>
           </div>
 
-          {modulos.map((id) => {
-            const info = MODULOS.find((m) => m.id === id)!;
-            const campos = equipe[id] ?? CAMPO_VAZIO;
-            return (
-              <div key={id} className="rounded-2xl bg-cream-50 p-3.5">
-                <p className="flex items-center gap-2 text-xs font-semibold text-ink-600">
-                  <ModuleIcon modulo={info.id} size={15} /> Usuário de {info.label}
-                </p>
-                <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <input
-                    value={campos.nome}
-                    onChange={(e) => atualizarEquipe(id, "nome", e.target.value)}
-                    placeholder="Nome"
-                    className={`${CAMPO_CLASSE_SM} bg-surface`}
-                  />
-                  <input
-                    type="email"
-                    value={campos.email}
-                    onChange={(e) => atualizarEquipe(id, "email", e.target.value)}
-                    placeholder="E-mail"
-                    className={`${CAMPO_CLASSE_SM} bg-surface`}
-                  />
-                  <input
-                    type="password"
-                    value={campos.senha}
-                    onChange={(e) => atualizarEquipe(id, "senha", e.target.value)}
-                    placeholder="Senha"
-                    className={`${CAMPO_CLASSE_SM} bg-surface`}
-                  />
-                </div>
-              </div>
-            );
-          })}
+          <p className="rounded-2xl bg-cream-50 px-3.5 py-3 text-xs leading-5 text-ink-500">Você poderá criar os demais acessos e escolher os cargos depois, na área Equipe.</p>
 
           <div className="flex gap-3">
             <button
@@ -355,13 +317,8 @@ export default function RegistroPage() {
             <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-ink-400">Acessos criados</p>
             <ul className="mt-1.5 space-y-1 text-sm text-ink-900">
               <li>
-                {admin.nome} <span className="text-xs text-ink-400">· {admin.email} · admin</span>
+                {admin.nome} <span className="text-xs text-ink-400">· {admin.usuario} · admin</span>
               </li>
-              {modulos.map((id) => (
-                <li key={id}>
-                  {equipe[id]?.nome} <span className="text-xs text-ink-400">· {equipe[id]?.email} · {id}</span>
-                </li>
-              ))}
             </ul>
           </div>
 

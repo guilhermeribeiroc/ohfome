@@ -3,13 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail, TriangleAlert } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, LockKeyhole, TriangleAlert, UserRound } from "lucide-react";
 import { useTenant } from "@/lib/tenant-context";
 
 export default function LoginPage() {
   const { entrar } = useTenant();
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [usuario, setUsuario] = useState("");
   const [senha, setSenha] = useState("");
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [erro, setErro] = useState("");
@@ -17,7 +17,7 @@ export default function LoginPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setErro(""); setEnviando(true);
-    const erroApi = await entrar(email, senha);
+    const erroApi = await entrar(usuario, senha);
     setEnviando(false);
     if (erroApi) { setErro(erroApi); return; }
     router.replace("/");
@@ -30,7 +30,7 @@ export default function LoginPage() {
       <p className="mb-8 mt-2 text-sm leading-6 text-ink-400">Entre para acompanhar a operação do seu estabelecimento.</p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <label className="block"><span className="of-label">E-mail</span><div className="relative"><Mail size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" /><input type="email" required autoComplete="email" value={email} onChange={(e) => { setEmail(e.target.value); setErro(""); }} placeholder="voce@estabelecimento.com" className="of-field !pl-10" /></div></label>
+        <label className="block"><span className="of-label">Usuário</span><div className="relative"><UserRound size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" /><input required autoComplete="username" value={usuario} onChange={(e) => { setUsuario(e.target.value); setErro(""); }} placeholder="Ex.: joao.milleto" className="of-field !pl-10" /></div></label>
         <label className="block"><span className="of-label">Senha</span><div className="relative"><LockKeyhole size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" /><input type={mostrarSenha ? "text" : "password"} required autoComplete="current-password" value={senha} onChange={(e) => { setSenha(e.target.value); setErro(""); }} placeholder="Sua senha" className="of-field !px-10" /><button type="button" onClick={() => setMostrarSenha((valor) => !valor)} aria-label={mostrarSenha ? "Ocultar senha" : "Mostrar senha"} className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-ink-400 transition hover:bg-cream-100 hover:text-ink-900">{mostrarSenha ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></label>
 
         {erro && <p role="alert" className="flex items-start gap-2 rounded-xl bg-danger-050 p-3 text-xs font-medium leading-5 text-danger-600 ring-1 ring-danger-400/15"><TriangleAlert size={15} className="mt-0.5 shrink-0" />{erro}</p>}

@@ -13,7 +13,7 @@ export interface ContextoSessao {
   usuario: {
     id: string;
     nome: string;
-    email: string;
+    usuario: string;
     role: PapelUsuario;
   };
 }
@@ -32,7 +32,7 @@ export async function buscarContexto(estabelecimentoId: string, usuarioId: strin
     );
 
     const { rows: userRows } = await client.query(
-      `select id, nome, email, role from usuarios where id = $1 and ativo`,
+      `select id, nome, usuario, role from usuarios where id = $1 and ativo`,
       [usuarioId]
     );
     if (userRows.length === 0) return null;

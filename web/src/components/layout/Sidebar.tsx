@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronRight, LogOut, Sparkles } from "lucide-react";
+import { ChevronRight, LogOut, Sparkles, UsersRound } from "lucide-react";
 import { modulosPermitidos, SEGMENTOS } from "@/lib/tenant-types";
 import { useTenant } from "@/lib/tenant-context";
 import { ModuleIcon, SegmentIcon } from "@/components/ui/AppIcons";
@@ -55,6 +55,7 @@ export function Sidebar() {
             </Link>
           );
         })}
+        {usuarioAtual?.role === "admin" && <Link href="/equipe" aria-current={pathname?.startsWith("/equipe") ? "page" : undefined} className={`group relative flex min-h-11 items-center gap-3 rounded-xl px-3 text-[13px] font-medium transition-all duration-200 ${pathname?.startsWith("/equipe") ? "bg-ink-900 text-white shadow-lg shadow-ink-900/15" : "text-ink-600 hover:bg-cream-100 hover:text-ink-900"}`}><UsersRound size={18} strokeWidth={1.8} className={pathname?.startsWith("/equipe") ? "text-coral-400" : "text-ink-400 transition-colors group-hover:text-coral-500"} /><span className="flex-1">Equipe</span>{pathname?.startsWith("/equipe") && <span className="h-1.5 w-1.5 rounded-full bg-coral-400" />}</Link>}
       </nav>
 
       <div className="mb-3 rounded-2xl border border-coral-100 bg-coral-050/70 p-3.5">
@@ -64,7 +65,7 @@ export function Sidebar() {
 
       <div className="flex items-center gap-2 border-t border-cream-200 pt-4">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink-900 font-display text-xs font-bold text-white">{usuarioAtual?.nome?.slice(0, 2).toUpperCase()}</span>
-        <div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold text-ink-900">{usuarioAtual?.nome}</p><p className="truncate text-[10px] text-ink-400">{usuarioAtual?.email}</p></div>
+        <div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold text-ink-900">{usuarioAtual?.nome}</p><p className="truncate text-[10px] text-ink-400">@{usuarioAtual?.usuario}</p></div>
         <button onClick={logout} className="of-icon-btn !h-10 !min-h-10 !w-10" aria-label="Sair da conta" title="Sair"><LogOut size={16} /></button>
       </div>
     </aside>

@@ -115,10 +115,11 @@ create table usuarios (
   id uuid primary key default gen_random_uuid(),
   estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade,
   nome text not null,
-  -- email e unico em toda a plataforma (o login pede so e-mail + senha, sem
-  -- selecionar estabelecimento antes) — cada conta pertence a exatamente um
-  -- estabelecimento e nunca enxerga dados de outro apos autenticar.
-  email text unique not null,
+  -- O usuario identifica a conta no login, sem exigir a escolha do
+  -- estabelecimento. E unico em toda a plataforma.
+  usuario text unique not null,
+  -- Mantido opcionalmente para contato e compatibilidade com contas antigas.
+  email text unique,
   senha_hash text not null,
   telefone text,
   role user_role not null,
@@ -704,9 +705,9 @@ create policy tenant_isolation on estabelecimentos
 -- ser o owner), mas expoem apenas a operacao especifica e o retorno minimo
 -- necessario — a aplicacao nunca ganha acesso irrestrito as tabelas.
 
--- Busca uma conta pelo e-mail (unico em toda a plataforma) para o login.
+-- Busca uma conta pelo usuario (unico em toda a plataforma) para o login.
 -- Devolve o hash da senha para o app comparar com bcrypt; nunca a senha em texto.
-create function fn_autenticar(p_email text)
+create function fn_autenticar(p_usuario text)
 returns table (
   usuario_id uuid,
   estabelecimento_id uuid,
@@ -724,14 +725,14 @@ as $$
   select u.id, u.estabelecimento_id, u.nome, u.senha_hash, u.role, u.ativo, e.ativo
   from usuarios u
   join estabelecimentos e on e.id = u.estabelecimento_id
-  where u.email = p_email;
+  where u.usuario = lower(p_usuario);
 $$;
 
 revoke all on function fn_autenticar(text) from public;
 
 -- Cria um estabelecimento novo com seus modulos e usuarios em uma unica
 -- transacao atomica. As senhas ja chegam com hash bcrypt (calculado no app,
--- nunca em SQL). p_usuarios: [{nome, email, senha_hash, role, modulo}, ...]
+-- nunca em SQL). p_usuarios: [{nome, usuario, senha_hash, role}, ...]
 -- onde o primeiro item deve ser role='admin'.
 create function fn_registrar_estabelecimento(
   p_nome text,
@@ -761,11 +762,12 @@ begin
   end loop;
 
   for v_usuario in select jsonb_array_elements(p_usuarios) loop
-    insert into usuarios (estabelecimento_id, nome, email, senha_hash, role)
+    insert into usuarios (estabelecimento_id, nome, usuario, email, senha_hash, role)
     values (
       v_estabelecimento_id,
       v_usuario->>'nome',
-      v_usuario->>'email',
+      lower(v_usuario->>'usuario'),
+      nullif(lower(v_usuario->>'email'), ''),
       v_usuario->>'senha_hash',
       (v_usuario->>'role')::user_role
     );

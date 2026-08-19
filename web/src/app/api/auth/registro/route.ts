@@ -4,19 +4,19 @@ import { queryPublico } from "@/lib/db";
 import { buscarContexto } from "@/lib/auth-queries";
 import { criarSessao, SESSION_COOKIE } from "@/lib/session";
 import { gerarSlug } from "@/lib/slug";
-import { MODULOS, MODULOS_DE_VENDA, SEGMENTOS, planoParaModulos } from "@/lib/tenant-types";
+import { MODULOS_DE_VENDA, SEGMENTOS, planoParaModulos } from "@/lib/tenant-types";
 import type { ModuloSistema } from "@/lib/tenant-types";
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const USUARIO_REGEX = /^[a-z0-9][a-z0-9._-]{2,39}$/;
 
 interface CampoUsuario {
   nome?: string;
-  email?: string;
+  usuario?: string;
   senha?: string;
 }
 
 function validarCampo(c: CampoUsuario | undefined): c is Required<CampoUsuario> {
-  return Boolean(c?.nome?.trim() && c?.email && EMAIL_REGEX.test(c.email) && c?.senha && c.senha.length >= 6);
+  return Boolean(c?.nome?.trim() && c?.usuario && USUARIO_REGEX.test(c.usuario.toLowerCase()) && c?.senha && c.senha.length >= 6);
 }
 
 export async function POST(request: NextRequest) {
@@ -27,7 +27,6 @@ export async function POST(request: NextRequest) {
   const tipo = body.tipo;
   const modulos: ModuloSistema[] = Array.isArray(body.modulos) ? body.modulos : [];
   const admin: CampoUsuario = body.admin ?? {};
-  const equipe: Record<string, CampoUsuario> = body.equipe ?? {};
 
   if (nome.length < 2) return NextResponse.json({ erro: "Informe o nome do estabelecimento." }, { status: 400 });
   const segmento = SEGMENTOS.find((item) => item.id === tipo);
@@ -39,29 +38,11 @@ export async function POST(request: NextRequest) {
   // cliente crie um segundo usuário nem escolha outro plano.
   const modulosAtivos: ModuloSistema[] = modulos.includes("site") ? [...modulos, "delivery"] : modulos;
   if (!validarCampo(admin)) {
-    return NextResponse.json({ erro: "Dados do administrador incompletos (senha mín. 6 caracteres)." }, { status: 400 });
-  }
-  for (const m of modulos) {
-    if (!validarCampo(equipe[m])) {
-      return NextResponse.json({ erro: `Dados do usuário de ${MODULOS.find((i) => i.id === m)?.label} incompletos.` }, { status: 400 });
-    }
-  }
-
-  const emails = [admin.email, ...modulos.map((m) => equipe[m].email)].map((e) => e!.toLowerCase());
-  if (new Set(emails).size !== emails.length) {
-    return NextResponse.json({ erro: "Os e-mails informados devem ser diferentes entre si." }, { status: 400 });
+    return NextResponse.json({ erro: "Dados do administrador inválidos. Use um usuário com 3 a 40 caracteres (letras, números, ponto, hífen ou sublinhado) e senha de 6 caracteres ou mais." }, { status: 400 });
   }
 
   const usuariosPayload = [
-    { nome: admin.nome, email: admin.email!.toLowerCase(), senha_hash: await bcrypt.hash(admin.senha!, 12), role: "admin" },
-    ...(await Promise.all(
-      modulos.map(async (m) => ({
-        nome: equipe[m].nome,
-        email: equipe[m].email!.toLowerCase(),
-        senha_hash: await bcrypt.hash(equipe[m].senha!, 12),
-        role: MODULOS.find((i) => i.id === m)!.papel,
-      }))
-    )),
+    { nome: admin.nome.trim(), usuario: admin.usuario!.trim().toLowerCase(), senha_hash: await bcrypt.hash(admin.senha!, 12), role: "admin" },
   ];
 
   async function tentarRegistrar(tentativasRestantes: number): Promise<string> {
@@ -85,12 +66,12 @@ export async function POST(request: NextRequest) {
     estabelecimentoId = await tentarRegistrar(1);
   } catch (erro) {
     if ((erro as { code?: string }).code === "23505") {
-      return NextResponse.json({ erro: "Um dos e-mails informados já está em uso." }, { status: 409 });
+      return NextResponse.json({ erro: "Este usuário já está em uso." }, { status: 409 });
     }
     throw erro;
   }
 
-  const contas = await queryPublico<{ usuario_id: string }>("select usuario_id from fn_autenticar($1)", [usuariosPayload[0].email]);
+  const contas = await queryPublico<{ usuario_id: string }>("select usuario_id from fn_autenticar($1)", [usuariosPayload[0].usuario]);
   const contexto = await buscarContexto(estabelecimentoId, contas[0].usuario_id);
   if (!contexto) {
     return NextResponse.json({ erro: "Estabelecimento criado, mas houve um erro ao carregar a sessão." }, { status: 500 });

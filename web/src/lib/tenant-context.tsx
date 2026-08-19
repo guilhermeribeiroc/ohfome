@@ -6,7 +6,7 @@ import type { ModuloSistema, PapelUsuario, TipoEstabelecimento } from "./tenant-
 interface UsuarioSessao {
   id: string;
   nome: string;
-  email: string;
+  usuario: string;
   role: PapelUsuario;
 }
 
@@ -23,15 +23,14 @@ interface RegistroInput {
   nome: string;
   tipo: TipoEstabelecimento;
   modulos: ModuloSistema[];
-  admin: { nome: string; email: string; senha: string };
-  equipe: Record<string, { nome: string; email: string; senha: string }>;
+  admin: { nome: string; usuario: string; senha: string };
 }
 
 interface TenantContextValue {
   carregando: boolean;
   estabelecimento: EstabelecimentoSessao | null;
   usuarioAtual: UsuarioSessao | null;
-  entrar: (email: string, senha: string) => Promise<string | null>;
+  entrar: (usuario: string, senha: string) => Promise<string | null>;
   sair: () => Promise<void>;
   registrar: (dados: RegistroInput) => Promise<string | null>;
 }
@@ -63,11 +62,11 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setCarregando(false));
   }, []);
 
-  const entrar = useCallback(async (email: string, senha: string) => {
+  const entrar = useCallback(async (usuario: string, senha: string) => {
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, senha }),
+      body: JSON.stringify({ usuario, senha }),
     });
     if (!res.ok) return extrairErro(res);
     const dados = await res.json();

@@ -18,7 +18,8 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
     [estabelecimento, usuarioAtual]
   );
   const moduloPermitido = permitidos.find((m) => pathname?.startsWith(m.href));
-  const rotaBloqueada = Boolean(estabelecimento) && !moduloPermitido;
+  const equipePermitida = usuarioAtual?.role === "admin" && pathname?.startsWith("/equipe");
+  const rotaBloqueada = Boolean(estabelecimento) && !moduloPermitido && !equipePermitida;
 
   useEffect(() => {
     if (!carregando && !estabelecimento) {

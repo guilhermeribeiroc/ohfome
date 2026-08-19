@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { modulosPermitidos } from "@/lib/tenant-types";
 import { useTenant } from "@/lib/tenant-context";
 import { ModuleIcon } from "@/components/ui/AppIcons";
+import { UsersRound } from "lucide-react";
 
 export function MobileNav() {
   const pathname = usePathname();
@@ -22,6 +23,7 @@ export function MobileNav() {
           </Link>
         );
       })}
+      {usuarioAtual?.role === "admin" && <Link href="/equipe" aria-current={pathname?.startsWith("/equipe") ? "page" : undefined} className={`relative flex min-h-[52px] min-w-[62px] flex-1 flex-col items-center justify-center gap-1 rounded-[1rem] px-2 text-[9px] font-medium transition-all duration-200 ${pathname?.startsWith("/equipe") ? "bg-white text-ink-900 shadow-sm" : "text-white/55 active:bg-white/10"}`}><UsersRound size={19} strokeWidth={pathname?.startsWith("/equipe") ? 2 : 1.7} className={pathname?.startsWith("/equipe") ? "text-coral-500" : ""} /><span>Equipe</span></Link>}
     </nav>
   );
 }
