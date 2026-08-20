@@ -1,13 +1,14 @@
 import { createSign } from "crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { autenticarRequisicao, respostaNaoAutenticado } from "@/lib/api-auth";
+import { credencialQz } from "@/lib/qz-credentials";
 
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   if (!autenticarRequisicao(request)) return respostaNaoAutenticado();
 
-  const privateKey = process.env.QZ_PRIVATE_KEY?.replace(/\\n/g, "\n");
+  const privateKey = credencialQz("QZ_PRIVATE_KEY");
   if (!privateKey) return NextResponse.json({ erro: "A assinatura QZ não está configurada." }, { status: 503 });
 
   const body = await request.json().catch(() => null);
