@@ -9,9 +9,9 @@ export default function AuthLayout({ children }: LayoutProps<"/">) {
         <div aria-hidden className="absolute inset-0 opacity-[.08]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,.7) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.7) 1px, transparent 1px)", backgroundSize: "48px 48px" }} />
         <Image aria-hidden src="/marca/ohfome-icone.svg" alt="" width={1254} height={1254} className="pointer-events-none absolute -bottom-24 -right-28 h-[34rem] w-[34rem] rotate-[-12deg] opacity-[.11]" />
 
-        <div className="relative flex items-center gap-4">
-          <Image src="/marca/ohfome-logo.png" alt="OhFome" width={4448} height={3560} className="h-20 w-auto drop-shadow-[0_14px_24px_rgba(0,0,0,.32)]" priority />
-          <small className="text-[10px] uppercase leading-[1.6] tracking-[.18em] text-white/45">Gestão para<br />quem faz</small>
+        <div className="relative flex flex-col items-start gap-3">
+          <Image src="/marca/ohfome-logo.png" alt="OhFome" width={4448} height={3560} className="w-64 max-w-full drop-shadow-[0_18px_30px_rgba(0,0,0,.35)] xl:w-80" priority />
+          <small className="pl-1 text-[10px] uppercase leading-[1.7] tracking-[.24em] text-white/45">Gestão para quem faz</small>
         </div>
 
         <div className="relative max-w-lg">
