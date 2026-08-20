@@ -14,5 +14,10 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ erro: "Estabelecimento não encontrado." }, { status: 404 });
   }
 
-  return NextResponse.json(cardapio);
+  const resposta = NextResponse.json(cardapio);
+  // Cardapio publico muda raramente (o dono edita produtos de vez em quando).
+  // Um cache curto evita bater no Postgres a cada abertura do link por
+  // clientes diferentes, sem deixar o cardapio "travado" em uma versao velha.
+  resposta.headers.set("Cache-Control", "public, max-age=20, stale-while-revalidate=120");
+  return resposta;
 }
