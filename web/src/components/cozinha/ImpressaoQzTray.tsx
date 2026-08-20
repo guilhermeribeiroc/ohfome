@@ -83,10 +83,18 @@ function modalidadePedido(pedido: Pedido) {
   return "BALCAO";
 }
 
+function exibeClienteNaComanda(pedido: Pedido) {
+  return pedido.formaRecebimento === "entrega" || pedido.formaRecebimento === "retirada" || pedido.tipo === "delivery";
+}
+
 export function dadosEscPosPedido(pedido: Pedido, largura = LARGURA_TICKET) {
   const cabecalho = cabecalhoTermico(pedido, largura);
   const contexto = `PEDIDO #${pedido.codigo} - ${modalidadePedido(pedido)}`.slice(0, largura);
   const linhas = ["\x1B\x40", "\x1B\x61\x01", "\x1B\x45\x01", `${centralizar(cabecalho, largura)}\n`, `${centralizar(contexto, largura)}\n`, "\x1B\x45\x00", "\n", "\x1B\x61\x00", `${"-".repeat(largura)}\n`];
+
+  if (exibeClienteNaComanda(pedido) && pedido.clienteNome?.trim()) {
+    linhas.push(...quebrarLinha(`CLIENTE: ${pedido.clienteNome.trim()}`, largura).map((linha) => `${linha}\n`), "\n");
+  }
 
   for (const item of pedido.itens) {
     linhas.push(...linhaComValor(`${item.quantidade}X ${item.produtoNome}`, moedaTermica(item.precoUnitario * item.quantidade), largura));
