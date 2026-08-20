@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, ChevronRight, CircleHelp, Download, Laptop, MonitorCog, Printer, ShieldCheck, Wifi } from "lucide-react";
+import { CheckCircle2, ChevronRight, CircleHelp, Download, Laptop, MonitorCog, Printer, ShieldCheck, Terminal, Wifi } from "lucide-react";
 
-type Sistema = "windows" | "macos";
+type Sistema = "windows" | "macos" | "linux";
 
 const SISTEMA_STORAGE_KEY = "ohfome.qz.configuracao.sistema";
 const MODELO_STORAGE_KEY = "ohfome.qz.configuracao.modelo";
@@ -26,6 +26,7 @@ const MODELOS: Modelo[] = [
     drivers: {
       windows: { href: "https://www.alarmshop.com.br/manuais/pos58/driver_windows.exe", titulo: "Baixar driver POS-58 para Windows", descricao: "Instale, selecione POS-58 e faça o teste de página no Windows." },
       macos: { href: "https://www.alarmshop.com.br/manuais/pos58/driver_macos.zip", titulo: "Baixar driver POS-58 para macOS", descricao: "Instale o driver e adicione a fila POS-58 em Impressoras e Scanners." },
+      linux: { href: "https://www.alarmshop.com.br/pos58/", titulo: "Abrir driver POS-58 para Linux", descricao: "Baixe o driver Linux do modelo e adicione a fila pela configuração CUPS do sistema." },
     },
   },
   {
@@ -34,6 +35,7 @@ const MODELOS: Modelo[] = [
     drivers: {
       windows: { href: "https://epson.com.br/Suporte/Ponto-de-venda/Impressoras-de-recibos/Epson-TM-T20X/s/SPT_C31CH26031", titulo: "Abrir driver oficial Epson", descricao: "Na página Epson, escolha Windows e baixe o Driver da impressora." },
       macos: { href: "https://epson.com.br/Suporte/Ponto-de-venda/Impressoras-de-recibos/Epson-TM-T20X/s/SPT_C31CH26031", titulo: "Abrir suporte oficial Epson", descricao: "Escolha macOS na página do fabricante ou instale a fila indicada pelo suporte Epson." },
+      linux: { href: "https://epson.com.br/Suporte/Ponto-de-venda/Impressoras-de-recibos/Epson-TM-T20X/s/SPT_C31CH26031", titulo: "Abrir suporte Epson para Linux", descricao: "Consulte o fabricante e adicione a fila pelo CUPS antes de conectar o QZ Tray." },
     },
   },
   {
@@ -42,6 +44,7 @@ const MODELOS: Modelo[] = [
     drivers: {
       windows: { href: "https://www.elgin.com.br/automacao/developers/suporte-tecnico", titulo: "Abrir suporte e driver Elgin", descricao: "Baixe o Driver Spooler da família i8/i9 para o seu Windows." },
       macos: { href: "https://www.elgin.com.br/automacao/developers/suporte-tecnico", titulo: "Abrir suporte Elgin", descricao: "Confirme com a Elgin o driver CUPS compatível para a revisão do equipamento." },
+      linux: { href: "https://www.elgin.com.br/automacao/developers/suporte-tecnico", titulo: "Abrir suporte Elgin para Linux", descricao: "Baixe o pacote Linux/CUPS correspondente ao modelo ou solicite-o ao suporte Elgin." },
     },
   },
   {
@@ -50,6 +53,7 @@ const MODELOS: Modelo[] = [
     drivers: {
       windows: { href: "https://www.elgin.com.br/automacao/developers/suporte-tecnico", titulo: "Abrir suporte Bematech/Elgin", descricao: "Baixe o spooler/driver MP-4200 adequado à sua versão do Windows." },
       macos: { href: "https://www.elgin.com.br/automacao/developers/suporte-tecnico", titulo: "Abrir suporte Bematech/Elgin", descricao: "Consulte o fabricante para a fila CUPS compatível com sua interface." },
+      linux: { href: "https://www.elgin.com.br/automacao/developers/suporte-tecnico", titulo: "Abrir suporte Bematech para Linux", descricao: "Instale o driver Linux/CUPS indicado pela Elgin e valide a página de teste." },
     },
   },
   {
@@ -58,6 +62,7 @@ const MODELOS: Modelo[] = [
     drivers: {
       windows: { href: "https://tedsys-software.atlassian.net/wiki/spaces/BDCSUP/pages/17039482", titulo: "Abrir guia de driver DR800", descricao: "Instale primeiro o driver DR800 e depois o spooler, conforme o guia." },
       macos: { href: "https://tedsys-software.atlassian.net/wiki/spaces/BDCSUP/pages/17039482", titulo: "Verificar suporte DR800", descricao: "A DR800 é legada; confirme com o suporte se há driver macOS para sua revisão." },
+      linux: { href: "https://tedsys-software.atlassian.net/wiki/spaces/BDCSUP/pages/17039482", titulo: "Verificar suporte DR800", descricao: "A DR800 é legada; confirme com o suporte a disponibilidade de driver CUPS/Linux." },
     },
   },
   {
@@ -66,6 +71,7 @@ const MODELOS: Modelo[] = [
     drivers: {
       windows: { href: "https://sweda.com.br/acervo-tecnico/", titulo: "Abrir drivers Sweda", descricao: "No acervo, procure SI-300S e baixe o driver Windows correspondente." },
       macos: { href: "https://sweda.com.br/acervo-tecnico/", titulo: "Abrir suporte Sweda", descricao: "Confirme no acervo técnico se há suporte macOS para o modelo instalado." },
+      linux: { href: "https://sweda.com.br/acervo-tecnico/", titulo: "Abrir driver Linux Sweda", descricao: "No acervo, procure SI-300S e baixe o pacote Linux de acordo com a arquitetura." },
     },
   },
   {
@@ -74,6 +80,7 @@ const MODELOS: Modelo[] = [
     drivers: {
       windows: { href: "https://www.alarmshop.com.br/manuais/pos58/driver_windows.exe", titulo: "Baixar driver POS-58 compatível", descricao: "Use apenas se o manual/equipamento indicar compatibilidade POS-58." },
       macos: { href: "https://www.alarmshop.com.br/manuais/pos58/driver_macos.zip", titulo: "Baixar driver POS-58 compatível", descricao: "Use apenas se o manual/equipamento indicar compatibilidade POS-58." },
+      linux: { href: "https://www.alarmshop.com.br/pos58/", titulo: "Abrir driver POS-58 para Linux", descricao: "Use apenas se o manual/equipamento indicar compatibilidade POS-58 e configure a fila CUPS." },
     },
   },
   {
@@ -82,6 +89,7 @@ const MODELOS: Modelo[] = [
     drivers: {
       windows: { href: "https://help.nextar.com/tutorial/how-to-install-pos-58-or-pos-80-printer", titulo: "Abrir guia POS-80 para Windows", descricao: "Use o driver indicado pelo fabricante e selecione POS-80 durante a instalação." },
       macos: { href: "https://www.alarmshop.com.br/pos58/", titulo: "Abrir guia de filas térmicas", descricao: "Instale uma fila ESC/POS/Raw compatível; confirme o modelo no manual da impressora." },
+      linux: { href: "https://openprinting.github.io/cups/", titulo: "Abrir guia CUPS para Linux", descricao: "Instale uma fila ESC/POS/Raw pelo CUPS e valide a página de teste antes do QZ." },
     },
   },
   {
@@ -90,6 +98,7 @@ const MODELOS: Modelo[] = [
     drivers: {
       windows: { href: "https://qz.io/docs/printers", titulo: "Ver requisitos de impressora do QZ", descricao: "Baixe o driver somente no site do fabricante e faça o teste pelo Windows." },
       macos: { href: "https://qz.io/docs/printers", titulo: "Ver requisitos de impressora do QZ", descricao: "Baixe o driver no fabricante ou configure uma fila CUPS indicada por ele." },
+      linux: { href: "https://openprinting.github.io/cups/", titulo: "Abrir guia CUPS para Linux", descricao: "Instale o driver no fabricante, crie a fila CUPS e imprima uma página de teste." },
     },
   },
 ];
@@ -101,14 +110,15 @@ export default function ConfiguracaoImpressaoPage() {
   useEffect(() => {
     const sistemaSalvo = window.localStorage.getItem(SISTEMA_STORAGE_KEY);
     const modeloSalvo = window.localStorage.getItem(MODELO_STORAGE_KEY);
-    if (sistemaSalvo === "windows" || sistemaSalvo === "macos") setSistema(sistemaSalvo);
+    if (sistemaSalvo === "windows" || sistemaSalvo === "macos" || sistemaSalvo === "linux") setSistema(sistemaSalvo);
     if (modeloSalvo && MODELOS.some((modelo) => modelo.id === modeloSalvo)) setModeloId(modeloSalvo);
     window.dispatchEvent(new Event("ohfome:abrir-configuracao-impressao"));
   }, []);
 
   const modelo = MODELOS.find((item) => item.id === modeloId) ?? MODELOS[0];
   const driver = modelo.drivers[sistema];
-  const instaladorConfianca = sistema === "windows" ? "/qz/instalar-qz-ohfome-windows.bat" : "/qz/instalar-qz-ohfome-macos.command";
+  const instaladorConfianca = sistema === "windows" ? "/qz/instalar-qz-ohfome-windows.bat" : sistema === "macos" ? "/qz/instalar-qz-ohfome-macos.command" : "/qz/instalar-qz-ohfome-linux.sh";
+  const nomeSistema = sistema === "windows" ? "Windows" : sistema === "macos" ? "macOS" : "Linux";
 
   function selecionarSistema(valor: Sistema) {
     setSistema(valor);
@@ -148,7 +158,7 @@ export default function ConfiguracaoImpressaoPage() {
     <section className="of-panel mb-5 overflow-hidden">
       <div className="border-b border-cream-200 px-5 py-4 sm:px-6"><p className="text-sm font-semibold text-ink-900">1. Escolha a impressora desta estação</p><p className="mt-1 text-xs leading-5 text-ink-500">Primeiro escolha o sistema, depois o modelo. Os links abaixo são ajustados para a sua escolha.</p></div>
       <div className="space-y-5 p-5 sm:p-6">
-        <div><p className="mb-2 text-xs font-semibold text-ink-700">Sistema operacional</p><div className="flex flex-wrap gap-2"><button type="button" onClick={() => selecionarSistema("windows")} className={sistema === "windows" ? "of-btn-primary min-h-10 px-4" : "of-btn-secondary min-h-10 px-4"}><Laptop size={16} /> Windows</button><button type="button" onClick={() => selecionarSistema("macos")} className={sistema === "macos" ? "of-btn-primary min-h-10 px-4" : "of-btn-secondary min-h-10 px-4"}><Laptop size={16} /> macOS</button></div></div>
+        <div><p className="mb-2 text-xs font-semibold text-ink-700">Sistema operacional</p><div className="flex flex-wrap gap-2"><button type="button" onClick={() => selecionarSistema("windows")} className={sistema === "windows" ? "of-btn-primary min-h-10 px-4" : "of-btn-secondary min-h-10 px-4"}><Laptop size={16} /> Windows</button><button type="button" onClick={() => selecionarSistema("macos")} className={sistema === "macos" ? "of-btn-primary min-h-10 px-4" : "of-btn-secondary min-h-10 px-4"}><Laptop size={16} /> macOS</button><button type="button" onClick={() => selecionarSistema("linux")} className={sistema === "linux" ? "of-btn-primary min-h-10 px-4" : "of-btn-secondary min-h-10 px-4"}><Terminal size={16} /> Linux</button></div></div>
         <div><p className="mb-2 text-xs font-semibold text-ink-700">Modelo da impressora</p><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{MODELOS.map((item) => <button key={item.id} type="button" onClick={() => selecionarModelo(item.id)} className={`rounded-xl border p-3 text-left transition ${modelo.id === item.id ? "border-coral-500 bg-coral-050 ring-1 ring-coral-200" : "border-cream-200 bg-white hover:border-ink-300"}`}><span className="block text-sm font-semibold text-ink-900">{item.nome}</span><span className="mt-1 block text-[11px] text-ink-500">{item.fabricante} · {item.largura}</span></button>)}</div></div>
       </div>
     </section>
@@ -157,10 +167,10 @@ export default function ConfiguracaoImpressaoPage() {
       <div className="border-b border-cream-200 px-5 py-4 sm:px-6"><p className="text-sm font-semibold text-ink-900">2. Instale {modelo.nome}</p><p className="mt-1 text-xs leading-5 text-ink-500">Recomendação: papel {modelo.largura}. {modelo.conexao}</p></div>
       <div className="grid gap-3 p-5 md:grid-cols-3 sm:p-6">
         <a href={driver.href} target="_blank" rel="noreferrer" className="rounded-xl border border-cream-200 bg-cream-50 p-4 transition hover:border-coral-300 hover:bg-coral-050"><Download size={18} className="text-coral-600" /><p className="mt-3 text-sm font-semibold text-ink-900">{driver.titulo}</p><p className="mt-1 text-xs leading-5 text-ink-500">{driver.descricao}</p><span className="mt-3 inline-flex items-center text-xs font-semibold text-coral-600">Abrir link <ChevronRight size={14} /></span></a>
-        <a href="https://qz.io/download/" target="_blank" rel="noreferrer" className="rounded-xl border border-cream-200 bg-cream-50 p-4 transition hover:border-coral-300 hover:bg-coral-050"><ShieldCheck size={18} className="text-coral-600" /><p className="mt-3 text-sm font-semibold text-ink-900">Instalar QZ Tray</p><p className="mt-1 text-xs leading-5 text-ink-500">Baixe o QZ Tray para {sistema === "windows" ? "Windows" : "macOS"} e deixe-o aberto perto do relógio.</p><span className="mt-3 inline-flex items-center text-xs font-semibold text-coral-600">Abrir download <ChevronRight size={14} /></span></a>
-        <a href={instaladorConfianca} download className="rounded-xl border border-cream-200 bg-cream-50 p-4 transition hover:border-coral-300 hover:bg-coral-050"><CheckCircle2 size={18} className="text-coral-600" /><p className="mt-3 text-sm font-semibold text-ink-900">Autorizar OhFome no QZ</p><p className="mt-1 text-xs leading-5 text-ink-500">Baixe e execute o instalador para não precisar aceitar cada pedido manualmente.</p><span className="mt-3 inline-flex items-center text-xs font-semibold text-coral-600">Baixar instalador <ChevronRight size={14} /></span></a>
+        <a href="https://qz.io/download/" target="_blank" rel="noreferrer" className="rounded-xl border border-cream-200 bg-cream-50 p-4 transition hover:border-coral-300 hover:bg-coral-050"><ShieldCheck size={18} className="text-coral-600" /><p className="mt-3 text-sm font-semibold text-ink-900">Instalar QZ Tray</p><p className="mt-1 text-xs leading-5 text-ink-500">Baixe o QZ Tray para {nomeSistema} e deixe-o aberto perto do relógio.</p><span className="mt-3 inline-flex items-center text-xs font-semibold text-coral-600">Abrir download <ChevronRight size={14} /></span></a>
+        <a href={instaladorConfianca} download className="rounded-xl border border-cream-200 bg-cream-50 p-4 transition hover:border-coral-300 hover:bg-coral-050"><CheckCircle2 size={18} className="text-coral-600" /><p className="mt-3 text-sm font-semibold text-ink-900">Autorizar OhFome no QZ</p><p className="mt-1 text-xs leading-5 text-ink-500">{sistema === "linux" ? "Baixe e execute no Terminal com bash instalar-qz-ohfome-linux.sh; o sistema solicitará a senha de administrador." : "Baixe e execute o instalador para não precisar aceitar cada pedido manualmente."}</p><span className="mt-3 inline-flex items-center text-xs font-semibold text-coral-600">Baixar instalador <ChevronRight size={14} /></span></a>
       </div>
-      <div className="flex gap-3 border-t border-cream-200 bg-cream-50/50 px-5 py-4 text-xs leading-5 text-ink-600 sm:px-6"><Wifi size={16} className="mt-0.5 shrink-0 text-coral-600" /><p>Impressora de <strong>rede ou Bluetooth</strong>: instale-a primeiro nas configurações de impressão do {sistema === "windows" ? "Windows" : "macOS"}. Quando imprimir a página de teste do sistema, ela aparecerá na lista do QZ Tray.</p></div>
+      <div className="flex gap-3 border-t border-cream-200 bg-cream-50/50 px-5 py-4 text-xs leading-5 text-ink-600 sm:px-6"><Wifi size={16} className="mt-0.5 shrink-0 text-coral-600" /><p>Impressora de <strong>rede ou Bluetooth</strong>: instale-a primeiro nas configurações de impressão do {nomeSistema}{sistema === "linux" ? " (CUPS)" : ""}. Quando imprimir a página de teste do sistema, ela aparecerá na lista do QZ Tray.</p></div>
     </section>
 
     <section className="of-panel overflow-hidden">
