@@ -10,9 +10,7 @@ export default function AuthLayout({ children }: LayoutProps<"/">) {
         <Image aria-hidden src="/marca/ohfome-icone.svg" alt="" width={1254} height={1254} className="pointer-events-none absolute -bottom-24 -right-28 h-[34rem] w-[34rem] rotate-[-12deg] opacity-[.11]" />
 
         <div className="relative flex items-center gap-4">
-          <span className="inline-flex items-center rounded-[1.35rem] bg-white px-5 py-3.5 shadow-[0_22px_45px_-24px_rgba(0,0,0,.72)] ring-1 ring-white/20">
-            <Image src="/marca/ohfome-logo.svg" alt="OhFome" width={1448} height={1086} className="h-20 w-auto" priority />
-          </span>
+          <Image src="/marca/ohfome-logo.png" alt="OhFome" width={4448} height={3560} className="h-20 w-auto drop-shadow-[0_14px_24px_rgba(0,0,0,.32)]" priority />
           <small className="text-[10px] uppercase leading-[1.6] tracking-[.18em] text-white/45">Gestão para<br />quem faz</small>
         </div>
 
@@ -32,8 +30,8 @@ export default function AuthLayout({ children }: LayoutProps<"/">) {
         <div aria-hidden className="absolute -right-28 -top-28 h-80 w-80 rounded-full bg-coral-100/35 blur-3xl" />
         <div className="relative w-full max-w-2xl">
           <div className="mb-8 flex items-center justify-center lg:hidden">
-            <span className="relative inline-flex items-center rounded-[1.25rem] bg-white px-4 py-2.5 shadow-[0_18px_42px_-24px_rgba(25,23,20,.35)] ring-1 ring-cream-200">
-              <Image src="/marca/ohfome-logo.svg" alt="OhFome" width={1448} height={1086} className="h-[4.25rem] w-auto" priority />
+            <span className="relative inline-flex items-center">
+              <Image src="/marca/ohfome-logo.png" alt="OhFome" width={4448} height={3560} className="h-[4.25rem] w-auto drop-shadow-[0_10px_18px_rgba(25,23,20,.16)]" priority />
               <Image aria-hidden src="/marca/ohfome-icone.svg" alt="" width={1254} height={1254} className="absolute -right-4 -top-4 h-9 w-9 drop-shadow-sm" />
             </span>
           </div>
