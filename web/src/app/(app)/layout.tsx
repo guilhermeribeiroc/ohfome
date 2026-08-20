@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { useTenant } from "@/lib/tenant-context";
 import { modulosPermitidos } from "@/lib/tenant-types";
-import { OhFomeMark } from "@/components/ui/OhFomeLogo";
 import { OnboardingFlow } from "@/components/onboarding/OnboardingFlow";
 
 export default function AppLayout({ children }: LayoutProps<"/">) {
@@ -36,7 +36,7 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-cream-50">
         <div className="flex flex-col items-center gap-4">
-          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-ink-900 text-cream-50 shadow-xl"><OhFomeMark className="h-10 w-10" /></span>
+          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white p-2 shadow-xl ring-1 ring-cream-200"><Image src="/marca/ohfome-icone-quadrado.png" alt="OhFome" width={887} height={887} className="h-full w-full object-contain" priority /></span>
           <div className="h-1 w-24 overflow-hidden rounded-full bg-cream-200"><i className="block h-full w-1/2 animate-pulse rounded-full bg-coral-500" /></div>
           <span className="text-[11px] font-medium text-ink-400">Preparando seu espaço</span>
         </div>
