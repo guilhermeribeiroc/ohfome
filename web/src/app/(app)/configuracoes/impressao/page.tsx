@@ -108,11 +108,14 @@ export default function ConfiguracaoImpressaoPage() {
   const [modeloId, setModeloId] = useState("oasis-pos58");
 
   useEffect(() => {
-    const sistemaSalvo = window.localStorage.getItem(SISTEMA_STORAGE_KEY);
-    const modeloSalvo = window.localStorage.getItem(MODELO_STORAGE_KEY);
-    if (sistemaSalvo === "windows" || sistemaSalvo === "macos" || sistemaSalvo === "linux") setSistema(sistemaSalvo);
-    if (modeloSalvo && MODELOS.some((modelo) => modelo.id === modeloSalvo)) setModeloId(modeloSalvo);
-    window.dispatchEvent(new Event("ohfome:abrir-configuracao-impressao"));
+    const sincronizar = window.setTimeout(() => {
+      const sistemaSalvo = window.localStorage.getItem(SISTEMA_STORAGE_KEY);
+      const modeloSalvo = window.localStorage.getItem(MODELO_STORAGE_KEY);
+      if (sistemaSalvo === "windows" || sistemaSalvo === "macos" || sistemaSalvo === "linux") setSistema(sistemaSalvo);
+      if (modeloSalvo && MODELOS.some((modelo) => modelo.id === modeloSalvo)) setModeloId(modeloSalvo);
+      window.dispatchEvent(new Event("ohfome:abrir-configuracao-impressao"));
+    }, 0);
+    return () => window.clearTimeout(sincronizar);
   }, []);
 
   const modelo = MODELOS.find((item) => item.id === modeloId) ?? MODELOS[0];
@@ -176,6 +179,11 @@ export default function ConfiguracaoImpressaoPage() {
     <section className="of-panel overflow-hidden">
       <div className="border-b border-cream-200 px-5 py-4 sm:px-6"><p className="text-sm font-semibold text-ink-900">3. Finalize no OhFome</p><p className="mt-1 text-xs leading-5 text-ink-500">Após instalar e testar o driver, abra o painel, escolha a fila encontrada e ative a impressão automática.</p></div>
       <div className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6"><div className="flex gap-3"><CircleHelp size={18} className="mt-0.5 text-ink-400" /><p className="max-w-xl text-xs leading-5 text-ink-500">O nome exibido pelo QZ pode ser diferente do modelo, por exemplo “Printer POS-58”. Escolha a fila que imprimiu a página de teste.</p></div><button onClick={abrirPainel} className="of-btn-primary shrink-0"><Printer size={16} /> Configurar estação</button></div>
+    </section>
+
+    <section className="mt-5 rounded-[1.4rem] border border-basil-400/20 bg-basil-050/60 p-5 sm:p-6">
+      <p className="text-sm font-semibold text-ink-900">Checklist de abertura da estação</p>
+      <div className="mt-4 grid gap-3 text-xs leading-5 text-ink-600 sm:grid-cols-2"><p><strong className="text-basil-700">1.</strong> Ligue o computador e confira papel, energia e conexão da impressora.</p><p><strong className="text-basil-700">2.</strong> Deixe o QZ Tray aberto perto do relógio e o OhFome acessado.</p><p><strong className="text-basil-700">3.</strong> Confirme o indicador verde no topo direito e imprima o teste.</p><p><strong className="text-basil-700">4.</strong> Durante o expediente, evite colocar a estação em suspensão.</p></div>
     </section>
   </div>;
 }

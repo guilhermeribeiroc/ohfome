@@ -20,6 +20,13 @@ export type ItemPedidoStatus = "pendente" | "em_preparo" | "pronto" | "entregue"
 export type UnidadeMedida = "kg" | "g" | "l" | "ml" | "un" | "cx" | "pct";
 
 export type ModoPrecificacao = "margem" | "preco_manual";
+export type ModoBannerCardapio = "padrao" | "fixo" | "carrossel";
+
+export interface BannerCardapio {
+  id: string;
+  url: string;
+  ordem: number;
+}
 
 export type EntregaStatus = "aguardando" | "em_rota" | "entregue" | "cancelada";
 export type FinanceiroTipo = "entrada" | "saida";
@@ -125,6 +132,15 @@ export interface ImpressaoJob {
   createdAt: string;
   pedido: Pedido;
 }
+
+export type EstadoEstacaoImpressao =
+  | "inicializando"
+  | "conectando"
+  | "pronta"
+  | "reconectando"
+  | "sem_impressora"
+  | "qz_indisponivel"
+  | "falha";
 
 export interface Produto {
   id: string;

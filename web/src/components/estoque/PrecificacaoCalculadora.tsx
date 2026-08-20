@@ -45,7 +45,7 @@ export function PrecificacaoCalculadora() {
 
   const selecionadoId = lista.some((p) => p.id === selecionadoIdManual) ? selecionadoIdManual : (lista[0]?.id ?? "");
   const selecionado = lista.find((p) => p.id === selecionadoId);
-  const lucroUnitario = selecionado ? Math.max(0, selecionado.precoVenda - selecionado.precoCusto) : 0;
+  const lucroUnitario = selecionado ? selecionado.precoVenda - selecionado.precoCusto : 0;
 
   function persistir(produto: Produto) {
     if (salvarTimeout.current) clearTimeout(salvarTimeout.current);
@@ -81,7 +81,8 @@ export function PrecificacaoCalculadora() {
     setDados((atual) =>
       (atual ?? []).map((p) => {
         if (p.id !== selecionadoId) return p;
-        const atualizado = calcular({ ...p, [campo]: valor } as Produto);
+        const modoPrecificacao = campo === "precoVenda" ? "preco_manual" : campo === "precoCusto" || campo === "margemPercentual" ? "margem" : p.modoPrecificacao;
+        const atualizado = calcular({ ...p, modoPrecificacao, [campo]: valor } as Produto);
         persistir(atualizado);
         return atualizado;
       })
@@ -164,24 +165,6 @@ export function PrecificacaoCalculadora() {
               </div>
             </div>
 
-            <div className="of-tabs mb-5">
-              {(
-                [
-                  { valor: "margem" as const, label: "Definir por margem" },
-                  { valor: "preco_manual" as const, label: "Definir por preço de venda" },
-                ]
-              ).map((opcao) => (
-                <button
-                  key={opcao.valor}
-                  onClick={() => atualizar("modoPrecificacao", opcao.valor)}
-                  data-active={selecionado.modoPrecificacao === opcao.valor}
-                  className="of-tab"
-                >
-                  {opcao.label}
-                </button>
-              ))}
-            </div>
-
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="block">
                 <span className="mb-1.5 block text-xs font-semibold text-ink-400">Preço de custo</span>
@@ -190,7 +173,6 @@ export function PrecificacaoCalculadora() {
                   <input
                     type="number"
                     step="0.01"
-                    min={0}
                     value={selecionado.precoCusto}
                     onChange={(e) => atualizar("precoCusto", Number(e.target.value))}
                     className="w-full bg-transparent px-2 py-3 text-ink-900 outline-none"
@@ -209,11 +191,9 @@ export function PrecificacaoCalculadora() {
                   <input
                     type="number"
                     step="0.1"
-                    min={0}
-                    disabled={selecionado.modoPrecificacao !== "margem"}
                     value={selecionado.margemPercentual}
                     onChange={(e) => atualizar("margemPercentual", Number(e.target.value))}
-                    className="w-full bg-transparent py-3 text-ink-900 outline-none disabled:text-ink-400"
+                    className="w-full bg-transparent py-3 text-ink-900 outline-none"
                   />
                   <span className="text-ink-400">%</span>
                 </div>
@@ -231,19 +211,17 @@ export function PrecificacaoCalculadora() {
                 <input
                   type="number"
                   step="0.01"
-                  min={0}
-                  disabled={selecionado.modoPrecificacao !== "preco_manual"}
                   value={selecionado.precoVenda}
                   onChange={(e) => atualizar("precoVenda", Number(e.target.value))}
-                  className="w-full bg-transparent px-2 py-3 text-lg font-bold text-ink-900 outline-none disabled:font-normal disabled:text-ink-600"
+                  className="w-full bg-transparent px-2 py-3 text-lg font-bold text-ink-900 outline-none"
                 />
               </div>
             </label>
 
-            <div className="mt-4 rounded-2xl border border-basil-400/20 bg-basil-050/70 p-4">
-              <div className="flex items-start justify-between gap-4"><div className="flex items-center gap-2 text-basil-600"><TrendingUp size={16} /><span className="text-xs font-semibold">Lucro estimado por unidade</span></div><strong className="font-display text-xl tracking-tight text-basil-600">R$ {lucroUnitario.toFixed(2).replace(".", ",")}</strong></div>
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-basil-400/15"><i className="block h-full rounded-full bg-basil-500 transition-all duration-300" style={{ width: `${Math.min(100, Math.max(4, selecionado.margemPercentual))}%` }} /></div>
-              <p className="mt-2 text-[11px] leading-5 text-ink-600">{selecionado.modoPrecificacao === "margem" ? "O preço de venda acompanha custo e margem automaticamente." : "A margem é recalculada sempre que o preço de venda muda."}</p>
+            <div className={`mt-4 rounded-2xl border p-4 ${lucroUnitario < 0 ? "border-danger-400/25 bg-danger-050/70" : "border-basil-400/20 bg-basil-050/70"}`}>
+              <div className="flex items-start justify-between gap-4"><div className={`flex items-center gap-2 ${lucroUnitario < 0 ? "text-danger-600" : "text-basil-600"}`}><TrendingUp size={16} /><span className="text-xs font-semibold">{lucroUnitario < 0 ? "Prejuízo estimado por unidade" : "Lucro estimado por unidade"}</span></div><strong className={`font-display text-xl tracking-tight ${lucroUnitario < 0 ? "text-danger-600" : "text-basil-600"}`}>R$ {lucroUnitario.toFixed(2).replace(".", ",")}</strong></div>
+              <div className={`mt-3 h-1.5 overflow-hidden rounded-full ${lucroUnitario < 0 ? "bg-danger-400/15" : "bg-basil-400/15"}`}><i className={`block h-full rounded-full transition-all duration-300 ${lucroUnitario < 0 ? "bg-danger-500" : "bg-basil-500"}`} style={{ width: `${Math.min(100, Math.max(4, Math.abs(selecionado.margemPercentual)))}%` }} /></div>
+              <p className={`mt-2 text-[11px] leading-5 ${lucroUnitario < 0 ? "text-danger-600" : "text-ink-600"}`}>{selecionado.precoCusto === 0 ? "Informe o custo para calcular a margem real." : selecionado.modoPrecificacao === "margem" ? "Venda recalculada a partir do custo e da margem." : "Margem recalculada a partir do custo e da venda."}</p>
             </div>
 
             <FichaTecnica produtoId={selecionado.id} />
@@ -282,7 +260,7 @@ function NovoProdutoModal({ onFechar, onCriado }: { onFechar: () => void; onCria
 
   const resumo = useMemo(() => {
     const custo = Math.max(0, numeroDaMoeda(precoCusto));
-    const margemInformada = Math.max(0, Number(margemPercentual) || 0);
+    const margemInformada = Math.max(-100, Number(margemPercentual) || 0);
     const vendaManual = Math.max(0, numeroDaMoeda(precoVendaManual));
     const precoVenda = modoPrecificacao === "margem" ? Math.round(custo * (1 + margemInformada / 100) * 100) / 100 : vendaManual;
     const margem = custo > 0 ? Math.round(((precoVenda - custo) / custo) * 1000) / 10 : 0;
@@ -295,10 +273,6 @@ function NovoProdutoModal({ onFechar, onCriado }: { onFechar: () => void; onCria
 
   async function criar() {
     if (!nome.trim()) return;
-    if (modoPrecificacao === "preco_manual" && resumo.precoVenda < resumo.custo) {
-      setErro("O preço de venda não pode ser menor que o preço de custo.");
-      return;
-    }
     setEnviando(true);
     setErro("");
 
@@ -373,16 +347,13 @@ function NovoProdutoModal({ onFechar, onCriado }: { onFechar: () => void; onCria
 
           <section>
             <div className="flex items-center gap-2"><Calculator size={15} className="text-coral-600" /><p className="text-xs font-semibold text-ink-900">Precificação</p></div>
-            <div className="of-tabs mt-3">
-              <button onClick={() => setModoPrecificacao("margem")} data-active={modoPrecificacao === "margem"} className="of-tab">Definir por margem</button>
-              <button onClick={() => setModoPrecificacao("preco_manual")} data-active={modoPrecificacao === "preco_manual"} className="of-tab">Definir preço de venda</button>
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <CampoMonetario label="Preço de custo" value={precoCusto} onChange={(valor) => { setPrecoCusto(valor); setModoPrecificacao("margem"); }} placeholder="0,00" />
+              <CampoPercentual label="Margem" value={margemPercentual} onChange={(valor) => { setMargemPercentual(valor); setModoPrecificacao("margem"); }} />
+              <CampoMonetario label="Preço de venda" value={precoVendaManual} onChange={(valor) => { setPrecoVendaManual(valor); setModoPrecificacao("preco_manual"); }} placeholder="0,00" destaque />
             </div>
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <CampoMonetario label="Preço de custo" value={precoCusto} onChange={setPrecoCusto} placeholder="0,00" />
-              {modoPrecificacao === "margem" ? <CampoPercentual label="Margem desejada" value={margemPercentual} onChange={setMargemPercentual} /> : <CampoMonetario label="Preço de venda" value={precoVendaManual} onChange={setPrecoVendaManual} placeholder="0,00" destaque />}
-            </div>
-            {modoPrecificacao === "preco_manual" && <p className="mt-2 text-[11px] leading-5 text-ink-400">A margem será calculada automaticamente a partir do custo e do preço de venda.</p>}
-            <div className="mt-3 rounded-2xl bg-basil-050 p-4 ring-1 ring-basil-400/20"><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[.13em] text-basil-600">{modoPrecificacao === "margem" ? "Preço de venda calculado" : "Margem calculada"}</p><p className="mt-1 text-xs text-ink-600">Custo {moeda(resumo.custo)}</p></div><strong className="font-display text-2xl font-bold tracking-tight text-basil-600">{modoPrecificacao === "margem" ? moeda(resumo.precoVenda) : `${resumo.margem.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}</strong></div></div>
+            <p className="mt-2 text-[11px] leading-5 text-ink-400">Altere custo ou margem para recalcular a venda; altere venda para recalcular a margem.</p>
+            <div className={`mt-3 rounded-2xl p-4 ring-1 ${resumo.precoVenda < resumo.custo ? "bg-danger-050 text-danger-600 ring-danger-400/20" : "bg-basil-050 text-basil-600 ring-basil-400/20"}`}><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[.13em]">{resumo.precoVenda < resumo.custo ? "Atenção: prejuízo" : modoPrecificacao === "margem" ? "Preço de venda calculado" : "Margem calculada"}</p><p className="mt-1 text-xs text-ink-600">Custo {moeda(resumo.custo)}</p></div><strong className="font-display text-2xl font-bold tracking-tight">{modoPrecificacao === "margem" ? moeda(resumo.precoVenda) : resumo.custo > 0 ? `${resumo.margem.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` : "—"}</strong></div></div>
           </section>
         </div>
 
@@ -397,5 +368,5 @@ function CampoMonetario({ label, value, onChange, placeholder, destaque = false 
 }
 
 function CampoPercentual({ label, value, onChange }: { label: string; value: string; onChange: (valor: string) => void }) {
-  return <label className="block"><span className="mb-1.5 block text-xs font-semibold text-ink-600">{label}</span><div className="flex min-h-[52px] items-center rounded-xl border border-coral-400 bg-coral-050 px-3 transition focus-within:ring-4 focus-within:ring-coral-100"><Percent size={15} className="text-coral-600" /><input type="number" inputMode="decimal" step="0.1" min={0} value={value} onChange={(e) => onChange(e.target.value)} className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm font-semibold text-ink-900 outline-none" /><span className="text-xs font-bold text-coral-600">%</span></div></label>;
+  return <label className="block"><span className="mb-1.5 block text-xs font-semibold text-ink-600">{label}</span><div className="flex min-h-[52px] items-center rounded-xl border border-coral-400 bg-coral-050 px-3 transition focus-within:ring-4 focus-within:ring-coral-100"><Percent size={15} className="text-coral-600" /><input type="number" inputMode="decimal" step="0.1" min={-100} value={value} onChange={(e) => onChange(e.target.value)} className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm font-semibold text-ink-900 outline-none" /><span className="text-xs font-bold text-coral-600">%</span></div></label>;
 }

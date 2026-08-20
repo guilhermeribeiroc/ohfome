@@ -55,19 +55,25 @@ export async function GET(request: NextRequest) {
   const sessao = autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
 
+  const statusSolicitado = request.nextUrl.searchParams.get("status");
   const jobs = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     // Se a maquina caiu depois de reservar um ticket, libera-o novamente.
     await client.query(
       `update impressao_jobs
-       set status = 'pendente', reservado_em = null, erro = 'A reserva anterior expirou.'
-       where status = 'imprimindo' and reservado_em < now() - interval '2 minutes'`
+       set status = 'pendente', reservado_em = null, estacao_id = null,
+           token_reserva = null, ultimo_heartbeat_em = null,
+           erro = 'A reserva anterior expirou e voltou para a fila.'
+       where status = 'imprimindo'
+         and coalesce(ultimo_heartbeat_em, reservado_em) < now() - interval '2 minutes'`
     );
 
+    const filtroStatus = statusSolicitado === "falhou" ? "falhou" : "pendente";
     const { rows } = await client.query(
       `${PEDIDO_IMPRESSAO_SELECT}
-       where j.status = 'pendente'
+       where j.status = $1
        order by j.created_at asc
-       limit 20`
+       limit 20`,
+      [filtroStatus]
     );
     return rows;
   });

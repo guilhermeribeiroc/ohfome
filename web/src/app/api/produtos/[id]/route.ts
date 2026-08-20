@@ -46,7 +46,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       !Number.isFinite(precoCusto) ||
       precoCusto < 0 ||
       !Number.isFinite(margemPercentual) ||
-      margemPercentual < 0 ||
+      margemPercentual < -100 ||
       !Number.isFinite(precoVenda) ||
       precoVenda < 0
     ) {

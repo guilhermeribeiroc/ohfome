@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
   const precoVenda = Number(body?.precoVenda ?? 0);
 
   if (nome.length < 2) return NextResponse.json({ erro: "Informe o nome do produto." }, { status: 400 });
-  if (!Number.isFinite(precoCusto) || precoCusto < 0 || !Number.isFinite(margemPercentual) || margemPercentual < 0 || !Number.isFinite(precoVenda) || precoVenda < 0) {
+  if (!Number.isFinite(precoCusto) || precoCusto < 0 || !Number.isFinite(margemPercentual) || margemPercentual < -100 || !Number.isFinite(precoVenda) || precoVenda < 0) {
     return NextResponse.json({ erro: "Preço de custo/margem inválidos." }, { status: 400 });
   }
 

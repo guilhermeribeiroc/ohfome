@@ -7,10 +7,11 @@ export default function AuthLayout({ children }: LayoutProps<"/">) {
       <aside className="relative hidden min-h-dvh overflow-hidden bg-ink-900 p-10 text-white lg:flex lg:flex-col lg:justify-between xl:p-14">
         <div aria-hidden className="absolute inset-0 opacity-80" style={{ background: "radial-gradient(circle at 12% 18%, rgba(232,93,63,.45), transparent 27rem), radial-gradient(circle at 90% 82%, rgba(238,191,91,.18), transparent 24rem)" }} />
         <div aria-hidden className="absolute inset-0 opacity-[.08]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,.7) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.7) 1px, transparent 1px)", backgroundSize: "48px 48px" }} />
+        <Image aria-hidden src="/marca/ohfome-icone.svg" alt="" width={1254} height={1254} className="pointer-events-none absolute -bottom-24 -right-28 h-[34rem] w-[34rem] rotate-[-12deg] opacity-[.11]" />
 
         <div className="relative flex items-center gap-4">
-          <span className="inline-flex items-center rounded-2xl bg-white px-3.5 py-2.5 shadow-[0_18px_40px_-20px_rgba(0,0,0,.55)]">
-            <Image src="/marca/ohfome-logo.svg" alt="OhFome" width={1448} height={1086} className="h-16 w-auto" priority />
+          <span className="inline-flex items-center rounded-[1.35rem] bg-white px-5 py-3.5 shadow-[0_22px_45px_-24px_rgba(0,0,0,.72)] ring-1 ring-white/20">
+            <Image src="/marca/ohfome-logo.svg" alt="OhFome" width={1448} height={1086} className="h-20 w-auto" priority />
           </span>
           <small className="text-[10px] uppercase leading-[1.6] tracking-[.18em] text-white/45">Gestão para<br />quem faz</small>
         </div>
@@ -31,7 +32,10 @@ export default function AuthLayout({ children }: LayoutProps<"/">) {
         <div aria-hidden className="absolute -right-28 -top-28 h-80 w-80 rounded-full bg-coral-100/35 blur-3xl" />
         <div className="relative w-full max-w-2xl">
           <div className="mb-8 flex items-center justify-center lg:hidden">
-            <Image src="/marca/ohfome-logo.svg" alt="OhFome" width={1448} height={1086} className="h-14 w-auto" priority />
+            <span className="relative inline-flex items-center rounded-[1.25rem] bg-white px-4 py-2.5 shadow-[0_18px_42px_-24px_rgba(25,23,20,.35)] ring-1 ring-cream-200">
+              <Image src="/marca/ohfome-logo.svg" alt="OhFome" width={1448} height={1086} className="h-[4.25rem] w-auto" priority />
+              <Image aria-hidden src="/marca/ohfome-icone.svg" alt="" width={1254} height={1254} className="absolute -right-4 -top-4 h-9 w-9 drop-shadow-sm" />
+            </span>
           </div>
           <section className="rounded-[1.6rem] border border-cream-200/80 bg-surface/90 p-5 shadow-[0_28px_80px_-48px_rgba(25,23,20,.45)] backdrop-blur-xl sm:p-8">{children}</section>
         </div>

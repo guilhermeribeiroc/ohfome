@@ -31,6 +31,8 @@ interface CardapioData {
   tipoComida: string;
   logoUrl?: string | null;
   whatsappAtendimento?: string | null;
+  bannerModo?: "padrao" | "fixo" | "carrossel";
+  banners?: { id: string; url: string; ordem: number }[];
   produtos: ProdutoPublico[];
 }
 
@@ -99,10 +101,26 @@ export function CardapioPublico({ slug }: { slug: string }) {
   const [codigoPedido, setCodigoPedido] = useState<number | null>(null);
   const [linkWhatsapp, setLinkWhatsapp] = useState<string | null>(null);
   const [pedidoAtivo, setPedidoAtivo] = useState<PedidoAtivo | null>(null);
+  const [indiceBanner, setIndiceBanner] = useState(0);
+
+  const bannersAtivos = useMemo(() => (dados?.banners ?? []).slice().sort((a, b) => a.ordem - b.ordem), [dados?.banners]);
+  const bannerAtual = bannersAtivos[indiceBanner] ?? bannersAtivos[0];
 
   useEffect(() => {
-    setPedidoAtivo(carregarPedidoAtivo(slug));
+    const carregar = window.setTimeout(() => setPedidoAtivo(carregarPedidoAtivo(slug)), 0);
+    return () => window.clearTimeout(carregar);
   }, [slug]);
+
+  useEffect(() => {
+    const resetar = window.setTimeout(() => setIndiceBanner(0), 0);
+    return () => window.clearTimeout(resetar);
+  }, [dados?.id, bannersAtivos.length]);
+
+  useEffect(() => {
+    if (dados?.bannerModo !== "carrossel" || bannersAtivos.length < 2 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const intervalo = window.setInterval(() => setIndiceBanner((atual) => (atual + 1) % bannersAtivos.length), 5_000);
+    return () => window.clearInterval(intervalo);
+  }, [dados?.bannerModo, bannersAtivos.length]);
   const refsCategoria = useRef<Record<string, HTMLElement | null>>({});
   const lenisRef = useRef<Lenis | null>(null);
 
@@ -264,9 +282,9 @@ export function CardapioPublico({ slug }: { slug: string }) {
         ) : null}
 
         <div className="relative mt-3 aspect-[16/9] overflow-hidden rounded-[1.4rem] bg-[#181714] shadow-[0_22px_60px_-38px_rgba(0,0,0,.6)] sm:rounded-[1.8rem] lg:mt-4 lg:h-72 lg:aspect-auto lg:rounded-[2rem]">
-          <div aria-hidden className="absolute inset-0 opacity-70" style={{ background: "radial-gradient(circle at 15% 12%, rgba(215,181,139,.32), transparent 31%), radial-gradient(circle at 88% 88%, rgba(14,119,117,.58), transparent 40%), linear-gradient(125deg, #181714 0%, #26241f 48%, #0e7775 150%)" }} />
-          <div aria-hidden className="absolute -right-12 -top-16 h-64 w-64 rounded-full border border-white/15" />
-          <div aria-hidden className="absolute -bottom-24 left-8 h-52 w-52 rounded-full border border-white/10" />
+          <div aria-hidden className="absolute inset-0 bg-cover bg-center transition-opacity duration-700" style={bannerAtual && dados.bannerModo !== "padrao" ? { backgroundImage: `url(${bannerAtual.url})` } : { background: "radial-gradient(circle at 15% 12%, rgba(215,181,139,.32), transparent 31%), radial-gradient(circle at 88% 88%, rgba(14,119,117,.58), transparent 40%), linear-gradient(125deg, #181714 0%, #26241f 48%, #0e7775 150%)" }} />
+          <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-black/35" />
+          {!bannerAtual || dados.bannerModo === "padrao" ? <><div aria-hidden className="absolute -right-12 -top-16 h-64 w-64 rounded-full border border-white/15" /><div aria-hidden className="absolute -bottom-24 left-8 h-52 w-52 rounded-full border border-white/10" /></> : null}
           <a href="https://www.instagram.com/otimizaii/" target="_blank" rel="noreferrer" className="absolute left-5 top-5 inline-flex min-h-9 items-center gap-2 rounded-full border border-white/15 bg-black/10 py-1.5 pl-2 pr-3 text-white/75 backdrop-blur-md transition hover:border-white/30 hover:bg-white/10 hover:text-white sm:left-7 sm:top-7" aria-label="Conheça a otimizaAÍ no Instagram">
             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[#181714]"><OhFomeMark className="h-3.5 w-3.5" /></span>
             <span className="leading-none"><strong className="block text-[10px] font-semibold tracking-[.08em]">OhFome</strong><small className="mt-1 block text-[8px] font-medium tracking-[.06em] text-white/45">por otimizaAÍ</small></span>
@@ -275,6 +293,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
             <div><p className="text-[10px] font-semibold uppercase tracking-[.2em] text-white/60">Cardápio digital</p><p className="mt-2 max-w-[15rem] font-display text-2xl font-semibold leading-none tracking-[-.055em] sm:max-w-xs sm:text-3xl">Seu sabor.<br />Sua marca.<br />Seu menu.</p></div>
             <span className="mb-1 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[.14em] backdrop-blur">{dados.tipo}</span>
           </div>
+          {dados.bannerModo === "carrossel" && bannersAtivos.length > 1 && <div className="absolute bottom-4 right-5 flex gap-1.5 sm:bottom-6 sm:right-7">{bannersAtivos.map((banner, indice) => <button key={banner.id} onClick={() => setIndiceBanner(indice)} aria-label={`Exibir foto ${indice + 1}`} className={`h-1.5 rounded-full transition-all ${indice === indiceBanner ? "w-6 bg-white" : "w-1.5 bg-white/55 hover:bg-white"}`} />)}</div>}
         </div>
 
         <div className="relative -mt-12 flex flex-col items-center sm:-mt-14 lg:-mt-16">

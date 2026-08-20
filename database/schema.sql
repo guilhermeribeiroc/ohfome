@@ -78,6 +78,7 @@ create table estabelecimentos (
   slug text not null unique,
   logo_url text,
   whatsapp_atendimento text,
+  cardapio_banner_modo text not null default 'padrao' check (cardapio_banner_modo in ('padrao', 'fixo', 'carrossel')),
   onboarding_concluido boolean not null default false,
   ativo boolean not null default true,
   created_at timestamptz not null default now(),
@@ -87,6 +88,23 @@ create table estabelecimentos (
 create trigger trg_estabelecimentos_updated_at
   before update on estabelecimentos
   for each row execute function set_updated_at();
+
+create table banners_cardapio (
+  id uuid primary key default gen_random_uuid(),
+  estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade,
+  url text not null,
+  ordem smallint not null default 0 check (ordem >= 0 and ordem < 20),
+  ativo boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (estabelecimento_id, ordem)
+);
+
+create trigger trg_banners_cardapio_updated_at
+  before update on banners_cardapio
+  for each row execute function set_updated_at();
+
+create index idx_banners_cardapio_estabelecimento on banners_cardapio(estabelecimento_id, ordem);
 
 -- Modulos que o estabelecimento contratou/ativou (balcao, cozinha, garcom,
 -- estoque, delivery). A presenca da linha indica que o modulo esta ativo;
@@ -237,7 +255,7 @@ create table produtos (
   -- modo 'preco_manual': preco_venda e definido a mao e a margem e recalculada
   modo_precificacao modo_precificacao not null default 'margem',
   preco_custo numeric(10, 2) not null default 0 check (preco_custo >= 0),
-  margem_percentual numeric(6, 2) not null default 0 check (margem_percentual >= 0),
+  margem_percentual numeric(7, 2) not null default 0 check (margem_percentual >= -100 and margem_percentual <= 99999.99),
   preco_venda numeric(10, 2) not null default 0 check (preco_venda >= 0),
   ativo boolean not null default true,
   created_at timestamptz not null default now(),
@@ -468,13 +486,23 @@ create table impressao_jobs (
   origem text not null default 'automatico' check (origem in ('automatico', 'reimpressao')),
   status text not null default 'pendente' check (status in ('pendente', 'imprimindo', 'impresso', 'falhou')),
   tentativas integer not null default 0 check (tentativas >= 0),
+  estacao_id text,
+  token_reserva uuid,
   reservado_em timestamptz,
+  ultimo_heartbeat_em timestamptz,
   impresso_em timestamptz,
+  concluido_em timestamptz,
   erro text,
   created_at timestamptz not null default now()
 );
 
 create index idx_impressao_jobs_fila on impressao_jobs(estabelecimento_id, status, created_at);
+create index idx_impressao_jobs_reserva_estacao
+  on impressao_jobs(estabelecimento_id, estacao_id, status, ultimo_heartbeat_em)
+  where status = 'imprimindo';
+create index idx_impressao_jobs_falhos
+  on impressao_jobs(estabelecimento_id, created_at desc)
+  where status = 'falhou';
 -- Um pedido recebe somente um ticket automatico. Reimpressoes sempre criam
 -- uma nova linha, preservando o historico de cada tentativa.
 create unique index uq_impressao_jobs_automatico
@@ -730,7 +758,7 @@ begin
     'usuarios', 'mesas', 'categorias_produto', 'produtos', 'insumos',
     'clientes', 'pedidos', 'entregadores', 'movimentacoes_financeiras',
     'custos_fixos', 'whatsapp_mensagens', 'estado_aplicacao', 'estabelecimento_modulos',
-    'impressao_jobs', 'bairros_entrega'
+    'impressao_jobs', 'bairros_entrega', 'banners_cardapio'
   ]
   loop
     execute format('alter table %I enable row level security', tabela);
@@ -898,6 +926,12 @@ as $$
     'tipoComida', e.tipo_comida,
     'logoUrl', e.logo_url,
     'whatsappAtendimento', e.whatsapp_atendimento,
+    'bannerModo', e.cardapio_banner_modo,
+    'banners', coalesce((
+      select jsonb_agg(jsonb_build_object('id', b.id, 'url', b.url, 'ordem', b.ordem) order by b.ordem)
+      from banners_cardapio b
+      where b.estabelecimento_id = e.id and b.ativo
+    ), '[]'::jsonb),
     'produtos', coalesce((
       select jsonb_agg(jsonb_build_object(
         'id', p.id,
