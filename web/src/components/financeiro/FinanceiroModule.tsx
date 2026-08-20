@@ -94,6 +94,8 @@ export function FinanceiroModule() {
     if (resposta.ok) await carregar();
   }
 
+  const margemOperacional = resumo.vendasFinalizadas > 0 ? (resumo.resultadoOperacional / resumo.vendasFinalizadas) * 100 : null;
+
   return <div className="of-page">
     <header className="of-page-header"><div><p className="of-eyebrow">Gestão administrativa</p><h1 className="of-title">Financeiro</h1><p className="of-subtitle">Entradas, saídas, custos fixos e resultado da operação no mês.</p></div></header>
 
@@ -101,7 +103,7 @@ export function FinanceiroModule() {
       <ResumoCard label="Vendas finalizadas" valor={resumo.vendasFinalizadas} icon={ArrowUpRight} tom="basil" />
       <ResumoCard label="Custo dos produtos" valor={resumo.custoProdutosVendidos} icon={ReceiptText} tom="amber" />
       <ResumoCard label="Saídas e custos fixos" valor={resumo.saidasAvulsas + resumo.custosFixosMensais} icon={ArrowDownRight} tom="coral" />
-      <ResumoCard label="Resultado operacional" valor={resumo.resultadoOperacional} icon={WalletCards} tom={resumo.resultadoOperacional >= 0 ? "basil" : "coral"} destaque />
+      <ResumoCard label="Resultado operacional" valor={resumo.resultadoOperacional} icon={WalletCards} tom={resumo.resultadoOperacional >= 0 ? "basil" : "coral"} destaque descricao={margemOperacional === null ? "Aguardando vendas finalizadas" : `${margemOperacional >= 0 ? "Margem operacional" : "Margem negativa"} de ${Math.abs(margemOperacional).toFixed(1).replace(".", ",")}%`} />
     </section>
 
     <section className="of-panel mt-5 overflow-hidden"><div className="flex items-center justify-between border-b border-cream-200 px-5 py-4"><div><h2 className="font-display text-xl font-bold tracking-tight">Vendas finalizadas</h2><p className="mt-0.5 text-xs text-ink-400">Receita, custo dos produtos e lucro bruto de cada pedido concluído neste mês.</p></div><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-basil-050 text-basil-600"><PackageCheck size={19} /></span></div><div className="max-h-[430px] divide-y divide-cream-200 overflow-y-auto">{carregando ? <LinhasCarregando /> : dados?.vendasFinalizadas.length ? dados.vendasFinalizadas.map((venda) => <VendaFinalizadaLinha key={venda.id} venda={venda} />) : <Vazio texto="Nenhuma venda finalizada neste mês." />}</div></section>
@@ -135,7 +137,7 @@ export function FinanceiroModule() {
 function Campo({ label, children }: { label: string; children: ReactNode }) { return <label className="block"><span className="mb-1.5 block text-xs font-semibold text-ink-600">{label}</span>{children}</label>; }
 function Vazio({ texto }: { texto: string }) { return <p className="px-5 py-10 text-center text-sm text-ink-400">{texto}</p>; }
 function LinhasCarregando() { return <div className="space-y-3 p-5">{[1, 2, 3].map((item) => <i key={item} className="of-skeleton block h-14 rounded-xl" />)}</div>; }
-function ResumoCard({ label, valor, icon: Icon, tom, destaque = false }: { label: string; valor: number; icon: LucideIcon; tom: "basil" | "amber" | "coral"; destaque?: boolean }) { const cores = { basil: "bg-basil-050 text-basil-600", amber: "bg-amber-050 text-amber-700", coral: "bg-coral-050 text-coral-600" }; return <article className={`of-panel p-4 sm:p-5 ${destaque ? "border-ink-900 bg-ink-900 text-white" : ""}`}><span className={`flex h-9 w-9 items-center justify-center rounded-xl ${destaque ? "bg-white/10 text-coral-400" : cores[tom]}`}><Icon size={18} /></span><p className={`mt-4 text-[11px] font-semibold uppercase tracking-[.12em] ${destaque ? "text-white/50" : "text-ink-400"}`}>{label}</p><strong className={`mt-1 block font-display text-2xl font-bold tracking-tight ${destaque ? "text-white" : "text-ink-900"}`}>{moeda(valor)}</strong></article>; }
+function ResumoCard({ label, valor, icon: Icon, tom, destaque = false, descricao }: { label: string; valor: number; icon: LucideIcon; tom: "basil" | "amber" | "coral"; destaque?: boolean; descricao?: string }) { const cores = { basil: "bg-basil-050 text-basil-600", amber: "bg-amber-050 text-amber-700", coral: "bg-coral-050 text-coral-600" }; return <article className={`of-panel p-4 sm:p-5 ${destaque ? "!border-ink-900 !bg-ink-900 text-white" : ""}`}><span className={`flex h-9 w-9 items-center justify-center rounded-xl ${destaque ? "bg-white/10 text-coral-400" : cores[tom]}`}><Icon size={18} /></span><p className={`mt-4 text-[11px] font-semibold uppercase tracking-[.12em] ${destaque ? "text-white/50" : "text-ink-400"}`}>{label}</p><strong className={`mt-1 block font-display text-2xl font-bold tracking-tight ${destaque ? "text-white" : "text-ink-900"}`}>{moeda(valor)}</strong>{descricao && <p className={`mt-2 text-xs font-medium ${destaque ? "text-basil-400" : "text-ink-400"}`}>{descricao}</p>}</article>; }
 
 function VendaFinalizadaLinha({ venda }: { venda: VendaFinanceira }) {
   const identificacao = venda.mesaNumero ? `Mesa ${venda.mesaNumero}` : venda.clienteNome || (venda.tipo === "delivery" ? "Delivery" : "Balcão");
