@@ -1,10 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { autenticarRequisicao, respostaNaoAutenticado } from "@/lib/api-auth";
 import { comEstabelecimento } from "@/lib/db";
+import { respostaAdministradorObrigatorio, sessaoEhAdministrador } from "@/lib/admin-auth";
+
+async function autenticarAdministrador(request: NextRequest) {
+  const sessao = autenticarRequisicao(request);
+  if (!sessao) return { sessao: null, autorizado: false };
+  return { sessao, autorizado: await sessaoEhAdministrador(sessao) };
+}
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const sessao = autenticarRequisicao(request);
+  const { sessao, autorizado } = await autenticarAdministrador(request);
   if (!sessao) return respostaNaoAutenticado();
+  if (!autorizado) return respostaAdministradorObrigatorio();
 
   const { id } = await params;
   const body = await request.json().catch(() => null);
@@ -36,8 +44,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const sessao = autenticarRequisicao(request);
+  const { sessao, autorizado } = await autenticarAdministrador(request);
   if (!sessao) return respostaNaoAutenticado();
+  if (!autorizado) return respostaAdministradorObrigatorio();
 
   const { id } = await params;
   const removido = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {

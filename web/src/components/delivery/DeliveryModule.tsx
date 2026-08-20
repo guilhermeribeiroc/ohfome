@@ -6,6 +6,7 @@ import type { BairroEntrega, Entrega, Entregador, EntregaStatus, Produto } from 
 import { ENTREGA_STATUS_LABEL } from "@/lib/types";
 import { usePolling } from "@/lib/use-polling";
 import { imprimirEntrega } from "@/lib/impressao";
+import { useTenant } from "@/lib/tenant-context";
 
 const COLUNAS: EntregaStatus[] = ["aguardando", "em_rota", "entregue"];
 const GRADIENTE_CORAL = "linear-gradient(120deg, var(--color-coral-600), var(--color-coral-500), var(--color-mango-500))";
@@ -13,6 +14,7 @@ const CAMPO_CLASSE =
   "w-full rounded-xl bg-cream-50 px-3.5 py-3 text-sm text-ink-900 outline-none transition focus:ring-4 focus:ring-coral-100";
 
 export function DeliveryModule() {
+  const { usuarioAtual } = useTenant();
   const { dados: entregas, recarregar: recarregarEntregas } = usePolling<Entrega[]>("/api/entregas", 4000);
   const { dados: entregadores, recarregar: recarregarEntregadores } = usePolling<Entregador[]>("/api/entregadores", 4000);
   const [modalAberto, setModalAberto] = useState(false);
@@ -91,9 +93,9 @@ export function DeliveryModule() {
           <p className="of-subtitle">Entregadores, atribuições e acompanhamento de cada saída.</p>
         </div>
         <div className="flex w-full gap-2 sm:w-auto">
-          <button onClick={() => setBairrosAberto(true)} className="of-btn-secondary flex-1 sm:flex-none">
+          {usuarioAtual?.role === "admin" && <button onClick={() => setBairrosAberto(true)} className="of-btn-secondary flex-1 sm:flex-none">
             <MapPinned size={17} /> Taxas por bairro
-          </button>
+          </button>}
           <button
             onClick={() => setModalAberto(true)}
             className="of-btn-primary flex-1 sm:flex-none"

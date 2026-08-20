@@ -1,10 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { autenticarRequisicao, respostaNaoAutenticado } from "@/lib/api-auth";
 import { comEstabelecimento } from "@/lib/db";
+import { respostaAdministradorObrigatorio, sessaoEhAdministrador } from "@/lib/admin-auth";
+
+async function autenticarAdministrador(request: NextRequest) {
+  const sessao = autenticarRequisicao(request);
+  if (!sessao) return { sessao: null, autorizado: false };
+  return { sessao, autorizado: await sessaoEhAdministrador(sessao) };
+}
 
 export async function GET(request: NextRequest) {
-  const sessao = autenticarRequisicao(request);
+  const { sessao, autorizado } = await autenticarAdministrador(request);
   if (!sessao) return respostaNaoAutenticado();
+  if (!autorizado) return respostaAdministradorObrigatorio();
 
   const bairros = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     const { rows } = await client.query(
@@ -18,8 +26,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const sessao = autenticarRequisicao(request);
+  const { sessao, autorizado } = await autenticarAdministrador(request);
   if (!sessao) return respostaNaoAutenticado();
+  if (!autorizado) return respostaAdministradorObrigatorio();
 
   const body = await request.json().catch(() => null);
   const nome = typeof body?.nome === "string" ? body.nome.trim() : "";
