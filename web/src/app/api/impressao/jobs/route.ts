@@ -12,6 +12,7 @@ const PEDIDO_IMPRESSAO_SELECT = `
       'origem', p.origem,
       'status', p.status,
       'total', p.total,
+      'taxaEntrega', p.taxa_entrega,
       'observacoes', p.observacoes,
       'formaRecebimento', p.forma_recebimento,
       'formaPagamento', p.forma_pagamento,
@@ -23,6 +24,7 @@ const PEDIDO_IMPRESSAO_SELECT = `
       'clienteNome', c.nome,
       'clienteTelefone', c.telefone,
       'enderecoEntrega', e.endereco,
+      'estabelecimentoNome', est.nome,
       'usuarioNome', u.nome,
       'itens', coalesce((
         select json_agg(json_build_object(
@@ -41,6 +43,7 @@ const PEDIDO_IMPRESSAO_SELECT = `
     ) as pedido
   from impressao_jobs j
   join pedidos p on p.id = j.pedido_id
+  join estabelecimentos est on est.id = p.estabelecimento_id
   left join comandas cm on cm.id = p.comanda_id
   left join mesas m on m.id = cm.mesa_id
   left join clientes c on c.id = p.cliente_id

@@ -107,6 +107,8 @@ export interface Pedido {
   trocoPara?: number;
   pagamentoStatus?: PagamentoStatus;
   enderecoEntrega?: string;
+  taxaEntrega?: number;
+  estabelecimentoNome?: string;
   total: number;
   createdAt: string;
   notificadoEm?: string;

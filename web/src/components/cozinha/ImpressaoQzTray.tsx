@@ -51,6 +51,24 @@ function centralizar(texto: string, largura = LARGURA_TICKET) {
   return `${" ".repeat(espacos)}${limpo}`;
 }
 
+function moedaTermica(valor: number) {
+  return `R$ ${Number(valor || 0).toFixed(2).replace(".", ",")}`;
+}
+
+function linhaComValor(descricao: string, valor: string, largura = LARGURA_TICKET) {
+  const larguraDescricao = Math.max(1, largura - valor.length - 1);
+  const linhas = quebrarLinha(descricao, larguraDescricao);
+  const ultima = linhas.pop() ?? "";
+  return [...linhas.map((linha) => `${linha}\n`), `${ultima}${" ".repeat(Math.max(1, largura - ultima.length - valor.length))}${valor}\n`];
+}
+
+function descricaoPagamento(pedido: Pedido) {
+  if (pedido.formaPagamento === "cartao") return `CARTAO - ${pedido.tipoCartao === "credito" ? "CREDITO" : "DEBITO"}`;
+  if (pedido.formaPagamento === "dinheiro") return pedido.trocoPara ? `DINHEIRO | TROCO P/ ${moedaTermica(pedido.trocoPara)}` : "DINHEIRO | SEM TROCO";
+  if (pedido.formaPagamento === "pix") return "PIX";
+  return "A COMBINAR";
+}
+
 function localDoPedido(pedido: Pedido) {
   if (pedido.mesaNumero) return `MESA ${pedido.mesaNumero}`;
   if (pedido.formaRecebimento === "entrega") return "DELIVERY";
@@ -59,12 +77,25 @@ function localDoPedido(pedido: Pedido) {
 }
 
 export function dadosEscPosPedido(pedido: Pedido, largura = LARGURA_TICKET) {
-  const linhas = ["\x1B\x40", "\x1B\x61\x01", "\x1B\x45\x01", `${centralizar("COZINHA", largura)}\n`, `${centralizar(`PEDIDO #${pedido.codigo}`, largura)}\n`, "\x1B\x45\x00", `${centralizar(localDoPedido(pedido), largura)}\n\n`, "\x1B\x61\x00", `${"-".repeat(largura)}\n`];
+  const cabecalho = pedido.estabelecimentoNome ? `${pedido.estabelecimentoNome} - OHFOME` : "OHFOME";
+  const linhas = ["\x1B\x40", "\x1B\x61\x01", "\x1B\x45\x01", ...quebrarLinha(cabecalho, largura).map((linha) => `${centralizar(linha, largura)}\n`), `${centralizar("COZINHA", largura)}\n`, `${centralizar(`PEDIDO #${pedido.codigo}`, largura)}\n`, "\x1B\x45\x00", `${centralizar(localDoPedido(pedido), largura)}\n\n`, "\x1B\x61\x00", `${"-".repeat(largura)}\n`];
 
   for (const item of pedido.itens) {
-    linhas.push(...quebrarLinha(`${item.quantidade}X ${item.produtoNome}`, largura).map((linha) => `${linha}\n`));
+    linhas.push(...linhaComValor(`${item.quantidade}X ${item.produtoNome}`, moedaTermica(item.precoUnitario * item.quantidade), largura));
     if (item.observacoes) linhas.push(...quebrarLinha(`  OBS: ${item.observacoes}`, largura).map((linha) => `${linha}\n`));
   }
+
+  if (pedido.formaRecebimento === "entrega") {
+    linhas.push(`${"-".repeat(largura)}\n`, ...linhaComValor("TAXA DE ENTREGA", Number(pedido.taxaEntrega) > 0 ? moedaTermica(Number(pedido.taxaEntrega)) : "GRATIS", largura));
+  }
+
+  linhas.push(`${"-".repeat(largura)}\n`, ...linhaComValor("TOTAL", moedaTermica(pedido.total), largura));
+
+  if (pedido.enderecoEntrega) {
+    linhas.push(`${"-".repeat(largura)}\n`, ...quebrarLinha("ENDERECO:", largura).map((linha) => `${linha}\n`), ...quebrarLinha(pedido.enderecoEntrega, largura).map((linha) => `${linha}\n`));
+  }
+
+  linhas.push(...quebrarLinha(`PAGAMENTO: ${descricaoPagamento(pedido)}`, largura).map((linha) => `${linha}\n`));
 
   if (pedido.observacoes) {
     linhas.push(`${"-".repeat(largura)}\n`, ...quebrarLinha(`OBS: ${pedido.observacoes}`, largura).map((linha) => `${linha}\n`));
