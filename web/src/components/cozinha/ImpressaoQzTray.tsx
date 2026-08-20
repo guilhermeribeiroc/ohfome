@@ -69,13 +69,6 @@ function descricaoPagamento(pedido: Pedido) {
   return "A COMBINAR";
 }
 
-function localDoPedido(pedido: Pedido) {
-  if (pedido.mesaNumero) return `MESA ${pedido.mesaNumero}`;
-  if (pedido.formaRecebimento === "entrega") return "DELIVERY";
-  if (pedido.formaRecebimento === "retirada") return "RETIRADA";
-  return pedido.tipo === "delivery" ? "DELIVERY" : "BALCAO";
-}
-
 function cabecalhoTermico(pedido: Pedido, largura: number) {
   if (!pedido.estabelecimentoNome) return "OHFOME";
   const sufixo = " - OHFOME";
