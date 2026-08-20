@@ -3,23 +3,17 @@ setlocal
 
 REM Execute como Administrador. Instala a confiança publica do OhFome no QZ Tray.
 set "QZ_DIR=%ProgramFiles%\QZ Tray"
-set "QZ_EXECUTABLE=%QZ_DIR%\qz-tray-console.exe"
-set "PROVISION_DIR=%QZ_DIR%\provision"
 set "CERT_URL=https://ohfome.app/ohfome-qz-root-ca.crt"
-set "PROVISION_URL=https://ohfome.app/qz/ohfome-qz-provision.json"
 
-if not exist "%QZ_EXECUTABLE%" (
+if not exist "%QZ_DIR%\qz-tray-console.exe" (
   echo QZ Tray nao foi encontrado. Instale-o primeiro em https://qz.io/download/
   exit /b 1
 )
 
 echo Preparando a confianca do OhFome no QZ Tray...
-if not exist "%PROVISION_DIR%" mkdir "%PROVISION_DIR%"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -UseBasicParsing '%CERT_URL%' -OutFile '%PROVISION_DIR%\ohfome-qz-root-ca.crt'"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -UseBasicParsing '%CERT_URL%' -OutFile '%QZ_DIR%\override.crt'"
 if errorlevel 1 exit /b 1
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -UseBasicParsing '%PROVISION_URL%' -OutFile '%PROVISION_DIR%\provision.json'"
-if errorlevel 1 exit /b 1
-"%QZ_EXECUTABLE%" certgen
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$p='%QZ_DIR%\qz-tray.properties'; $l=Get-Content $p | Where-Object { $_ -notmatch '^\s*authcert\.override\s*=' }; $l += 'authcert.override=C:/Program Files/QZ Tray/override.crt'; Set-Content -Path $p -Value $l -Encoding Ascii"
 if errorlevel 1 exit /b 1
 
 echo.
