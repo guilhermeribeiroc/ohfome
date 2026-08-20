@@ -949,6 +949,7 @@ declare
   v_produto_id uuid;
   v_quantidade int;
   v_preco numeric(10,2);
+  v_item_observacoes text;
   v_endereco text := nullif(btrim(coalesce(p_endereco, '')), '');
   v_observacoes text := nullif(btrim(coalesce(p_observacoes, '')), '');
   v_cpf text := nullif(btrim(coalesce(p_cpf, '')), '');
@@ -1013,9 +1014,13 @@ begin
   for v_item in select jsonb_array_elements(p_itens) loop
     v_produto_id := (v_item->>'produtoId')::uuid;
     v_quantidade := (v_item->>'quantidade')::int;
+    v_item_observacoes := nullif(btrim(coalesce(v_item->>'observacoes', '')), '');
 
     if v_quantidade is null or v_quantidade <= 0 then
       raise exception 'Quantidade inválida' using errcode = '22023';
+    end if;
+    if length(coalesce(v_item_observacoes, '')) > 1000 then
+      raise exception 'A observação do item pode ter até 1.000 caracteres' using errcode = '22023';
     end if;
 
     select preco_venda into v_preco
@@ -1026,8 +1031,8 @@ begin
       raise exception 'Produto inválido' using errcode = '22023';
     end if;
 
-    insert into itens_pedido (pedido_id, produto_id, quantidade, preco_unitario)
-    values (v_pedido_id, v_produto_id, v_quantidade, v_preco);
+    insert into itens_pedido (pedido_id, produto_id, quantidade, preco_unitario, observacoes)
+    values (v_pedido_id, v_produto_id, v_quantidade, v_preco, v_item_observacoes);
   end loop;
 
   if p_forma_recebimento = 'entrega' then
