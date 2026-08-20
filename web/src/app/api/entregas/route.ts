@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
          en.entregador_id as "entregadorId",
          en.status,
          en.endereco,
+         en.bairro,
          p.observacoes,
          p.forma_pagamento as "formaPagamento",
          p.tipo_cartao as "tipoCartao",

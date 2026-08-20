@@ -644,6 +644,7 @@ create table entregas (
   entregador_id uuid references entregadores(id),
   status entrega_status not null default 'aguardando',
   endereco text not null,
+  bairro text,
   tempo_estimado_min integer,
   saiu_em timestamptz,
   entregue_em timestamptz,
@@ -652,6 +653,22 @@ create table entregas (
 
 create index idx_entregas_status on entregas(status);
 create index idx_entregas_entregador on entregas(entregador_id);
+
+-- Taxas de entrega por bairro: o dono define quanto cobrar em cada um, e o
+-- cardapio publico usa essa tabela pra calcular a taxa automaticamente.
+create table bairros_entrega (
+  id uuid primary key default gen_random_uuid(),
+  estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade,
+  nome text not null,
+  taxa numeric(10, 2) not null default 0 check (taxa >= 0),
+  -- comeca desativado: o dono revisa a taxa antes do bairro aparecer pros
+  -- clientes no cardapio (evita cobrar 0 por engano).
+  ativo boolean not null default false,
+  created_at timestamptz not null default now(),
+  unique (estabelecimento_id, nome)
+);
+
+create index idx_bairros_entrega_estabelecimento on bairros_entrega(estabelecimento_id);
 
 -- ============================================================================
 -- WHATSAPP (log de mensagens recebidas para rastreabilidade e reprocessamento)
@@ -713,7 +730,7 @@ begin
     'usuarios', 'mesas', 'categorias_produto', 'produtos', 'insumos',
     'clientes', 'pedidos', 'entregadores', 'movimentacoes_financeiras',
     'custos_fixos', 'whatsapp_mensagens', 'estado_aplicacao', 'estabelecimento_modulos',
-    'impressao_jobs'
+    'impressao_jobs', 'bairros_entrega'
   ]
   loop
     execute format('alter table %I enable row level security', tabela);
@@ -799,6 +816,13 @@ declare
   v_categorias text[];
   v_nome_categoria text;
   v_ordem int;
+  v_bairros text[] := array[
+    'Centro', 'Cristo Rei', 'São José', 'Hermógenes Henrique Girão',
+    'Nossa Senhora da Conceição', 'Girão Maia', 'Júlia Santiago', 'São Francisco',
+    'Antônio Raulino', 'Divino Espírito Santo', 'Alto Tiradentes',
+    'Dionísio de Matos Fontes', 'Dois de Agosto', 'Luiz Valter Rabelo Maia', 'Irapuan Nobre'
+  ];
+  v_nome_bairro text;
 begin
   insert into estabelecimentos (nome, tipo, tipo_comida, slug)
   values (p_nome, p_tipo, p_tipo_comida, p_slug)
@@ -839,6 +863,11 @@ begin
     insert into categorias_produto (estabelecimento_id, nome, ordem_exibicao)
     values (v_estabelecimento_id, v_nome_categoria, v_ordem);
     v_ordem := v_ordem + 1;
+  end loop;
+
+  foreach v_nome_bairro in array v_bairros loop
+    insert into bairros_entrega (estabelecimento_id, nome)
+    values (v_estabelecimento_id, v_nome_bairro);
   end loop;
 
   return v_estabelecimento_id;
@@ -903,7 +932,8 @@ create function fn_criar_pedido_publico(
   p_troco_para numeric,
   p_itens jsonb,
   p_cpf text default null,
-  p_notificar_pedido boolean default false
+  p_notificar_pedido boolean default false,
+  p_bairro_id uuid default null
 )
 returns jsonb
 language plpgsql
@@ -923,6 +953,8 @@ declare
   v_observacoes text := nullif(btrim(coalesce(p_observacoes, '')), '');
   v_cpf text := nullif(btrim(coalesce(p_cpf, '')), '');
   v_troco_para numeric(10,2) := case when p_troco_para > 0 then p_troco_para else null end;
+  v_bairro_nome text;
+  v_taxa_entrega numeric(10,2) := 0;
 begin
   select id into v_estabelecimento_id from estabelecimentos where slug = p_slug and ativo;
   if v_estabelecimento_id is null then
@@ -949,6 +981,18 @@ begin
     raise exception 'Informe o endereço completo para entrega' using errcode = '22023';
   end if;
 
+  if p_forma_recebimento = 'entrega' then
+    if p_bairro_id is null then
+      raise exception 'Selecione o bairro de entrega' using errcode = '22023';
+    end if;
+    select nome, taxa into v_bairro_nome, v_taxa_entrega
+    from bairros_entrega
+    where id = p_bairro_id and estabelecimento_id = v_estabelecimento_id and ativo;
+    if v_bairro_nome is null then
+      raise exception 'Bairro inválido' using errcode = '22023';
+    end if;
+  end if;
+
   if jsonb_array_length(p_itens) = 0 then
     raise exception 'Pedido sem itens' using errcode = '22023';
   end if;
@@ -962,8 +1006,8 @@ begin
         notificar_pedido = excluded.notificar_pedido
   returning id into v_cliente_id;
 
-  insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, cliente_id, observacoes, forma_recebimento, forma_pagamento, tipo_cartao, troco_para)
-  values (v_estabelecimento_id, case when p_forma_recebimento = 'entrega' then 'delivery'::pedido_tipo else 'balcao'::pedido_tipo end, 'app', 'novo', true, now(), v_cliente_id, v_observacoes, p_forma_recebimento, p_forma_pagamento, case when p_forma_pagamento = 'cartao' then p_tipo_cartao else null end, v_troco_para)
+  insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, cliente_id, observacoes, forma_recebimento, forma_pagamento, tipo_cartao, troco_para, taxa_entrega)
+  values (v_estabelecimento_id, case when p_forma_recebimento = 'entrega' then 'delivery'::pedido_tipo else 'balcao'::pedido_tipo end, 'app', 'novo', true, now(), v_cliente_id, v_observacoes, p_forma_recebimento, p_forma_pagamento, case when p_forma_pagamento = 'cartao' then p_tipo_cartao else null end, v_troco_para, v_taxa_entrega)
   returning id, codigo into v_pedido_id, v_codigo;
 
   for v_item in select jsonb_array_elements(p_itens) loop
@@ -987,14 +1031,29 @@ begin
   end loop;
 
   if p_forma_recebimento = 'entrega' then
-    insert into entregas (pedido_id, endereco) values (v_pedido_id, v_endereco);
+    insert into entregas (pedido_id, endereco, bairro) values (v_pedido_id, v_endereco, v_bairro_nome);
   end if;
 
-  return jsonb_build_object('id', v_pedido_id, 'codigo', v_codigo, 'notificar', p_notificar_pedido);
+  return jsonb_build_object('id', v_pedido_id, 'codigo', v_codigo, 'notificar', p_notificar_pedido, 'taxaEntrega', v_taxa_entrega);
 end;
 $$;
 
-revoke all on function fn_criar_pedido_publico(text, text, text, text, text, text, text, text, numeric, jsonb, text, boolean) from public;
+revoke all on function fn_criar_pedido_publico(text, text, text, text, text, text, text, text, numeric, jsonb, text, boolean, uuid) from public;
+
+-- Lista publica dos bairros ativos (e a taxa de cada um) pro cardapio digital.
+create function fn_bairros_publico(p_slug text)
+returns jsonb
+language sql
+security definer
+set search_path = public
+as $$
+  select coalesce(jsonb_agg(jsonb_build_object('id', b.id, 'nome', b.nome, 'taxa', b.taxa) order by b.nome), '[]'::jsonb)
+  from bairros_entrega b
+  join estabelecimentos e on e.id = b.estabelecimento_id
+  where e.slug = p_slug and e.ativo and b.ativo;
+$$;
+
+revoke all on function fn_bairros_publico(text) from public;
 
 -- Consulta publica de status: usada pela aba de acompanhamento do cliente.
 -- So enxerga pedidos com origem='app' (feitos pelo cardapio) do slug pedido,
@@ -1053,7 +1112,7 @@ grant select, insert, update, delete on
   insumos, movimentacoes_estoque, clientes, pedidos, itens_pedido,
   historico_status_pedido, entregadores, entregas, whatsapp_mensagens,
   movimentacoes_financeiras, custos_fixos, estado_aplicacao,
-  estabelecimento_modulos, impressao_jobs
+  estabelecimento_modulos, impressao_jobs, bairros_entrega
 to ohfome_app;
 
 -- estabelecimentos: sem insert/delete direto (so via fn_registrar_estabelecimento);
@@ -1066,7 +1125,8 @@ grant execute on function fn_autenticar(text) to ohfome_app;
 grant execute on function fn_registrar_estabelecimento(text, tipo_estabelecimento, text, modulo_sistema[], jsonb, text) to ohfome_app;
 grant execute on function fn_cardapio_publico(text) to ohfome_app;
 grant execute on function fn_pedido_publico_status(text, uuid) to ohfome_app;
-grant execute on function fn_criar_pedido_publico(text, text, text, text, text, text, text, text, numeric, jsonb, text, boolean) to ohfome_app;
+grant execute on function fn_criar_pedido_publico(text, text, text, text, text, text, text, text, numeric, jsonb, text, boolean, uuid) to ohfome_app;
+grant execute on function fn_bairros_publico(text) to ohfome_app;
 
 -- Colunas serial (ex.: pedidos.codigo) usam uma sequence por baixo; inserir
 -- nelas exige USAGE/SELECT na sequence, nao so privilegio na tabela.

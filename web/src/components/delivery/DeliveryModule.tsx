@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState, type DragEvent } from "react";
-import { Check, MapPin, Plus, Printer, Send, Trash2, UserRoundPlus, X } from "lucide-react";
-import type { Entrega, Entregador, EntregaStatus, Produto } from "@/lib/types";
+import { Check, MapPin, MapPinned, Plus, Printer, Send, Trash2, UserRoundPlus, X } from "lucide-react";
+import type { BairroEntrega, Entrega, Entregador, EntregaStatus, Produto } from "@/lib/types";
 import { ENTREGA_STATUS_LABEL } from "@/lib/types";
 import { usePolling } from "@/lib/use-polling";
 import { imprimirEntrega } from "@/lib/impressao";
@@ -20,6 +20,7 @@ export function DeliveryModule() {
   const [entregaArrastada, setEntregaArrastada] = useState<string | null>(null);
   const [colunaDestino, setColunaDestino] = useState<EntregaStatus | null>(null);
   const [entregaDetalhe, setEntregaDetalhe] = useState<Entrega | null>(null);
+  const [bairrosAberto, setBairrosAberto] = useState(false);
 
   async function excluirEntregador(id: string, nome: string) {
     if (!confirm(`Remover "${nome}" da equipe de entrega?`)) return;
@@ -89,12 +90,17 @@ export function DeliveryModule() {
           <h1 className="of-title">Delivery</h1>
           <p className="of-subtitle">Entregadores, atribuições e acompanhamento de cada saída.</p>
         </div>
-        <button
-          onClick={() => setModalAberto(true)}
-          className="of-btn-primary w-full sm:w-auto"
-        >
-          <Plus size={17} /> Novo pedido delivery
-        </button>
+        <div className="flex w-full gap-2 sm:w-auto">
+          <button onClick={() => setBairrosAberto(true)} className="of-btn-secondary flex-1 sm:flex-none">
+            <MapPinned size={17} /> Taxas por bairro
+          </button>
+          <button
+            onClick={() => setModalAberto(true)}
+            className="of-btn-primary flex-1 sm:flex-none"
+          >
+            <Plus size={17} /> Novo pedido delivery
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_260px]">
@@ -133,7 +139,7 @@ export function DeliveryModule() {
                           </span>
                         </div>
                         <p className="text-xs font-medium text-ink-600">{entrega.clienteNome}</p>
-                        <p className="mb-2.5 mt-1 flex items-start gap-1.5 text-xs leading-5 text-ink-400"><MapPin size={13} className="mt-0.5 shrink-0" />{entrega.endereco}</p>
+                        <p className="mb-2.5 mt-1 flex items-start gap-1.5 text-xs leading-5 text-ink-400"><MapPin size={13} className="mt-0.5 shrink-0" />{entrega.bairro ? `${entrega.bairro} · ${entrega.endereco}` : entrega.endereco}</p>
 
                         {status === "aguardando" && <div className="space-y-2"><button onClick={(evento) => { evento.stopPropagation(); void marcarSaiu(entrega.id); }} className="flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-ink-900 px-3 text-[11px] font-semibold text-white transition active:scale-95"><Send size={13} /> Saiu para entrega</button>{(entregadores ?? []).some((e) => e.disponivel) && <select defaultValue="" onClick={(evento) => evento.stopPropagation()} onChange={(e) => e.target.value && atribuir(entrega.id, e.target.value)} className="w-full rounded-lg border border-cream-200 bg-surface px-2 py-2 text-xs text-ink-600 shadow-sm outline-none"><option value="" disabled>Atribuir entregador (opcional)</option>{(entregadores ?? []).filter((e) => e.disponivel).map((e) => <option key={e.id} value={e.id}>{e.nome} · {e.veiculo}</option>)}</select>}</div>}
 
@@ -217,6 +223,111 @@ export function DeliveryModule() {
         />
       )}
       {entregaDetalhe && <EntregaDetalheModal entrega={entregaDetalhe} entregadorNome={(entregadores ?? []).find((entregador) => entregador.id === entregaDetalhe.entregadorId)?.nome} onFechar={() => setEntregaDetalhe(null)} />}
+      {bairrosAberto && <BairrosModal onFechar={() => setBairrosAberto(false)} />}
+    </div>
+  );
+}
+
+function BairrosModal({ onFechar }: { onFechar: () => void }) {
+  const { dados: bairros, setDados, recarregar } = usePolling<BairroEntrega[]>("/api/entrega/bairros", 60000);
+  const [novoNome, setNovoNome] = useState("");
+  const [novaTaxa, setNovaTaxa] = useState("");
+  const [criando, setCriando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  async function salvarTaxa(bairro: BairroEntrega, taxa: number) {
+    setDados((atual) => (atual ?? []).map((b) => (b.id === bairro.id ? { ...b, taxa } : b)));
+    await fetch(`/api/entrega/bairros/${bairro.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taxa }),
+    });
+  }
+
+  async function alternarAtivo(bairro: BairroEntrega) {
+    setDados((atual) => (atual ?? []).map((b) => (b.id === bairro.id ? { ...b, ativo: !b.ativo } : b)));
+    await fetch(`/api/entrega/bairros/${bairro.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ativo: !bairro.ativo }),
+    });
+  }
+
+  async function excluir(bairro: BairroEntrega) {
+    if (!confirm(`Remover "${bairro.nome}" da lista de bairros?`)) return;
+    setDados((atual) => (atual ?? []).filter((b) => b.id !== bairro.id));
+    await fetch(`/api/entrega/bairros/${bairro.id}`, { method: "DELETE" });
+  }
+
+  async function criarBairro() {
+    if (!novoNome.trim() || !novaTaxa) return;
+    setCriando(true);
+    setErro("");
+    const res = await fetch("/api/entrega/bairros", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nome: novoNome, taxa: Number(novaTaxa.replace(",", ".")) }),
+    });
+    setCriando(false);
+    if (!res.ok) {
+      const dados = await res.json().catch(() => null);
+      setErro(dados?.erro ?? "Não foi possível adicionar o bairro.");
+      return;
+    }
+    setNovoNome("");
+    setNovaTaxa("");
+    recarregar();
+  }
+
+  return (
+    <div className="of-modal-backdrop z-50" role="dialog" aria-modal="true" aria-label="Taxas por bairro">
+      <section className="of-modal-panel flex max-h-[90dvh] max-w-lg flex-col overflow-hidden">
+        <header className="flex items-start justify-between border-b border-cream-200 p-5">
+          <div><p className="of-eyebrow">Delivery</p><h2 className="font-display text-xl font-bold tracking-tight text-ink-900">Taxas por bairro</h2><p className="mt-1 text-xs leading-5 text-ink-400">Ative os bairros que você atende e defina a taxa de cada um. Só bairros ativos aparecem pro cliente no cardápio digital.</p></div>
+          <button onClick={onFechar} className="of-icon-btn shrink-0" aria-label="Fechar"><X size={17} /></button>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          <div className="space-y-2">
+            {(bairros ?? []).map((bairro) => (
+              <div key={bairro.id} className={`flex items-center gap-3 rounded-2xl border p-3 transition ${bairro.ativo ? "border-coral-200 bg-coral-050/50" : "border-cream-200 bg-cream-50"}`}>
+                <button
+                  onClick={() => alternarAtivo(bairro)}
+                  className={`flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition ${bairro.ativo ? "bg-coral-500" : "bg-cream-300"}`}
+                  aria-pressed={bairro.ativo}
+                  aria-label={`${bairro.ativo ? "Desativar" : "Ativar"} ${bairro.nome}`}
+                >
+                  <span className={`h-5 w-5 rounded-full bg-white shadow-sm transition ${bairro.ativo ? "translate-x-5" : "translate-x-0"}`} />
+                </button>
+                <p className={`min-w-0 flex-1 truncate text-sm font-medium ${bairro.ativo ? "text-ink-900" : "text-ink-400"}`}>{bairro.nome}</p>
+                <label className="flex shrink-0 items-center overflow-hidden rounded-lg border border-cream-200 bg-white">
+                  <span className="pl-2.5 text-xs font-semibold text-ink-400">R$</span>
+                  <input
+                    inputMode="decimal"
+                    defaultValue={bairro.taxa.toFixed(2).replace(".", ",")}
+                    onBlur={(e) => {
+                      const valor = Number(e.target.value.replace(",", "."));
+                      if (Number.isFinite(valor) && valor >= 0) salvarTaxa(bairro, valor);
+                    }}
+                    className="w-16 bg-transparent py-2 pr-2.5 text-right text-sm outline-none"
+                  />
+                </label>
+                <button onClick={() => excluir(bairro)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-danger-600 hover:bg-danger-050" aria-label={`Remover ${bairro.nome}`}><Trash2 size={14} /></button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <footer className="border-t border-cream-200 bg-surface p-5">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-ink-400">Adicionar outro bairro</p>
+          <div className="flex gap-2">
+            <input value={novoNome} onChange={(e) => setNovoNome(e.target.value)} placeholder="Nome do bairro" className={`${CAMPO_CLASSE} flex-1`} />
+            <input value={novaTaxa} onChange={(e) => setNovaTaxa(e.target.value)} inputMode="decimal" placeholder="Taxa" className={`${CAMPO_CLASSE} w-24`} />
+            <button onClick={criarBairro} disabled={criando || !novoNome.trim() || !novaTaxa} className="of-btn-primary shrink-0 !px-4">{criando ? "..." : <Plus size={17} />}</button>
+          </div>
+          {erro && <p className="mt-2 text-xs font-medium text-danger-600">{erro}</p>}
+        </footer>
+      </section>
     </div>
   );
 }
@@ -234,19 +345,24 @@ function EntregaDetalheModal({ entrega, entregadorNome, onFechar }: { entrega: E
 
 function NovoPedidoDeliveryModal({ onFechar, onCriado }: { onFechar: () => void; onCriado: () => void }) {
   const { dados: produtos } = usePolling<Produto[]>("/api/produtos", 60000);
+  const { dados: bairros } = usePolling<BairroEntrega[]>("/api/entrega/bairros", 60000);
   const [clienteNome, setClienteNome] = useState("");
   const [endereco, setEndereco] = useState("");
+  const [bairroId, setBairroId] = useState("");
   const [itens, setItens] = useState<Record<string, number>>({});
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
 
-  const total = useMemo(() => {
+  const bairrosAtivos = useMemo(() => (bairros ?? []).filter((b) => b.ativo), [bairros]);
+  const taxaEntrega = bairrosAtivos.find((b) => b.id === bairroId)?.taxa ?? 0;
+  const subtotal = useMemo(() => {
     if (!produtos) return 0;
     return Object.entries(itens).reduce((soma, [produtoId, qtd]) => {
       const produto = produtos.find((p) => p.id === produtoId);
       return soma + (produto?.precoVenda ?? 0) * qtd;
     }, 0);
   }, [itens, produtos]);
+  const total = subtotal + taxaEntrega;
 
   function ajustar(produtoId: string, delta: number) {
     setItens((atual) => {
@@ -269,6 +385,7 @@ function NovoPedidoDeliveryModal({ onFechar, onCriado }: { onFechar: () => void;
         tipo: "delivery",
         clienteNome,
         endereco,
+        bairroId: bairroId || undefined,
         itens: Object.entries(itens).map(([produtoId, quantidade]) => ({ produtoId, quantidade })),
       }),
     });
@@ -292,6 +409,10 @@ function NovoPedidoDeliveryModal({ onFechar, onCriado }: { onFechar: () => void;
         <div className="flex-1 overflow-y-auto px-5">
           <div className="mb-4 space-y-2">
             <input value={clienteNome} onChange={(e) => setClienteNome(e.target.value)} placeholder="Nome do cliente" className={CAMPO_CLASSE} />
+            <select value={bairroId} onChange={(e) => setBairroId(e.target.value)} className={CAMPO_CLASSE}>
+              <option value="">Bairro (opcional, calcula a taxa)</option>
+              {bairrosAtivos.map((b) => <option key={b.id} value={b.id}>{b.nome} · R$ {b.taxa.toFixed(2).replace(".", ",")}</option>)}
+            </select>
             <input value={endereco} onChange={(e) => setEndereco(e.target.value)} placeholder="Endereço de entrega" className={CAMPO_CLASSE} />
           </div>
 
@@ -330,7 +451,7 @@ function NovoPedidoDeliveryModal({ onFechar, onCriado }: { onFechar: () => void;
         <div className="p-5">
           {erro && <p className="mb-2 text-xs font-medium text-danger-600">{erro}</p>}
           <div className="mb-3 flex items-center justify-between">
-            <span className="text-sm text-ink-400">{Object.keys(itens).length} item(ns)</span>
+            <span className="text-sm text-ink-400">{Object.keys(itens).length} item(ns){taxaEntrega > 0 ? ` · taxa R$ ${taxaEntrega.toFixed(2).replace(".", ",")}` : ""}</span>
             <span className="font-display text-lg font-bold text-ink-900">R$ {total.toFixed(2).replace(".", ",")}</span>
           </div>
           <button

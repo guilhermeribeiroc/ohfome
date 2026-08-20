@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Calculator, PackagePlus, Sparkles, UsersRound } from "lucide-react";
+import { ArrowRight, Calculator, MapPinned, PackagePlus, Sparkles, UsersRound } from "lucide-react";
 import { useTenant } from "@/lib/tenant-context";
 import { MODULOS } from "@/lib/tenant-types";
 import { ModuleIcon } from "@/components/ui/AppIcons";
@@ -10,7 +10,7 @@ import { OhFomeMark } from "@/components/ui/OhFomeLogo";
 
 const GRADIENTE_CORAL = "linear-gradient(120deg, var(--color-coral-600), var(--color-coral-500), var(--color-mango-500))";
 
-type Fase = "oculto" | "intro" | "equipe" | "estoque";
+type Fase = "oculto" | "intro" | "equipe" | "estoque" | "entrega";
 
 const DURACAO_INTRO_MS = 2400;
 
@@ -37,24 +37,34 @@ export function OnboardingFlow() {
   const modulosDoTime = MODULOS.filter(
     (m) => m.id !== "estoque" && estabelecimento.modulosAtivos.includes(m.id)
   );
+  const temDelivery = estabelecimento.modulosAtivos.includes("delivery");
+  const totalPassos = temDelivery ? 3 : 2;
 
-  function irPara(destino: string, encerrar: boolean) {
-    router.push(destino);
-    if (encerrar) {
-      void concluirOnboarding();
-      setFase("oculto");
-    } else {
-      setFase("estoque");
-    }
+  function encerrarOnboarding() {
+    void concluirOnboarding();
+    setFase("oculto");
+  }
+
+  function irParaEquipe() {
+    router.push("/equipe");
+    setFase("estoque");
+  }
+
+  function irParaEstoque() {
+    router.push("/estoque");
+    if (temDelivery) setFase("entrega");
+    else encerrarOnboarding();
+  }
+
+  function irParaEntrega() {
+    router.push("/delivery");
+    encerrarOnboarding();
   }
 
   function adiar() {
-    if (fase === "equipe") {
-      setFase("estoque");
-    } else {
-      void concluirOnboarding();
-      setFase("oculto");
-    }
+    if (fase === "equipe") setFase("estoque");
+    else if (fase === "estoque" && temDelivery) setFase("entrega");
+    else encerrarOnboarding();
   }
 
   return (
@@ -85,7 +95,7 @@ export function OnboardingFlow() {
           <div className="relative overflow-hidden px-7 pt-7 pb-6" style={{ background: GRADIENTE_CORAL }}>
             <span className="pointer-events-none absolute -right-8 -top-10 h-36 w-36 rounded-full bg-white/10" />
             <span className="pointer-events-none absolute -bottom-12 -left-6 h-28 w-28 rounded-full bg-white/10" />
-            <p className="text-[10px] font-bold uppercase tracking-[.16em] text-white/75">Primeiros passos · 1 de 2</p>
+            <p className="text-[10px] font-bold uppercase tracking-[.16em] text-white/75">Primeiros passos · 1 de {totalPassos}</p>
             <div className="mt-2 flex items-center gap-3">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-white ring-1 ring-white/25"><UsersRound size={20} /></span>
               <p className="font-display text-xl font-bold leading-tight text-white">Chame o time pra mesa</p>
@@ -116,7 +126,7 @@ export function OnboardingFlow() {
             <div className="mt-6 flex flex-col gap-2.5">
               <button
                 type="button"
-                onClick={() => irPara("/equipe", false)}
+                onClick={irParaEquipe}
                 className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl text-sm font-bold text-white shadow-lg shadow-coral-500/25 transition hover:shadow-xl"
                 style={{ background: GRADIENTE_CORAL }}
               >
@@ -139,7 +149,7 @@ export function OnboardingFlow() {
           <div className="relative overflow-hidden px-7 pt-7 pb-6 bg-ink-900">
             <span className="pointer-events-none absolute -right-10 -top-12 h-36 w-36 rounded-full bg-mango-400/15" />
             <span className="pointer-events-none absolute -bottom-14 -left-8 h-32 w-32 rounded-full bg-coral-500/15" />
-            <p className="text-[10px] font-bold uppercase tracking-[.16em] text-white/55">Primeiros passos · 2 de 2</p>
+            <p className="text-[10px] font-bold uppercase tracking-[.16em] text-white/55">Primeiros passos · 2 de {totalPassos}</p>
             <div className="mt-2 flex items-center gap-3">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-mango-400 ring-1 ring-white/15"><PackagePlus size={20} /></span>
               <p className="font-display text-xl font-bold leading-tight text-white">Monte seu estoque e preços</p>
@@ -159,10 +169,53 @@ export function OnboardingFlow() {
             <div className="mt-6 flex flex-col gap-2.5">
               <button
                 type="button"
-                onClick={() => irPara("/estoque", true)}
+                onClick={irParaEstoque}
                 className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-ink-900 text-sm font-bold text-white shadow-lg shadow-ink-900/20 transition hover:shadow-xl"
               >
                 <Sparkles size={16} /> Configurar estoque e preços
+              </button>
+              <button
+                type="button"
+                onClick={adiar}
+                className="min-h-11 w-full rounded-xl text-sm font-semibold text-ink-400 transition hover:text-ink-600"
+              >
+                Fazer isso depois
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {fase === "entrega" && (
+        <div className="w-full max-w-md overflow-hidden rounded-[2rem] bg-surface shadow-2xl" style={{ animation: "onb-pop .4s cubic-bezier(.2,.8,.2,1) both" }}>
+          <div className="relative overflow-hidden px-7 pt-7 pb-6" style={{ background: GRADIENTE_CORAL }}>
+            <span className="pointer-events-none absolute -right-8 -top-10 h-36 w-36 rounded-full bg-white/10" />
+            <span className="pointer-events-none absolute -bottom-12 -left-6 h-28 w-28 rounded-full bg-white/10" />
+            <p className="text-[10px] font-bold uppercase tracking-[.16em] text-white/75">Primeiros passos · 3 de {totalPassos}</p>
+            <div className="mt-2 flex items-center gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-white ring-1 ring-white/25"><MapPinned size={20} /></span>
+              <p className="font-display text-xl font-bold leading-tight text-white">Defina as taxas de entrega</p>
+            </div>
+          </div>
+
+          <div className="px-7 py-6">
+            <p className="text-sm leading-6 text-ink-600">
+              Já deixamos os bairros de Morada Nova prontos pra você. Ative os que você atende e diga quanto cobrar em cada um — o cardápio digital calcula a taxa sozinho quando o cliente escolhe o bairro na hora de pedir.
+            </p>
+
+            <div className="mt-5 flex items-center gap-3 rounded-xl bg-cream-50 px-3.5 py-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface text-coral-600 shadow-sm ring-1 ring-cream-200"><MapPinned size={16} /></span>
+              <p className="text-xs leading-5 text-ink-600"><b className="text-ink-900">15 bairros já cadastrados</b>, só falta você ativar e definir o valor.</p>
+            </div>
+
+            <div className="mt-6 flex flex-col gap-2.5">
+              <button
+                type="button"
+                onClick={irParaEntrega}
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl text-sm font-bold text-white shadow-lg shadow-coral-500/25 transition hover:shadow-xl"
+                style={{ background: GRADIENTE_CORAL }}
+              >
+                Configurar taxas de entrega <ArrowRight size={16} />
               </button>
               <button
                 type="button"

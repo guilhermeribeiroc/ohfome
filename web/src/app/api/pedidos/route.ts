@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
   const mesaId = body?.mesaId;
   const clienteNome = typeof body?.clienteNome === "string" ? body.clienteNome.trim() : undefined;
   const endereco = typeof body?.endereco === "string" ? body.endereco.trim() : undefined;
+  const bairroId = typeof body?.bairroId === "string" ? body.bairroId : undefined;
   const itensInput: ItemInput[] = Array.isArray(body?.itens) ? body.itens : [];
 
   if (tipo !== "mesa" && tipo !== "balcao" && tipo !== "delivery") {
@@ -135,11 +136,23 @@ export async function POST(request: NextRequest) {
         clienteId = rows[0].id;
       }
 
+      let bairroNome: string | null = null;
+      let taxaEntrega = 0;
+      if (tipo === "delivery" && bairroId) {
+        const { rows: bairroRows } = await client.query(
+          `select nome, taxa from bairros_entrega where id = $1`,
+          [bairroId]
+        );
+        if (bairroRows.length === 0) throw Object.assign(new Error("Bairro inválido."), { status: 400 });
+        bairroNome = bairroRows[0].nome;
+        taxaEntrega = bairroRows[0].taxa;
+      }
+
       const { rows: pedidoRows } = await client.query(
-        `insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, comanda_id, cliente_id, usuario_id)
-         values ($1, $2, 'presencial', 'novo', true, now(), $3, $4, $5)
+        `insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, comanda_id, cliente_id, usuario_id, taxa_entrega)
+         values ($1, $2, 'presencial', 'novo', true, now(), $3, $4, $5, $6)
          returning id`,
-        [sessao.estabelecimentoId, tipo, comandaId, clienteId, sessao.usuarioId]
+        [sessao.estabelecimentoId, tipo, comandaId, clienteId, sessao.usuarioId, taxaEntrega]
       );
       const pedidoId = pedidoRows[0].id;
 
@@ -152,7 +165,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (tipo === "delivery") {
-        await client.query(`insert into entregas (pedido_id, endereco) values ($1, $2)`, [pedidoId, endereco]);
+        await client.query(`insert into entregas (pedido_id, endereco, bairro) values ($1, $2, $3)`, [pedidoId, endereco, bairroNome]);
       }
 
       return pedidoId;

@@ -176,6 +176,7 @@ export interface Entrega {
   entregadorId?: string;
   status: EntregaStatus;
   endereco: string;
+  bairro?: string;
   observacoes?: string;
   formaPagamento?: FormaPagamento;
   tipoCartao?: TipoCartao;
@@ -184,6 +185,13 @@ export interface Entrega {
   itens?: { produtoNome: string; quantidade: number; precoUnitario: number }[];
   total: number;
   tempoEstimadoMin?: number;
+}
+
+export interface BairroEntrega {
+  id: string;
+  nome: string;
+  taxa: number;
+  ativo: boolean;
 }
 
 export const PEDIDO_STATUS_LABEL: Record<PedidoStatus, string> = {
