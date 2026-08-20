@@ -8,6 +8,7 @@ import { MobileNav } from "@/components/layout/MobileNav";
 import { useTenant } from "@/lib/tenant-context";
 import { modulosPermitidos } from "@/lib/tenant-types";
 import { OnboardingFlow } from "@/components/onboarding/OnboardingFlow";
+import { ImpressaoQzTray } from "@/components/cozinha/ImpressaoQzTray";
 
 export default function AppLayout({ children }: LayoutProps<"/">) {
   const { carregando, estabelecimento, usuarioAtual } = useTenant();
@@ -20,7 +21,8 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
   );
   const moduloPermitido = permitidos.find((m) => pathname?.startsWith(m.href));
   const equipePermitida = usuarioAtual?.role === "admin" && pathname?.startsWith("/equipe");
-  const rotaBloqueada = Boolean(estabelecimento) && !moduloPermitido && !equipePermitida;
+  const configuracaoPermitida = usuarioAtual?.role === "admin" && pathname?.startsWith("/configuracoes");
+  const rotaBloqueada = Boolean(estabelecimento) && !moduloPermitido && !equipePermitida && !configuracaoPermitida;
 
   useEffect(() => {
     if (!carregando && !estabelecimento) {
@@ -50,6 +52,7 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
       <main className="min-w-0 flex-1 overflow-x-hidden">{children}</main>
       <MobileNav />
       <OnboardingFlow />
+      <ImpressaoQzTray compacta />
     </div>
   );
 }

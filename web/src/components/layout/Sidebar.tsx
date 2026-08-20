@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronRight, LogOut, Sparkles, UsersRound } from "lucide-react";
+import { ChevronRight, LogOut, Settings2, Sparkles, UsersRound } from "lucide-react";
 import { modulosPermitidos, SEGMENTOS } from "@/lib/tenant-types";
 import { useTenant } from "@/lib/tenant-context";
 import Image from "next/image";
@@ -56,6 +56,7 @@ export function Sidebar() {
           );
         })}
         {usuarioAtual?.role === "admin" && <Link href="/equipe" aria-current={pathname?.startsWith("/equipe") ? "page" : undefined} className={`group relative flex min-h-11 items-center gap-3 rounded-xl px-3 text-[13px] font-medium transition-all duration-200 ${pathname?.startsWith("/equipe") ? "bg-ink-900 text-white shadow-lg shadow-ink-900/15" : "text-ink-600 hover:bg-cream-100 hover:text-ink-900"}`}><UsersRound size={18} strokeWidth={1.8} className={pathname?.startsWith("/equipe") ? "text-coral-400" : "text-ink-400 transition-colors group-hover:text-coral-500"} /><span className="flex-1">Equipe</span>{pathname?.startsWith("/equipe") && <span className="h-1.5 w-1.5 rounded-full bg-coral-400" />}</Link>}
+        {usuarioAtual?.role === "admin" && <Link href="/configuracoes/impressao" aria-current={pathname?.startsWith("/configuracoes") ? "page" : undefined} className={`group relative flex min-h-11 items-center gap-3 rounded-xl px-3 text-[13px] font-medium transition-all duration-200 ${pathname?.startsWith("/configuracoes") ? "bg-ink-900 text-white shadow-lg shadow-ink-900/15" : "text-ink-600 hover:bg-cream-100 hover:text-ink-900"}`}><Settings2 size={18} strokeWidth={1.8} className={pathname?.startsWith("/configuracoes") ? "text-coral-400" : "text-ink-400 transition-colors group-hover:text-coral-500"} /><span className="flex-1">Configurações</span>{pathname?.startsWith("/configuracoes") && <span className="h-1.5 w-1.5 rounded-full bg-coral-400" />}</Link>}
       </nav>
 
       <div className="mb-3 rounded-2xl border border-coral-100 bg-coral-050/70 p-3.5">
