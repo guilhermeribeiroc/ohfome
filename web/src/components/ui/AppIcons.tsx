@@ -11,6 +11,7 @@ import {
   Flame,
   Fish,
   Hamburger,
+  IceCreamCone,
   PackageOpen,
   Pizza,
   Sandwich,
@@ -39,6 +40,7 @@ const SEGMENTO_ICONS: Record<TipoEstabelecimento, LucideIcon> = {
   hamburgueria: Hamburger,
   japonesa: Fish,
   padaria_cafeteria: Croissant,
+  sorveteria: IceCreamCone,
   outro: Store,
 };
 
@@ -49,6 +51,7 @@ const CATEGORY_ICONS: Array<[RegExp, LucideIcon]> = [
   [/sobremesa|doce|chocolate|bolo/i, CakeSlice],
   [/carne|churrasco|espeto|picanha/i, Beef],
   [/sushi|temaki|japon/i, Fish],
+  [/sorvete|açaí|acai|milk-?shake|sundae|casquinha|gelato/i, IceCreamCone],
   [/pão|padaria|salgado|croissant/i, Croissant],
   [/café|cafeteria/i, Coffee],
   [/sopa|caldo/i, Soup],

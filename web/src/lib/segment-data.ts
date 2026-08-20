@@ -74,12 +74,26 @@ const PADARIA: SegmentoDataset = {
   ],
 };
 
+const SORVETERIA: SegmentoDataset = {
+  produtos: [
+    { id: "prod1", categoriaNome: "Sorvetes", nome: "Casquinha simples", modoPrecificacao: "margem", precoCusto: 2.2, margemPercentual: 172.7, precoVenda: 6.0, ativo: true },
+    { id: "prod2", categoriaNome: "Açaí", nome: "Açaí 500ml completo", modoPrecificacao: "margem", precoCusto: 7.5, margemPercentual: 106.7, precoVenda: 15.5, ativo: true },
+    { id: "prod3", categoriaNome: "Milkshakes", nome: "Milk-shake de morango", modoPrecificacao: "preco_manual", precoCusto: 6.0, margemPercentual: 116.7, precoVenda: 13.0, ativo: true },
+  ],
+  insumos: [
+    { id: "ins1", nome: "Base de sorvete (l)", unidadeMedida: "l", quantidadeEstoque: 20, quantidadeMinima: 10, custoUnitario: 14.0, fornecedor: "Laticínios Serra" },
+    { id: "ins2", nome: "Polpa de açaí (kg)", unidadeMedida: "kg", quantidadeEstoque: 15, quantidadeMinima: 8, custoUnitario: 22.0, fornecedor: "Distribuidora Amazônia" },
+    { id: "ins3", nome: "Casquinha (un)", unidadeMedida: "un", quantidadeEstoque: 80, quantidadeMinima: 40, custoUnitario: 0.6, fornecedor: "Padaria Aurora" },
+  ],
+};
+
 export const SEGMENT_DATASETS: Record<TipoEstabelecimento, SegmentoDataset> = {
   churrascaria: CHURRASCARIA,
   pizzaria: PIZZARIA,
   hamburgueria: HAMBURGUERIA,
   japonesa: JAPONESA,
   padaria_cafeteria: PADARIA,
+  sorveteria: SORVETERIA,
   outro: CHURRASCARIA,
 };
 

@@ -4,6 +4,7 @@ export type TipoEstabelecimento =
   | "hamburgueria"
   | "japonesa"
   | "padaria_cafeteria"
+  | "sorveteria"
   | "outro";
 
 export type ModuloSistema = "balcao" | "cozinha" | "garcom" | "estoque" | "delivery" | "site";
@@ -164,5 +165,6 @@ export const SEGMENTOS: SegmentoInfo[] = [
   { id: "hamburgueria", label: "Hamburgueria", exemploCardapio: "Burgers, batatas, milk-shakes" },
   { id: "japonesa", label: "Comida japonesa", exemploCardapio: "Sushis, temakis, yakisoba" },
   { id: "padaria_cafeteria", label: "Padaria & Cafeteria", exemploCardapio: "Pães, salgados, cafés" },
+  { id: "sorveteria", label: "Sorveteria", exemploCardapio: "Sorvetes, açaí, milk-shakes" },
   { id: "outro", label: "Outro tipo", exemploCardapio: "Cardápio personalizado" },
 ];

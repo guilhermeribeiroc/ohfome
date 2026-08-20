@@ -47,7 +47,7 @@ create type destino_preparo as enum ('cozinha', 'balcao');
 create type financeiro_movimento_tipo as enum ('entrada', 'saida');
 
 create type tipo_estabelecimento as enum (
-  'churrascaria', 'pizzaria', 'hamburgueria', 'japonesa', 'padaria_cafeteria', 'outro'
+  'churrascaria', 'pizzaria', 'hamburgueria', 'japonesa', 'padaria_cafeteria', 'sorveteria', 'outro'
 );
 
 create type modulo_sistema as enum ('balcao', 'cozinha', 'garcom', 'estoque', 'delivery', 'site');
@@ -756,6 +756,9 @@ declare
   v_estabelecimento_id uuid;
   v_modulo modulo_sistema;
   v_usuario jsonb;
+  v_categorias text[];
+  v_nome_categoria text;
+  v_ordem int;
 begin
   insert into estabelecimentos (nome, tipo, tipo_comida, slug)
   values (p_nome, p_tipo, p_tipo_comida, p_slug)
@@ -776,6 +779,26 @@ begin
       v_usuario->>'senha_hash',
       (v_usuario->>'role')::user_role
     );
+  end loop;
+
+  -- Categorias de produto padrao, nichadas pelo tipo do estabelecimento —
+  -- poupa o cliente de comecar do zero e ja da uma referencia do que
+  -- cadastrar no Cardapio Digital / Estoque.
+  v_categorias := case p_tipo
+    when 'churrascaria' then array['Espetos', 'Carnes', 'Porções', 'Acompanhamentos', 'Saladas', 'Bebidas', 'Sobremesas']
+    when 'pizzaria' then array['Pizzas Salgadas', 'Pizzas Doces', 'Esfihas', 'Bebidas', 'Sobremesas']
+    when 'hamburgueria' then array['Hambúrgueres', 'Porções', 'Combos', 'Bebidas', 'Sobremesas']
+    when 'japonesa' then array['Sushis', 'Temakis', 'Yakisoba', 'Entradas', 'Bebidas', 'Sobremesas']
+    when 'padaria_cafeteria' then array['Pães', 'Salgados', 'Doces', 'Cafés', 'Bebidas']
+    when 'sorveteria' then array['Sorvetes', 'Açaí', 'Milkshakes', 'Sundaes', 'Casquinhas', 'Bebidas']
+    else array['Entradas', 'Pratos Principais', 'Acompanhamentos', 'Bebidas', 'Sobremesas']
+  end;
+
+  v_ordem := 0;
+  foreach v_nome_categoria in array v_categorias loop
+    insert into categorias_produto (estabelecimento_id, nome, ordem_exibicao)
+    values (v_estabelecimento_id, v_nome_categoria, v_ordem);
+    v_ordem := v_ordem + 1;
   end loop;
 
   return v_estabelecimento_id;
