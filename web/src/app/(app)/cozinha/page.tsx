@@ -8,6 +8,7 @@ export default function CozinhaPage() {
         colunas={["novo", "em_preparo", "pronto"]}
         permiteCriar={false}
         permiteCancelar={false}
+        modoCozinha
     />
   );
 }

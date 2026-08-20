@@ -112,6 +112,18 @@ export interface Pedido {
   notificadoEm?: string;
 }
 
+export type ImpressaoJobStatus = "pendente" | "imprimindo" | "impresso" | "falhou";
+
+export interface ImpressaoJob {
+  id: string;
+  pedidoId: string;
+  status: ImpressaoJobStatus;
+  tentativas: number;
+  erro?: string;
+  createdAt: string;
+  pedido: Pedido;
+}
+
 export interface Produto {
   id: string;
   categoriaId?: string | null;
