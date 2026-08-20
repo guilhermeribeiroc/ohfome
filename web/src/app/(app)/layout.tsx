@@ -38,7 +38,7 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-cream-50">
         <div className="flex flex-col items-center gap-4">
-          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white p-2 shadow-xl ring-1 ring-cream-200"><Image src="/marca/ohfome-icone-quadrado.png" alt="OhFome" width={887} height={887} className="h-full w-full object-contain" priority /></span>
+          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white p-2 shadow-xl ring-1 ring-cream-200"><Image src="/marca/ohfome-icone.svg" alt="OhFome" width={1254} height={1254} className="h-full w-full object-contain" priority /></span>
           <div className="h-1 w-24 overflow-hidden rounded-full bg-cream-200"><i className="block h-full w-1/2 animate-pulse rounded-full bg-coral-500" /></div>
           <span className="text-[11px] font-medium text-ink-400">Preparando seu espaço</span>
         </div>

@@ -23,7 +23,7 @@ export function Sidebar() {
   return (
     <aside className="sticky top-0 hidden h-dvh w-[272px] shrink-0 flex-col border-r border-cream-200/80 bg-surface/92 px-4 py-5 backdrop-blur-xl md:flex">
       <Link href={modulos[0]?.href ?? "/"} className="flex min-h-11 items-center gap-3 px-2">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white p-1.5 shadow-lg shadow-ink-900/10 ring-1 ring-cream-200"><Image src="/marca/ohfome-icone-quadrado.png" alt="OhFome" width={887} height={887} className="h-full w-full object-contain" priority /></span>
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white p-1.5 shadow-lg shadow-ink-900/10 ring-1 ring-cream-200"><Image src="/marca/ohfome-icone.svg" alt="OhFome" width={1254} height={1254} className="h-full w-full object-contain" priority /></span>
         <span>
           <strong className="block font-display text-lg font-bold tracking-[-.04em] text-ink-900">OhFome</strong>
           <small className="block text-[10px] font-medium uppercase tracking-[.15em] text-ink-400">Operação inteligente</small>

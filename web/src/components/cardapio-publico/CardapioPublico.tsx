@@ -308,7 +308,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
             })}</div>
           </section>
         ))}
-        <div className="flex flex-col items-center py-14 text-center"><span className="flex h-10 w-10 items-center justify-center rounded-full border border-black/10 text-[#0e7775]"><Sparkles size={16} /></span><p className="mt-3 font-display text-sm font-semibold">Feito com cuidado, servido com presença.</p><small className="mt-1 text-[10px] uppercase tracking-[.14em] text-black/35">Cardápio digital via OhFome</small></div>
+        <div className="flex flex-col items-center py-14 text-center"><span className="flex h-10 w-10 items-center justify-center rounded-full border border-black/10 text-[#0e7775]"><Sparkles size={16} /></span><p className="mt-3 font-display text-sm font-semibold">Feito com cuidado, servido com presença.</p><img src="/marca/ohfome-logo.svg" alt="OhFome" className="mt-4 h-12 w-auto" /><small className="mt-1 text-[10px] uppercase tracking-[.14em] text-black/35">Cardápio digital</small></div>
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-black/[.08] bg-[#eee8df]/97 pb-[max(.45rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-xl">

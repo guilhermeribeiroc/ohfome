@@ -17,6 +17,10 @@ const bricolage = Bricolage_Grotesque({
 export const metadata: Metadata = {
   title: "OhFome | Gestão para restaurantes",
   description: "OhFome — plataforma de gestão para redes de estabelecimentos de comida",
+  icons: {
+    icon: "/marca/ohfome-icone.svg",
+    apple: "/marca/ohfome-icone.svg",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
