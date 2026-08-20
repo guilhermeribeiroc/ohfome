@@ -7,7 +7,6 @@ import type { Mesa, Pedido, PedidoStatus, Produto } from "@/lib/types";
 import { MESA_STATUS_LABEL, PEDIDO_STATUS_LABEL } from "@/lib/types";
 import { usePolling } from "@/lib/use-polling";
 import { imprimirPedido } from "@/lib/impressao";
-import { ImpressaoQzTray } from "@/components/cozinha/ImpressaoQzTray";
 
 const TODAS_COLUNAS: PedidoStatus[] = ["novo", "em_preparo", "pronto", "saiu_para_entrega", "finalizado"];
 const PROXIMO_STATUS: Partial<Record<PedidoStatus, PedidoStatus>> = { novo: "em_preparo", em_preparo: "pronto", pronto: "saiu_para_entrega", saiu_para_entrega: "finalizado" };
@@ -127,7 +126,6 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Balcão
         </div>
       </header>
 
-      {modoCozinha && <ImpressaoQzTray />}
 
       <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-4 lg:grid lg:snap-none lg:overflow-visible" style={{ gridTemplateColumns: `repeat(${colunas.length}, minmax(0, 1fr))` }}>
         {colunas.map((status) => {
