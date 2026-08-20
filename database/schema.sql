@@ -457,6 +457,30 @@ create trigger trg_pedidos_updated_at
   before update on pedidos
   for each row execute function set_updated_at();
 
+-- Fila persistente de impressao. A estacao da cozinha reserva um trabalho,
+-- envia o ticket via QZ Tray e confirma o resultado. Dessa forma o pedido
+-- nao se perde se o navegador for fechado ou a impressora estiver desligada.
+create table impressao_jobs (
+  id uuid primary key default gen_random_uuid(),
+  estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade,
+  pedido_id uuid not null references pedidos(id) on delete cascade,
+  tipo text not null default 'cozinha' check (tipo in ('cozinha')),
+  origem text not null default 'automatico' check (origem in ('automatico', 'reimpressao')),
+  status text not null default 'pendente' check (status in ('pendente', 'imprimindo', 'impresso', 'falhou')),
+  tentativas integer not null default 0 check (tentativas >= 0),
+  reservado_em timestamptz,
+  impresso_em timestamptz,
+  erro text,
+  created_at timestamptz not null default now()
+);
+
+create index idx_impressao_jobs_fila on impressao_jobs(estabelecimento_id, status, created_at);
+-- Um pedido recebe somente um ticket automatico. Reimpressoes sempre criam
+-- uma nova linha, preservando o historico de cada tentativa.
+create unique index uq_impressao_jobs_automatico
+  on impressao_jobs(pedido_id)
+  where origem = 'automatico' and tipo = 'cozinha';
+
 create table itens_pedido (
   id uuid primary key default gen_random_uuid(),
   pedido_id uuid not null references pedidos(id) on delete cascade,
@@ -493,6 +517,21 @@ $$ language plpgsql;
 create trigger trg_pedidos_historico
   after insert or update of status on pedidos
   for each row execute function registrar_historico_status();
+
+create function enfileirar_impressao_cozinha() returns trigger as $$
+begin
+  if new.enviado_cozinha and (tg_op = 'INSERT' or not old.enviado_cozinha) then
+    insert into impressao_jobs (estabelecimento_id, pedido_id, tipo, origem)
+    values (new.estabelecimento_id, new.id, 'cozinha', 'automatico')
+    on conflict do nothing;
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+create trigger trg_pedidos_impressao_cozinha
+  after insert or update of enviado_cozinha on pedidos
+  for each row execute function enfileirar_impressao_cozinha();
 
 -- Notifica em tempo real (LISTEN/NOTIFY) o painel de balcao/cozinha a cada
 -- pedido novo ou mudanca de status — dispensa dependencia de servico externo
@@ -673,7 +712,8 @@ begin
   foreach tabela in array array[
     'usuarios', 'mesas', 'categorias_produto', 'produtos', 'insumos',
     'clientes', 'pedidos', 'entregadores', 'movimentacoes_financeiras',
-    'custos_fixos', 'whatsapp_mensagens', 'estado_aplicacao', 'estabelecimento_modulos'
+    'custos_fixos', 'whatsapp_mensagens', 'estado_aplicacao', 'estabelecimento_modulos',
+    'impressao_jobs'
   ]
   loop
     execute format('alter table %I enable row level security', tabela);
@@ -1013,7 +1053,7 @@ grant select, insert, update, delete on
   insumos, movimentacoes_estoque, clientes, pedidos, itens_pedido,
   historico_status_pedido, entregadores, entregas, whatsapp_mensagens,
   movimentacoes_financeiras, custos_fixos, estado_aplicacao,
-  estabelecimento_modulos
+  estabelecimento_modulos, impressao_jobs
 to ohfome_app;
 
 -- estabelecimentos: sem insert/delete direto (so via fn_registrar_estabelecimento);

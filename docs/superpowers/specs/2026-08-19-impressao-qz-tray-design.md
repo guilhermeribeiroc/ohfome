@@ -2,12 +2,12 @@
 
 ## Objetivo
 
-Imprimir automaticamente uma comanda térmica quando um pedido de balcão, garçom ou delivery for enviado à cozinha. A primeira versão usa uma única impressora por estabelecimento: a impressora da cozinha.
+Imprimir automaticamente uma comanda térmica quando um pedido de balcão, garçom ou cliente pelo cardápio digital for enviado à cozinha. A primeira versão usa uma única impressora por estabelecimento: a impressora da cozinha.
 
 ## Limites da primeira versão
 
 - Uma impressora de cozinha por estabelecimento.
-- Pedidos de balcão, mesa e delivery entram na mesma fila.
+- Pedidos de balcão, mesa e cardápio digital (retirada ou delivery) entram na mesma fila.
 - Botão de reimpressão disponível para pedidos já impressos ou com falha.
 - Sem separação de impressoras por setor nesta etapa.
 
@@ -65,4 +65,3 @@ Na Cozinha:
 3. Criar um pedido de balcão, de mesa e de delivery; cada um deve gerar uma única comanda.
 4. Desligar a impressora; confirmar que o trabalho é marcado como falho e pode ser reimpresso.
 5. Confirmar que o ticket termina logo após os itens, sem uma página fixa extra.
-
