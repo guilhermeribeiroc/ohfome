@@ -85,7 +85,8 @@ function cabecalhoTermico(pedido: Pedido, largura: number) {
 
 export function dadosEscPosPedido(pedido: Pedido, largura = LARGURA_TICKET) {
   const cabecalho = cabecalhoTermico(pedido, largura);
-  const linhas = ["\x1B\x40", "\x1B\x61\x01", "\x1B\x45\x01", `${centralizar(cabecalho, largura)}\n`, `${centralizar("COZINHA", largura)}\n`, `${centralizar(`PEDIDO #${pedido.codigo}`, largura)}\n`, "\x1B\x45\x00", `${centralizar(localDoPedido(pedido), largura)}\n\n`, "\x1B\x61\x00", `${"-".repeat(largura)}\n`];
+  const contexto = `COZINHA | PEDIDO #${pedido.codigo} | ${localDoPedido(pedido)}`.slice(0, largura);
+  const linhas = ["\x1B\x40", "\x1B\x61\x01", "\x1B\x45\x01", `${centralizar(cabecalho, largura)}\n`, `${centralizar(contexto, largura)}\n`, "\x1B\x45\x00", "\n", "\x1B\x61\x00", `${"-".repeat(largura)}\n`];
 
   for (const item of pedido.itens) {
     linhas.push(...linhaComValor(`${item.quantidade}X ${item.produtoNome}`, moedaTermica(item.precoUnitario * item.quantidade), largura));
