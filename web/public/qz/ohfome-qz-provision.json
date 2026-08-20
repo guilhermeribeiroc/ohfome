@@ -1,0 +1,8 @@
+[
+  {
+    "description": "Confiar na Autoridade Certificadora do OhFome",
+    "type": "ca",
+    "phase": "certgen",
+    "data": "ohfome-qz-root-ca.crt"
+  }
+]
