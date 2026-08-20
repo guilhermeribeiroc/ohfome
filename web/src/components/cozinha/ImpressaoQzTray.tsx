@@ -76,9 +76,16 @@ function cabecalhoTermico(pedido: Pedido, largura: number) {
   return `${textoTermico(pedido.estabelecimentoNome).slice(0, limiteNome)}${sufixo}`;
 }
 
+function modalidadePedido(pedido: Pedido) {
+  if (pedido.mesaNumero) return `MESA ${pedido.mesaNumero}`;
+  if (pedido.formaRecebimento === "entrega" || pedido.tipo === "delivery") return "DELIVERY";
+  if (pedido.formaRecebimento === "retirada") return "RETIRADA";
+  return "BALCAO";
+}
+
 export function dadosEscPosPedido(pedido: Pedido, largura = LARGURA_TICKET) {
   const cabecalho = cabecalhoTermico(pedido, largura);
-  const contexto = `PEDIDO #${pedido.codigo}`;
+  const contexto = `PEDIDO #${pedido.codigo} - ${modalidadePedido(pedido)}`.slice(0, largura);
   const linhas = ["\x1B\x40", "\x1B\x61\x01", "\x1B\x45\x01", `${centralizar(cabecalho, largura)}\n`, `${centralizar(contexto, largura)}\n`, "\x1B\x45\x00", "\n", "\x1B\x61\x00", `${"-".repeat(largura)}\n`];
 
   for (const item of pedido.itens) {
