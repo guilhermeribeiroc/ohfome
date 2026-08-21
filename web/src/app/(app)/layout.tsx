@@ -9,6 +9,7 @@ import { useTenant } from "@/lib/tenant-context";
 import { modulosPermitidos } from "@/lib/tenant-types";
 import { OnboardingFlow } from "@/components/onboarding/OnboardingFlow";
 import { ImpressaoQzTray } from "@/components/cozinha/ImpressaoQzTray";
+import { PwaRegistro } from "@/components/pwa/PwaRegistro";
 
 export default function AppLayout({ children }: LayoutProps<"/">) {
   const { carregando, estabelecimento, usuarioAtual } = useTenant();
@@ -53,6 +54,7 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
       <MobileNav />
       <OnboardingFlow />
       <ImpressaoQzTray compacta />
+      <PwaRegistro />
     </div>
   );
 }

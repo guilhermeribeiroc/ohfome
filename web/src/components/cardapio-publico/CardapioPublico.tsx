@@ -50,6 +50,7 @@ interface CardapioData {
   bannerModo?: "padrao" | "fixo" | "carrossel";
   banners?: { id: string; url: string; ordem: number }[];
   pix?: { modo: "manual" | "mercado_pago" } | null;
+  disponibilidade?: { aberto: boolean; pausado: boolean; motivo?: string | null; turnos: Record<string, { inicio: string; fim: string }[]> };
   produtos: ProdutoPublico[];
 }
 
@@ -424,8 +425,10 @@ export function CardapioPublico({ slug }: { slug: string }) {
   }, [carrinho, dados]);
 
   const segmento = SEGMENTOS.find((item) => item.id === dados?.tipo);
+  const cardapioDisponivel = dados?.disponibilidade?.aberto ?? true;
 
   function ajustar(produtoId: string, delta: number) {
+    if (!cardapioDisponivel) return;
     navigator.vibrate?.(10);
     setCarrinho((atual) => {
       const quantidade = (atual[produtoId] ?? 0) + delta;
@@ -728,6 +731,10 @@ export function CardapioPublico({ slug }: { slug: string }) {
           <h1 className="mt-4 text-center font-display text-2xl font-semibold tracking-[-.055em] sm:text-3xl">
             {dados.nome}
           </h1>
+          <span className={`mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-semibold ${cardapioDisponivel ? "bg-[#0e7775]/10 text-[#0e7775]" : "bg-[#941c42]/10 text-[#941c42]"}`}>
+            <i className={`h-2 w-2 rounded-full ${cardapioDisponivel ? "bg-[#0e7775]" : "bg-[#941c42]"}`} />
+            {cardapioDisponivel ? "Aberto agora" : dados.disponibilidade?.motivo ?? "Fechado no momento"}
+          </span>
         </div>
       </header>
 
@@ -948,6 +955,8 @@ export function CardapioPublico({ slug }: { slug: string }) {
             }
             abrirOverlay("pix");
           }}
+          disponivel={cardapioDisponivel}
+          motivoIndisponivel={dados.disponibilidade?.motivo ?? "Não estamos recebendo pedidos no momento."}
         />
       )}
       {overlay === "pix" && cobrancaPix && (
@@ -1413,6 +1422,8 @@ function CarrinhoSheet({
   onFechar,
   onConfirmado,
   onAguardandoPix,
+  disponivel,
+  motivoIndisponivel,
 }: {
   slug: string;
   dados: CardapioData;
@@ -1428,6 +1439,8 @@ function CarrinhoSheet({
     pedidoId: string,
   ) => void;
   onAguardandoPix: (cobranca: CobrancaPix) => void;
+  disponivel: boolean;
+  motivoIndisponivel: string;
 }) {
   const painelRef = usePainelAcessivel(onFechar);
   const [etapa, setEtapa] = useState<"itens" | "dados" | "pagamento">("itens");
@@ -1495,6 +1508,10 @@ function CarrinhoSheet({
   }
 
   async function confirmar() {
+    if (!disponivel) {
+      setErro(motivoIndisponivel);
+      return;
+    }
     if (!validarDados()) return;
     const emailPagador = email.trim();
     if (
@@ -1646,6 +1663,7 @@ function CarrinhoSheet({
             <X size={18} />
           </button>
         </header>
+        {!disponivel && <div className="mx-5 mt-4 rounded-2xl border border-[#941c42]/15 bg-[#941c42]/[.07] p-3 text-sm leading-5 text-[#941c42] sm:mx-6">{motivoIndisponivel} Você pode consultar o cardápio, mas novos pedidos estão temporariamente bloqueados.</div>}
         {etapa === "itens" ? (
           <>
             <div
@@ -1971,7 +1989,7 @@ function CarrinhoSheet({
                 {etapa === "dados" ? (
                   <button onClick={() => { if (validarDados()) setEtapa("pagamento"); }} className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-full bg-[#0e7775] text-sm font-semibold text-white">Continuar para pagamento <ArrowRight size={16} /></button>
                 ) : (
-                  <button onClick={confirmar} disabled={enviando} className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-full bg-[#0e7775] text-sm font-semibold text-white disabled:opacity-50">{enviando ? "Enviando..." : "Confirmar pedido"}<Check size={16} /></button>
+                  <button onClick={confirmar} disabled={enviando || !disponivel} className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-full bg-[#0e7775] text-sm font-semibold text-white disabled:opacity-50">{enviando ? "Enviando..." : !disponivel ? "Pedidos indisponíveis" : "Confirmar pedido"}<Check size={16} /></button>
                 )}
               </div>
             </footer>
