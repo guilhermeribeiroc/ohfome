@@ -37,7 +37,7 @@ export async function PATCH(request: NextRequest) {
 
   const body = await request.json().catch(() => null);
   const logoUrl = typeof body?.logoUrl === "string" ? body.logoUrl.trim() : "";
-  if (logoUrl && (logoUrl.length > 1000 || !/^(\/uploads\/logos\/|https?:\/\/)/.test(logoUrl))) {
+  if (logoUrl && (logoUrl.length > 1000 || !/^(\/api\/arquivos\/logos\/|https?:\/\/)/.test(logoUrl))) {
     return NextResponse.json({ erro: "Use uma URL válida ou envie o arquivo da logo." }, { status: 400 });
   }
 

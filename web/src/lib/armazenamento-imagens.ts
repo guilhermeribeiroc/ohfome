@@ -14,7 +14,7 @@ function raizUploads() {
   return process.env.UPLOADS_DIR?.trim() || path.join(process.cwd(), "public", "uploads");
 }
 
-export async function salvarImagem(categoria: "banners", arquivo: File) {
+export async function salvarImagem(categoria: "banners" | "logos", arquivo: File) {
   const extensao = TIPOS_PERMITIDOS[arquivo.type];
   if (!extensao) throw new Error("Envie uma imagem JPG, PNG ou WebP.");
   if (arquivo.size > LIMITE_IMAGEM_BYTES) throw new Error("A imagem deve ter no máximo 5 MB.");
@@ -25,7 +25,7 @@ export async function salvarImagem(categoria: "banners", arquivo: File) {
   return { nome, url: `/api/arquivos/${categoria}/${nome}` };
 }
 
-export async function lerImagemPublica(categoria: "banners", nome: string) {
+export async function lerImagemPublica(categoria: "banners" | "logos", nome: string) {
   if (!/^[a-f0-9-]+\.(jpg|png|webp)$/i.test(nome)) return null;
   try {
     return await readFile(path.join(raizUploads(), categoria, nome));
