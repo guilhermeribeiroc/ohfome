@@ -22,9 +22,9 @@ const CHURRASCARIA: SegmentoDataset = {
 
 const PIZZARIA: SegmentoDataset = {
   produtos: [
-    { id: "prod1", categoriaNome: "Pizzas salgadas", nome: "Pizza Margherita (G)", modoPrecificacao: "margem", precoCusto: 18.0, margemPercentual: 122.0, precoVenda: 39.9, ativo: true },
-    { id: "prod2", categoriaNome: "Pizzas salgadas", nome: "Pizza Calabresa (G)", modoPrecificacao: "margem", precoCusto: 16.5, margemPercentual: 133.9, precoVenda: 38.6, ativo: true },
-    { id: "prod3", categoriaNome: "Pizzas doces", nome: "Pizza Chocolate c/ Morango (G)", modoPrecificacao: "preco_manual", precoCusto: 20.0, margemPercentual: 119.5, precoVenda: 43.9, ativo: true },
+    { id: "prod1", categoriaNome: "Pizzas salgadas", nome: "Pizza Margherita", tamanho: "G", modoPrecificacao: "margem", precoCusto: 18.0, margemPercentual: 122.0, precoVenda: 39.9, ativo: true },
+    { id: "prod2", categoriaNome: "Pizzas salgadas", nome: "Pizza Calabresa", tamanho: "G", modoPrecificacao: "margem", precoCusto: 16.5, margemPercentual: 133.9, precoVenda: 38.6, ativo: true },
+    { id: "prod3", categoriaNome: "Pizzas doces", nome: "Pizza Chocolate c/ Morango", tamanho: "G", modoPrecificacao: "preco_manual", precoCusto: 20.0, margemPercentual: 119.5, precoVenda: 43.9, ativo: true },
     { id: "prod4", categoriaNome: "Bebidas", nome: "Refrigerante 2L", modoPrecificacao: "margem", precoCusto: 6.0, margemPercentual: 66.7, precoVenda: 10.0, ativo: true },
   ],
   insumos: [

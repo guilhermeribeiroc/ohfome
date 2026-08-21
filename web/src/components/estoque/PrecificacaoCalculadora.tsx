@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { Calculator, CircleDollarSign, Image as ImageIcon, Link2, PackageSearch, Percent, Plus, Tag, Trash2, TrendingUp, Upload, X } from "lucide-react";
-import type { Categoria, ModoPrecificacao, Produto } from "@/lib/types";
+import { nomeProdutoComTamanho, type Categoria, type ModoPrecificacao, type Produto, type TamanhoProduto } from "@/lib/types";
 import { usePolling } from "@/lib/use-polling";
 import { mascararMoeda, moedaComCentavos, numeroDaMoeda } from "@/lib/moeda";
 import { FichaTecnica } from "./FichaTecnica";
@@ -56,6 +56,7 @@ export function PrecificacaoCalculadora() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nome: produto.nome,
+          tamanho: produto.tamanho ?? null,
           descricao: produto.descricao ?? "",
           imagemUrl: produto.imagemUrl ?? null,
           modoPrecificacao: produto.modoPrecificacao,
@@ -72,6 +73,15 @@ export function PrecificacaoCalculadora() {
     setDados((atual) => (atual ?? []).map((produto) => {
       if (produto.id !== selecionadoId) return produto;
       const atualizado = { ...produto, [campo]: valor };
+      persistir(atualizado);
+      return atualizado;
+    }));
+  }
+
+  function atualizarTamanho(tamanho: TamanhoProduto | null) {
+    setDados((atual) => (atual ?? []).map((produto) => {
+      if (produto.id !== selecionadoId) return produto;
+      const atualizado = { ...produto, tamanho };
       persistir(atualizado);
       return atualizado;
     }));
@@ -132,7 +142,7 @@ export function PrecificacaoCalculadora() {
                     }`}
                   >
                     <span>
-                      {produto.nome}
+                      {nomeProdutoComTamanho(produto)}
                       <span className="ml-2 text-xs text-ink-400">{produto.categoriaNome}</span>
                     </span>
                     <span className="font-medium">R$ {produto.precoVenda.toFixed(2).replace(".", ",")}</span>
@@ -145,7 +155,7 @@ export function PrecificacaoCalculadora() {
           <div className="of-panel p-4 sm:p-5">
             <div className="mb-4 flex items-start justify-between">
               <div>
-                <p className="font-display text-lg font-bold text-ink-900">{selecionado.nome}</p>
+                <p className="font-display text-lg font-bold text-ink-900">{nomeProdutoComTamanho(selecionado)}</p>
                 <p className="text-xs text-ink-400">Calculadora automática de precificação</p>
               </div>
               <div className="flex items-center gap-2">
@@ -160,6 +170,7 @@ export function PrecificacaoCalculadora() {
               <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-xl bg-ink-900 text-white" style={selecionado.imagemUrl ? { backgroundImage: `url(${selecionado.imagemUrl})`, backgroundPosition: "center", backgroundSize: "cover" } : { backgroundImage: "url(/menu-assets/ohfome-food-atlas.webp)", backgroundPosition: "0% 0%", backgroundSize: "300% 200%" }}><ImageIcon size={18} className={selecionado.imagemUrl ? "opacity-0" : "opacity-70"} /></div>
               <div className="space-y-2">
                 <input value={selecionado.nome} onChange={(e) => atualizarTexto("nome", e.target.value)} placeholder="Nome do produto" className="of-field" />
+                <SeletorTamanho value={selecionado.tamanho ?? null} onChange={atualizarTamanho} compacto />
                 <textarea value={selecionado.descricao ?? ""} onChange={(e) => atualizarTexto("descricao", e.target.value)} placeholder="Descrição que aparecerá no cardápio" rows={2} className="of-field resize-none" />
                 <div className="grid gap-2 sm:grid-cols-[auto_1fr]"><label className="flex min-h-[46px] cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-coral-300 bg-coral-050 px-3 text-xs font-semibold text-coral-700 transition hover:bg-coral-100"><Upload size={15} />{enviandoImagem ? "Enviando..." : "Enviar arquivo"}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => trocarImagem(e.target.files?.[0])} className="sr-only" /></label><div className="relative"><Link2 size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" /><input value={selecionado.imagemUrl ?? ""} onChange={(e) => atualizarTexto("imagemUrl", e.target.value)} placeholder="ou cole a URL da foto" className="of-field !min-h-[46px] !pl-9" /></div></div>
               </div>
@@ -249,6 +260,7 @@ function NovoProdutoModal({ onFechar, onCriado }: { onFechar: () => void; onCria
   const [categoriaId, setCategoriaId] = useState("");
   const [novaCategoria, setNovaCategoria] = useState("");
   const [descricao, setDescricao] = useState("");
+  const [tamanho, setTamanho] = useState<TamanhoProduto | null>(null);
   const [imagemUrl, setImagemUrl] = useState("");
   const [enviandoImagem, setEnviandoImagem] = useState(false);
   const [modoPrecificacao, setModoPrecificacao] = useState<ModoPrecificacao>("margem");
@@ -295,6 +307,7 @@ function NovoProdutoModal({ onFechar, onCriado }: { onFechar: () => void; onCria
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         nome,
+        tamanho,
         descricao,
         imagemUrl,
         categoriaId: categoriaIdFinal,
@@ -334,8 +347,9 @@ function NovoProdutoModal({ onFechar, onCriado }: { onFechar: () => void; onCria
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
           <section className="space-y-3">
             <p className="text-[10px] font-bold uppercase tracking-[.14em] text-ink-400">Informações do item</p>
-            <label className="block"><span className="mb-1.5 block text-xs font-semibold text-ink-600">Nome do produto</span><input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex.: Pizza Calabresa grande" className={CAMPO_CLASSE} /></label>
-            <label className="block"><span className="mb-1.5 block text-xs font-semibold text-ink-600">Descrição <em className="not-italic font-normal text-ink-400">(opcional)</em></span><textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder="Ingredientes, tamanho ou detalhes que ajudam na venda" rows={2} className={`${CAMPO_CLASSE} resize-none`} /></label>
+            <label className="block"><span className="mb-1.5 block text-xs font-semibold text-ink-600">Nome do produto</span><input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex.: Pizza Calabresa" className={CAMPO_CLASSE} /></label>
+            <SeletorTamanho value={tamanho} onChange={setTamanho} />
+            <label className="block"><span className="mb-1.5 block text-xs font-semibold text-ink-600">Descrição <em className="not-italic font-normal text-ink-400">(opcional)</em></span><textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder="Ingredientes ou detalhes que ajudam na venda" rows={2} className={`${CAMPO_CLASSE} resize-none`} /></label>
             <div className="rounded-2xl border border-cream-200 bg-cream-50/70 p-3.5"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold text-ink-700">Imagem do produto <span className="font-normal text-ink-400">(opcional)</span></p><p className="mt-0.5 text-[11px] text-ink-400">Envie uma foto ou cole o endereço dela.</p></div><ImageIcon size={17} className="text-coral-600" /></div><label className="mt-3 flex min-h-[48px] cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-coral-300 bg-surface px-3 text-sm font-semibold text-coral-700 transition hover:bg-coral-050"><Upload size={16} />{enviandoImagem ? "Enviando imagem..." : "Escolher arquivo"}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => adicionarImagem(e.target.files?.[0])} className="sr-only" /></label><div className="my-3 flex items-center gap-3 text-[10px] font-semibold uppercase tracking-[.12em] text-ink-400"><i className="h-px flex-1 bg-cream-200" />ou cole uma URL<i className="h-px flex-1 bg-cream-200" /></div><div className="relative"><Link2 size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" /><input value={imagemUrl} onChange={(e) => setImagemUrl(e.target.value)} placeholder="https://..." className={`${CAMPO_CLASSE} !bg-surface !pl-10`} /></div>{imagemUrl && <p className="mt-2 truncate text-[11px] text-basil-600">Imagem pronta para o cardápio.</p>}</div>
           </section>
 
@@ -361,6 +375,16 @@ function NovoProdutoModal({ onFechar, onCriado }: { onFechar: () => void; onCria
       </div>
     </div>
   );
+}
+
+function SeletorTamanho({ value, onChange, compacto = false }: { value: TamanhoProduto | null; onChange: (valor: TamanhoProduto | null) => void; compacto?: boolean }) {
+  const opcoes: { valor: TamanhoProduto | null; rotulo: string }[] = [
+    { valor: null, rotulo: "Sem tamanho" },
+    { valor: "P", rotulo: "P" },
+    { valor: "M", rotulo: "M" },
+    { valor: "G", rotulo: "G" },
+  ];
+  return <fieldset><legend className={`mb-1.5 text-xs font-semibold ${compacto ? "text-ink-400" : "text-ink-600"}`}>Tamanho <span className="font-normal text-ink-400">(opcional)</span></legend><div className="grid grid-cols-[minmax(0,1.8fr)_repeat(3,minmax(42px,1fr))] gap-1.5 rounded-xl bg-cream-100 p-1.5">{opcoes.map((opcao) => <button key={opcao.valor ?? "nenhum"} type="button" onClick={() => onChange(opcao.valor)} aria-pressed={value === opcao.valor} className={`min-h-10 rounded-lg px-2 text-xs font-bold transition-all ${value === opcao.valor ? "bg-surface text-coral-700 shadow-sm ring-1 ring-coral-200" : "text-ink-500 hover:bg-surface/60 hover:text-ink-800"}`}>{opcao.rotulo}</button>)}</div></fieldset>;
 }
 
 function CampoMonetario({ label, value, onChange, placeholder, destaque = false }: { label: string; value: string; onChange: (valor: string) => void; placeholder: string; destaque?: boolean }) {

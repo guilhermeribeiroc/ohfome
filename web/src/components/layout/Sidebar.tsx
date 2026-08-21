@@ -44,7 +44,7 @@ export function Sidebar() {
       </div>
 
       <p className="mb-2 mt-7 px-3 text-[10px] font-semibold uppercase tracking-[.16em] text-ink-400">Espaço de trabalho</p>
-      <nav className="flex flex-1 flex-col gap-1">
+      <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pb-3">
         {modulos.map((item) => {
           const active = pathname?.startsWith(item.href);
           return (

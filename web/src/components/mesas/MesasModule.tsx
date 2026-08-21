@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { ArrowRight, Check, Minus, Plus, Printer, Search, Settings2, Users, X } from "lucide-react";
 import type { Mesa, MesaStatus, Pedido, Produto } from "@/lib/types";
-import { MESA_STATUS_LABEL } from "@/lib/types";
+import { MESA_STATUS_LABEL, nomeProdutoComTamanho } from "@/lib/types";
 import { usePolling } from "@/lib/use-polling";
 
 const GRADIENTE_CORAL = "linear-gradient(120deg, var(--color-coral-600), var(--color-coral-500), var(--color-mango-500))";
@@ -77,7 +77,7 @@ export function MesasModule() {
             ? lista.filter((i) => i.produtoId !== produto.id)
             : lista.map((i) => (i.produtoId === produto.id ? { ...i, quantidade: novaQtd } : i));
       } else if (delta > 0) {
-        novaLista = [...lista, { produtoId: produto.id, nome: produto.nome, precoUnitario: produto.precoVenda, quantidade: 1 }];
+        novaLista = [...lista, { produtoId: produto.id, nome: nomeProdutoComTamanho(produto), precoUnitario: produto.precoVenda, quantidade: 1 }];
       } else {
         novaLista = lista;
       }
@@ -180,7 +180,7 @@ export function MesasModule() {
                     className={`flex min-h-[78px] items-center justify-between rounded-2xl border p-3.5 transition-all ${qtd > 0 ? "border-coral-400/50 bg-coral-050 shadow-sm" : "border-cream-200 bg-surface"}`}
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-ink-900">{produto.nome}</p>
+                      <p className="truncate text-sm font-medium text-ink-900">{nomeProdutoComTamanho(produto)}</p>
                       <p className="text-xs text-ink-400">R$ {produto.precoVenda.toFixed(2).replace(".", ",")}</p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">

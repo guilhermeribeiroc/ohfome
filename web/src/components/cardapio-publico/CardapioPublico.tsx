@@ -34,6 +34,7 @@ import { Bell, ChefHat, PackageCheck, PackageSearch } from "lucide-react";
 interface ProdutoPublico {
   id: string;
   nome: string;
+  tamanho?: "P" | "M" | "G" | null;
   descricao: string | null;
   categoriaNome: string;
   precoVenda: number;
@@ -151,6 +152,10 @@ function fotoDoProduto(produto: ProdutoPublico): CSSProperties {
 
 function moeda(valor: number) {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function nomeProdutoExibicao(produto: ProdutoPublico) {
+  return produto.tamanho ? `${produto.nome} (${produto.tamanho})` : produto.nome;
 }
 
 function grupoDaCategoria(nome: string): GrupoMenu {
@@ -612,7 +617,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
                     />
                     <span className="min-w-0 flex-1">
                       <strong className="block truncate font-display text-sm">
-                        {produto.nome}
+                        {nomeProdutoExibicao(produto)}
                       </strong>
                       <small className="text-[#0e7775]">
                         {moeda(produto.precoVenda)}
@@ -831,7 +836,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
                     </span>
                     <span className="min-w-0 self-center">
                       <strong className="block font-display text-[17px] font-semibold leading-[1.08] tracking-[-.035em] text-[#181714] sm:text-[21px]">
-                        {produto.nome}
+                        {nomeProdutoExibicao(produto)}
                       </strong>
                       <b className="mt-1.5 block text-sm font-semibold text-[#0e7775] sm:text-base">
                         {moeda(produto.precoVenda)}
@@ -1292,7 +1297,7 @@ function ProdutoDetalhe({
             {produto.categoriaNome}
           </p>
           <h2 id="produto-detalhe-titulo" className="mt-2 font-display text-3xl font-semibold uppercase leading-[1.02] tracking-[-.055em] sm:text-4xl">
-            {produto.nome}
+            {nomeProdutoExibicao(produto)}
           </h2>
           <p className="mt-3 font-display text-2xl font-semibold text-[#0e7775]">
             {moeda(produto.precoVenda)}
@@ -1321,6 +1326,7 @@ function ProdutoDetalhe({
           <h3 className="mt-9 font-display text-lg font-semibold">Detalhes</h3>
           <div className="mt-3 flex flex-wrap gap-2">
             <DetailTag icon={UtensilsCrossed} label={produto.categoriaNome} />
+            {produto.tamanho && <DetailTag icon={Info} label={`Tamanho ${produto.tamanho}`} />}
             <DetailTag icon={Sparkles} label="Feito na casa" />
             <DetailTag icon={Info} label="Consulte ingredientes" />
           </div>
@@ -1618,7 +1624,7 @@ function CarrinhoSheet({
       "*Itens:*",
       ...itens.map(
         (item) =>
-          `${item.quantidade}× ${item.produto.nome} — ${moeda(item.produto.precoVenda * item.quantidade)}${item.observacoes ? `\n   Obs.: ${item.observacoes}` : ""}`,
+          `${item.quantidade}× ${nomeProdutoExibicao(item.produto)} — ${moeda(item.produto.precoVenda * item.quantidade)}${item.observacoes ? `\n   Obs.: ${item.observacoes}` : ""}`,
       ),
       "",
       `*Total:* ${moeda(totalComTaxa)}`,
@@ -1696,7 +1702,7 @@ function CarrinhoSheet({
                         />
                         <span className="min-w-0">
                           <strong className="block truncate font-display text-base">
-                            {produto.nome}
+                            {nomeProdutoExibicao(produto)}
                           </strong>
                           <small className="text-[#0e7775]">
                             {moeda(produto.precoVenda)}

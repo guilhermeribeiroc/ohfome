@@ -3,7 +3,7 @@
 import { useMemo, useState, type DragEvent } from "react";
 import { Check, MapPin, MapPinned, Plus, Printer, Send, Trash2, UserRoundPlus, X } from "lucide-react";
 import type { BairroEntrega, Entrega, Entregador, EntregaStatus, Produto } from "@/lib/types";
-import { ENTREGA_STATUS_LABEL } from "@/lib/types";
+import { ENTREGA_STATUS_LABEL, nomeProdutoComTamanho } from "@/lib/types";
 import { usePolling } from "@/lib/use-polling";
 import { imprimirEntrega } from "@/lib/impressao";
 import { useTenant } from "@/lib/tenant-context";
@@ -425,7 +425,7 @@ function NovoPedidoDeliveryModal({ onFechar, onCriado }: { onFechar: () => void;
               return (
                 <div key={produto.id} className="flex items-center justify-between rounded-2xl bg-cream-50 p-3">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-ink-900">{produto.nome}</p>
+                    <p className="truncate text-sm font-medium text-ink-900">{nomeProdutoComTamanho(produto)}</p>
                     <p className="text-xs text-ink-400">R$ {produto.precoVenda.toFixed(2).replace(".", ",")}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
