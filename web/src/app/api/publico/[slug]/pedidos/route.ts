@@ -41,12 +41,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (itens.length === 0) return NextResponse.json({ erro: "Adicione ao menos um item ao pedido." }, { status: 400 });
 
   try {
-    const disponibilidade = await queryPublico<{ fn_disponibilidade_cardapio_publico: { aberto: boolean; motivo?: string } | null }>(
-      "select fn_disponibilidade_cardapio_publico($1)", [slug]
-    );
-    const cardapioDisponivel = disponibilidade[0]?.fn_disponibilidade_cardapio_publico;
-    if (!cardapioDisponivel) return NextResponse.json({ erro: "Cardápio não encontrado." }, { status: 404 });
-    if (!cardapioDisponivel.aberto) return NextResponse.json({ erro: cardapioDisponivel.motivo ?? "Não estamos recebendo pedidos no momento." }, { status: 409 });
+    try {
+      const disponibilidade = await queryPublico<{ fn_disponibilidade_cardapio_publico: { aberto: boolean; motivo?: string } | null }>(
+        "select fn_disponibilidade_cardapio_publico($1)", [slug]
+      );
+      const cardapioDisponivel = disponibilidade[0]?.fn_disponibilidade_cardapio_publico;
+      if (!cardapioDisponivel) return NextResponse.json({ erro: "Cardápio não encontrado." }, { status: 404 });
+      if (!cardapioDisponivel.aberto) return NextResponse.json({ erro: cardapioDisponivel.motivo ?? "Não estamos recebendo pedidos no momento." }, { status: 409 });
+    } catch (erro) {
+      // Permite publicar a interface antes da migration em uma instalação já
+      // em operação. Sem a função nova, o comportamento anterior (aberto)
+      // permanece; após aplicar a migration a validação entra em vigor.
+      if ((erro as { code?: string }).code !== "42883") throw erro;
+    }
 
     const linhas = await queryPublico<{ fn_criar_pedido_publico: { id: string; codigo: number; estabelecimentoId: string; notificar: boolean; taxaEntrega: number; total: number; pixModo?: "manual" | "mercado_pago" | null; aguardandoPagamento?: boolean } }>(
       "select fn_criar_pedido_publico($1, $2, $3, $4, $5, $6, $7, $8, $9::numeric, $10::jsonb, $11, $12, $13::uuid, $14)",
