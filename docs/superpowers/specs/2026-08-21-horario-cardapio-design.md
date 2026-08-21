@@ -1,10 +1,12 @@
-# Horários e disponibilidade do cardápio público
+# Horários, disponibilidade e PWA operacional
 
 ## Objetivo
 
 Permitir que cada restaurante publique horários com múltiplos turnos por dia,
 pause o recebimento de pedidos em imprevistos e impeça pedidos fora do período
-disponível. O cliente deve ver o status antes de iniciar a compra.
+disponível. O cliente deve ver o status antes de iniciar a compra. Também
+permitir que a equipe instale o sistema administrativo como aplicativo pelo
+navegador, sem transformar o cardápio público em PWA.
 
 ## Decisões aprovadas
 
@@ -18,6 +20,17 @@ disponível. O cliente deve ver o status antes de iniciar a compra.
   adicionar/finalizar pedidos.
 - A API revalida a disponibilidade antes de criar o pedido; a interface não é
   a única proteção.
+- O PWA é destinado ao sistema operacional do restaurante e administrativo;
+  o cardápio público continua sendo uma página web responsiva.
+- Quando o navegador permitir, o sistema exibirá uma ação explícita
+  **Instalar aplicativo** e usará o fluxo nativo do Chrome/Edge ou do celular.
+- O aplicativo instalado terá ícone, nome e cores do OhFome e abrirá em janela
+  própria, sem depender da barra do navegador.
+- O cache do PWA deve guardar a estrutura estática da interface para melhorar
+  abertura e navegação, mas dados operacionais continuam buscados na rede.
+- Criação de pedidos, confirmação de Pix e impressão não funcionam offline; a
+  interface deixa isso claro em vez de aceitar ações que poderiam duplicar ou
+  perder pedidos.
 
 ## Persistência
 
@@ -59,6 +72,21 @@ dias. Isso elimina ambiguidades na avaliação do servidor.
 6. A criação de pedido público consulta a mesma regra antes de inserir dados;
    se indisponível retorna `409` com a mensagem ao cliente.
 
+## PWA administrativo
+
+1. O layout administrativo publica um `manifest` com nome, nome curto, cores,
+   ícones quadrados e modo `standalone`.
+2. Um registrador de service worker controla atualização e cache de arquivos
+   estáticos do sistema, sem cachear respostas de APIs nem páginas de pedidos.
+3. No menu de perfil/configurações haverá um item **Instalar OhFome**. Em
+   navegadores compatíveis ele abre o prompt nativo; nos demais apresenta
+   passos curtos para instalar pelo menu do navegador.
+4. Ao abrir instalado, a aplicação mantém autenticação normal e mostra um
+   aviso de conexão quando estiver offline. Botões que exigem rede ficam
+   bloqueados com explicação.
+5. O cardápio público não registra esse fluxo de instalação nem armazena
+   pedidos em cache; segue acessível como site.
+
 ## Implementação e testes
 
 - Criar um módulo de domínio compartilhado que normaliza horários, calcula a
@@ -69,5 +97,8 @@ dias. Isso elimina ambiguidades na avaliação do servidor.
 - Trocar os metadados globais do cardápio para apontar somente para
   `ohfome-icone-quadrado.png` com uma nova versão de cache, substituindo o
   favicon antigo após recarregamento forçado.
+- Criar manifesto, ícones e service worker do PWA apenas para as rotas
+  autenticadas, além da ação de instalação e do estado offline.
 - Cobrir os cenários: aberto, fechado, dois turnos, pausa manual, tentativa de
-  pedido direto fora do horário e favicon novo no cardápio.
+  pedido direto fora do horário, favicon novo no cardápio, instalação pelo
+  Chrome/Edge, abertura como aplicativo e bloqueio seguro de ações offline.
