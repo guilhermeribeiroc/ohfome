@@ -740,7 +740,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
           <h1 className="mt-4 text-center font-display text-2xl font-semibold tracking-[-.055em] sm:text-3xl">
             {dados.nome}
           </h1>
-          <span className={`mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-semibold ${cardapioDisponivel ? "bg-[#0e7775]/10 text-[#0e7775]" : "bg-[#941c42]/10 text-[#941c42]"}`}>
+          <span className={`mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-semibold ${cardapioDisponivel ? "bg-coral-050 text-coral-600" : "bg-danger-050 text-danger-600"}`}>
             <i className={`h-2 w-2 rounded-full ${cardapioDisponivel ? "bg-[#0e7775]" : "bg-[#941c42]"}`} />
             {cardapioDisponivel ? "Aberto agora" : dados.disponibilidade?.motivo ?? "Fechado no momento"}
           </span>
@@ -1308,7 +1308,7 @@ function ProdutoDetalhe({
           <p className="mt-7 text-base leading-7 text-black/70 sm:max-w-2xl sm:text-lg sm:leading-8">
             {descricaoDoProduto(produto)}
           </p>
-          <label className="mt-7 block rounded-2xl border border-[#0e7775]/15 bg-[#0e7775]/[.045] p-4">
+          <label className="mt-7 block rounded-2xl border border-coral-100 bg-coral-050 p-4">
             <span className="block text-xs font-semibold text-[#0e7775]">
               Observação deste item
             </span>
@@ -1674,7 +1674,7 @@ function CarrinhoSheet({
             <X size={18} />
           </button>
         </header>
-        {!disponivel && <div className="mx-5 mt-4 rounded-2xl border border-[#941c42]/15 bg-[#941c42]/[.07] p-3 text-sm leading-5 text-[#941c42] sm:mx-6">{motivoIndisponivel} Você pode consultar o cardápio, mas novos pedidos estão temporariamente bloqueados.</div>}
+        {!disponivel && <div className="mx-5 mt-4 rounded-2xl border border-danger-500/15 bg-danger-050 p-3 text-sm leading-5 text-danger-600 sm:mx-6">{motivoIndisponivel} Você pode consultar o cardápio, mas novos pedidos estão temporariamente bloqueados.</div>}
         {etapa === "itens" ? (
           <>
             <div
@@ -1919,7 +1919,7 @@ function CarrinhoSheet({
             </>
               ) : (
                 <>
-                  <div className="rounded-2xl border border-[#0e7775]/15 bg-[#0e7775]/[.06] p-3.5 text-sm leading-5 text-black/65">
+                  <div className="rounded-2xl border border-coral-100 bg-coral-050 p-3.5 text-sm leading-5 text-black/65">
                     <b className="block text-black">{entregaSelecionada ? "Entrega selecionada" : "Retirada no estabelecimento"}</b>
                     <span>{entregaSelecionada ? `${bairroSelecionado?.nome ?? "Bairro não informado"} · ${endereco || "Endereço não informado"}` : "Seu pedido será preparado para retirada."}</span>
                   </div>
@@ -1961,15 +1961,15 @@ function CarrinhoSheet({
                     </Campo>
                   )}
                   {formaPagamento === "pix" && (
-                    <div className="rounded-2xl border border-[#0e7775]/15 bg-[#0e7775]/[.06] p-3 text-sm leading-5 text-black/65">
+                    <div className="rounded-2xl border border-coral-100 bg-coral-050 p-3 text-sm leading-5 text-black/65">
                       {dados.pix?.modo === "mercado_pago" ? "Você receberá um QR Code Pix válido por 30 minutos. A cozinha só receberá a comanda após a confirmação do pagamento." : "O Pix será pago na entrega. A equipe receberá seu pedido agora e confirmará o pagamento depois."}
                     </div>
                   )}
                   {formaPagamento === "cartao" ? (
                     <Campo label="Tipo de cartão">
                       <div className="grid grid-cols-2 gap-2">
-                        <button type="button" onClick={() => setTipoCartao("credito")} className={`rounded-xl border px-3 py-3 text-sm font-semibold ${tipoCartao === "credito" ? "border-[#0e7775] bg-[#0e7775]/10 text-[#0e7775]" : "border-black/[.1] bg-white/55 text-black/65"}`}>Crédito</button>
-                        <button type="button" onClick={() => setTipoCartao("debito")} className={`rounded-xl border px-3 py-3 text-sm font-semibold ${tipoCartao === "debito" ? "border-[#0e7775] bg-[#0e7775]/10 text-[#0e7775]" : "border-black/[.1] bg-white/55 text-black/65"}`}>Débito</button>
+                        <button type="button" onClick={() => setTipoCartao("credito")} className={`rounded-xl border px-3 py-3 text-sm font-semibold ${tipoCartao === "credito" ? "border-coral-500 bg-coral-050 text-coral-600" : "border-black/[.1] bg-white/55 text-black/65"}`}>Crédito</button>
+                        <button type="button" onClick={() => setTipoCartao("debito")} className={`rounded-xl border px-3 py-3 text-sm font-semibold ${tipoCartao === "debito" ? "border-coral-500 bg-coral-050 text-coral-600" : "border-black/[.1] bg-white/55 text-black/65"}`}>Débito</button>
                       </div>
                     </Campo>
                   ) : formaPagamento === "dinheiro" ? (
@@ -2104,7 +2104,7 @@ function CarrinhoSheet({
                     )}
                   </div>
                 ) : (
-                  <div className="mt-2 rounded-2xl border border-[#0e7775]/15 bg-[#0e7775]/[.06] p-3 text-sm leading-5 text-black/65">
+                  <div className="mt-2 rounded-2xl border border-coral-100 bg-coral-050 p-3 text-sm leading-5 text-black/65">
                     {dados.pix?.modo === "mercado_pago"
                       ? "Você verá um QR Code Pix válido por 30 minutos. O pedido só seguirá para a cozinha e será impresso depois da confirmação do pagamento."
                       : "O Pix será pago na entrega. A equipe receberá seu pedido agora e confirmará o pagamento depois."}
