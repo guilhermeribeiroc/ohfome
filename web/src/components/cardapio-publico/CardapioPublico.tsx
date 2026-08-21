@@ -1624,7 +1624,7 @@ function CarrinhoSheet({
                         }
                       >
                         {dados.pix.modo === "mercado_pago"
-                          ? "Gera um QR Code e libera o preparo somente depois do pagamento."
+                          ? "O pedido só será enviado à cozinha depois do pagamento confirmado."
                           : "Você paga ao receber; a equipe confirma depois."}
                       </small>
                     </span>
@@ -1829,7 +1829,7 @@ function CarrinhoSheet({
                 ) : (
                   <div className="mt-2 rounded-2xl border border-[#0e7775]/15 bg-[#0e7775]/[.06] p-3 text-sm leading-5 text-black/65">
                     {dados.pix?.modo === "mercado_pago"
-                      ? "Você verá o QR Code Pix na próxima etapa. O pedido seguirá para a cozinha somente depois da confirmação do pagamento."
+                      ? "Você verá um QR Code Pix válido por 30 minutos. O pedido só seguirá para a cozinha e será impresso depois da confirmação do pagamento."
                       : "O Pix será pago na entrega. A equipe receberá seu pedido agora e confirmará o pagamento depois."}
                   </div>
                 )}
@@ -2098,8 +2098,9 @@ function TelaPix({
           ) : (
             <>
               <p className="text-sm leading-6 text-black/60">
-                Pedido #{cobranca.codigo}. A cozinha receberá a comanda
-                automaticamente após o pagamento confirmado.
+                Pedido #{cobranca.codigo}. Este QR Code é válido por 30
+                minutos. A cozinha não recebe a comanda e nada é impresso
+                antes da confirmação do pagamento.
               </p>
               <img
                 src={`data:image/png;base64,${cobranca.qrCodeBase64}`}
@@ -2116,7 +2117,8 @@ function TelaPix({
                 </b>
               </button>
               <p className="text-xs text-black/45">
-                Aguardando a confirmação segura do Mercado Pago…
+                Aguardando a confirmação segura do Mercado Pago. Após a
+                confirmação, seu pedido será enviado automaticamente.
               </p>
             </>
           )}

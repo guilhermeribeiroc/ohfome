@@ -45,12 +45,9 @@ export async function PATCH(request: NextRequest) {
   const ativo = body?.ativo === true;
   const chaveManual = typeof body?.chaveManual === "string" ? body.chaveManual.trim() : "";
   const instrucaoManual = typeof body?.instrucaoManual === "string" ? body.instrucaoManual.trim() : "";
-  const expiracaoMinutos = Number(body?.expiracaoMinutos ?? 30);
+  const expiracaoMinutos = 30;
 
   if (!modo) return NextResponse.json({ erro: "Escolha o modo Pix." }, { status: 400 });
-  if (!Number.isInteger(expiracaoMinutos) || expiracaoMinutos < 30 || expiracaoMinutos > 43200) {
-    return NextResponse.json({ erro: "A expiração do Pix deve ficar entre 30 minutos e 30 dias." }, { status: 400 });
-  }
   if (chaveManual.length > 200 || instrucaoManual.length > 500) {
     return NextResponse.json({ erro: "A chave ou instrução Pix é longa demais." }, { status: 400 });
   }

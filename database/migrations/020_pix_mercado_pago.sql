@@ -9,7 +9,9 @@ create table if not exists configuracoes_pix (
   modo text not null default 'manual' check (modo in ('manual', 'mercado_pago')),
   chave_manual text,
   instrucao_manual text,
-  expiracao_minutos integer not null default 30 check (expiracao_minutos between 30 and 43200),
+  -- A Orders API do Mercado Pago aceita no mínimo 30 minutos. Mantemos o
+  -- prazo fixo para a comunicação com o cliente ser sempre verdadeira.
+  expiracao_minutos integer not null default 30 check (expiracao_minutos = 30),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

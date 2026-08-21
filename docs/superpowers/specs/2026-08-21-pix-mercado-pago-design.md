@@ -60,7 +60,7 @@ Cliente confirma o pedido
 → pedido é liberado uma única vez para cozinha e impressão
 ```
 
-O QR Code será de uso único e terá vencimento configurável, inicialmente 30 minutos. Vencido ou recusado, o pedido permanece fora da cozinha; a tela permite recomeçar a cobrança sem duplicar o pedido nem imprimir comandas.
+O QR Code será de uso único e terá vencimento fixo de 30 minutos, o mínimo aceito pela Orders API do Mercado Pago. Enquanto estiver pendente, o pedido permanece fora da cozinha e não gera comanda; a tela deixa essa condição explícita. Vencido ou recusado, o pedido continua bloqueado.
 
 ## Estado e dados
 
