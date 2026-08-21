@@ -18,6 +18,6 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   // Cardapio publico muda raramente (o dono edita produtos de vez em quando).
   // Um cache curto evita bater no Postgres a cada abertura do link por
   // clientes diferentes, sem deixar o cardapio "travado" em uma versao velha.
-  resposta.headers.set("Cache-Control", "public, max-age=20, stale-while-revalidate=120");
+  resposta.headers.set("Cache-Control", "no-store");
   return resposta;
 }

@@ -5,10 +5,46 @@ import type { SessionPayload } from "@/lib/session";
 
 const TIPOS = ["entrada", "saida"] as const;
 type Tipo = (typeof TIPOS)[number];
+type Periodo = { inicio: string; fim: string };
 
 function numero(valor: unknown) {
   const resultado = Number(valor);
   return Number.isFinite(resultado) ? resultado : NaN;
+}
+
+function dataNaZonaAtual() {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Fortaleza",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const parte = (tipo: Intl.DateTimeFormatPartTypes) => partes.find((item) => item.type === tipo)?.value;
+  return `${parte("year")}-${parte("month")}-${parte("day")}`;
+}
+
+function ultimoDiaDoMes(data: string) {
+  const [ano, mes] = data.split("-").map(Number);
+  return new Date(Date.UTC(ano, mes, 0)).toISOString().slice(0, 10);
+}
+
+function dataValida(data: string | null): data is string {
+  if (!data || !/^\d{4}-\d{2}-\d{2}$/.test(data)) return false;
+  const dataConvertida = new Date(`${data}T12:00:00Z`);
+  return !Number.isNaN(dataConvertida.getTime()) && dataConvertida.toISOString().slice(0, 10) === data;
+}
+
+function periodoDaRequisicao(request: NextRequest): Periodo | null {
+  const inicio = request.nextUrl.searchParams.get("inicio");
+  const fim = request.nextUrl.searchParams.get("fim");
+  if (!inicio && !fim) {
+    const hoje = dataNaZonaAtual();
+    return { inicio: `${hoje.slice(0, 7)}-01`, fim: ultimoDiaDoMes(hoje) };
+  }
+  if (!dataValida(inicio) || !dataValida(fim) || inicio > fim) return null;
+
+  const diferencaEmDias = (new Date(`${fim}T12:00:00Z`).getTime() - new Date(`${inicio}T12:00:00Z`).getTime()) / 86_400_000;
+  return diferencaEmDias <= 366 ? { inicio, fim } : null;
 }
 
 async function administradorDaRequisicao(request: NextRequest): Promise<SessionPayload | null> {
@@ -30,36 +66,43 @@ export async function GET(request: NextRequest) {
   if (!autenticado) return respostaNaoAutenticado();
   const sessao = await administradorDaRequisicao(request);
   if (!sessao) return respostaSemPermissao();
+  const periodo = periodoDaRequisicao(request);
+  if (!periodo) return NextResponse.json({ erro: "Selecione um período válido de até 12 meses." }, { status: 400 });
 
   const dados = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     const [movimentos, custosFixos, resumo, vendasFinalizadas] = await Promise.all([
       client.query(`select id, tipo, categoria, descricao, valor, data_movimento as "dataMovimento"
-        from movimentacoes_financeiras order by data_movimento desc, created_at desc limit 80`),
+        from movimentacoes_financeiras
+        where data_movimento between $1::date and $2::date
+        order by data_movimento desc, created_at desc limit 80`, [periodo.inicio, periodo.fim]),
       client.query(`select id, categoria, descricao, valor_mensal as "valorMensal", dia_vencimento as "diaVencimento", ativo
         from custos_fixos order by ativo desc, dia_vencimento, descricao`),
       client.query(`with vendas as (
           select coalesce(sum(total), 0) as vendas
           from pedidos
           where status = 'finalizado'
-            and date_trunc('month', created_at) = date_trunc('month', current_date)
+            and (created_at at time zone 'America/Fortaleza')::date between $1::date and $2::date
         ), custo_vendido as (
           select coalesce(sum(i.quantidade * coalesce(pr.preco_custo, 0)), 0) as custo
           from itens_pedido i
           join pedidos p on p.id = i.pedido_id
           left join produtos pr on pr.id = i.produto_id
           where p.status = 'finalizado'
-            and date_trunc('month', p.created_at) = date_trunc('month', current_date)
+            and (p.created_at at time zone 'America/Fortaleza')::date between $1::date and $2::date
         ), avulsos as (
           select coalesce(sum(valor) filter (where tipo = 'entrada'), 0) as entradas,
                  coalesce(sum(valor) filter (where tipo = 'saida'), 0) as saidas
           from movimentacoes_financeiras
-          where date_trunc('month', data_movimento) = date_trunc('month', current_date)
+          where data_movimento between $1::date and $2::date
         ), fixos as (
-          select coalesce(sum(valor_mensal) filter (where ativo), 0) as total from custos_fixos
+          select coalesce(sum(cf.valor_mensal / extract(day from (date_trunc('month', dias.dia) + interval '1 month - 1 day'))), 0) as total
+          from custos_fixos cf
+          cross join generate_series($1::date, $2::date, interval '1 day') as dias(dia)
+          where cf.ativo
         ) select vendas.vendas as "vendasFinalizadas", custo_vendido.custo as "custoProdutosVendidos",
                  avulsos.entradas as "entradasAvulsas", avulsos.saidas as "saidasAvulsas",
-                 fixos.total as "custosFixosMensais"
-        from vendas cross join custo_vendido cross join avulsos cross join fixos`),
+                 fixos.total as "custosFixosPeriodo"
+        from vendas cross join custo_vendido cross join avulsos cross join fixos`, [periodo.inicio, periodo.fim]),
       client.query(`select
           p.id, p.codigo, p.tipo, p.total, p.created_at as "createdAt",
           m.numero as "mesaNumero", c.nome as "clienteNome",
@@ -77,25 +120,33 @@ export async function GET(request: NextRequest) {
         left join itens_pedido ip on ip.pedido_id = p.id
         left join produtos pr on pr.id = ip.produto_id
         where p.status = 'finalizado'
-          and date_trunc('month', p.created_at) = date_trunc('month', current_date)
+          and (p.created_at at time zone 'America/Fortaleza')::date between $1::date and $2::date
         group by p.id, p.codigo, p.tipo, p.total, p.created_at, m.numero, c.nome
         order by p.created_at desc
-        limit 80`),
+        limit 80`, [periodo.inicio, periodo.fim]),
     ]);
     return { movimentos: movimentos.rows, custosFixos: custosFixos.rows, resumo: resumo.rows[0], vendasFinalizadas: vendasFinalizadas.rows };
   });
 
   const resumo = dados.resumo;
+  const resumoNormalizado = {
+    vendasFinalizadas: Number(resumo.vendasFinalizadas),
+    custoProdutosVendidos: Number(resumo.custoProdutosVendidos),
+    entradasAvulsas: Number(resumo.entradasAvulsas),
+    saidasAvulsas: Number(resumo.saidasAvulsas),
+    custosFixosPeriodo: Number(resumo.custosFixosPeriodo),
+  };
   return NextResponse.json({
     ...dados,
+    periodo,
     vendasFinalizadas: dados.vendasFinalizadas.map((venda) => ({
       ...venda,
       custoProdutos: Number(venda.custoProdutos),
       lucroBruto: Number(venda.total) - Number(venda.custoProdutos),
     })),
     resumo: {
-      ...resumo,
-      resultadoOperacional: Number(resumo.vendasFinalizadas) - Number(resumo.custoProdutosVendidos) + Number(resumo.entradasAvulsas) - Number(resumo.saidasAvulsas) - Number(resumo.custosFixosMensais),
+      ...resumoNormalizado,
+      resultadoOperacional: resumoNormalizado.vendasFinalizadas - resumoNormalizado.custoProdutosVendidos + resumoNormalizado.entradasAvulsas - resumoNormalizado.saidasAvulsas - resumoNormalizado.custosFixosPeriodo,
     },
   });
 }

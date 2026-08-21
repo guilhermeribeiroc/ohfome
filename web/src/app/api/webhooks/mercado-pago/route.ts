@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { comEstabelecimento, queryPublico } from "@/lib/db";
-import { consultarOrdemMercadoPago, dadosPagamento, pagamentoAprovado, validarAssinaturaWebhook } from "@/lib/mercado-pago";
+import { sincronizarCobrancaPixMercadoPago, validarAssinaturaWebhook } from "@/lib/mercado-pago";
 
 type EventoMercadoPago = { data?: { id?: string }; type?: string };
 
@@ -24,40 +24,7 @@ export async function POST(request: NextRequest) {
 
   try {
     await comEstabelecimento(estabelecimentoId, async (client) => {
-      const { rows } = await client.query<{
-        pedidoId: string;
-        valor: number;
-        status: string;
-      }>(`select pedido_id as "pedidoId", valor, status from pagamentos_pix
-          where order_id = $1 for update`, [orderId]);
-      const local = rows[0];
-      if (!local || local.status === "pago" || local.status === "estornado") return;
-
-      const ordem = await consultarOrdemMercadoPago(client, estabelecimentoId, orderId);
-      const remoto = dadosPagamento(ordem);
-      if (ordem.external_reference !== local.pedidoId || Math.abs(remoto.valor - local.valor) > 0.009) {
-        throw new Error("A cobrança recebida não corresponde ao pedido local.");
-      }
-
-      if (pagamentoAprovado(ordem)) {
-        await client.query(`update pagamentos_pix set status = 'pago', payment_id = coalesce($2, payment_id), confirmado_em = now(), detalhe_erro = null
-          where order_id = $1`, [orderId, remoto.paymentId]);
-        const { rows: liberados } = await client.query(`update pedidos
-          set pagamento_status = 'pago', enviado_cozinha = true, enviado_cozinha_em = coalesce(enviado_cozinha_em, now())
-          where id = $1 and enviado_cozinha = false and forma_pagamento = 'pix'
-          returning id`, [local.pedidoId]);
-        if (liberados[0]) await client.query("select baixar_estoque_pedido_confirmado($1::uuid)", [local.pedidoId]);
-        return;
-      }
-
-      const statusRemoto = String(remoto.status).toLowerCase();
-      const expirado = ["cancelled", "canceled", "rejected", "expired"].includes(statusRemoto);
-      if (expirado) {
-        await client.query(`update pagamentos_pix set status = $2, payment_id = coalesce($3, payment_id), detalhe_erro = $4 where order_id = $1`,
-          [orderId, statusRemoto === "expired" ? "expirado" : "falhou", remoto.paymentId, `Status Mercado Pago: ${statusRemoto}`]);
-        await client.query(`update pedidos set pagamento_status = 'falhou'
-          where id = $1 and enviado_cozinha = false`, [local.pedidoId]);
-      }
+      await sincronizarCobrancaPixMercadoPago(client, estabelecimentoId, orderId);
     });
     return NextResponse.json({ recebido: true });
   } catch (erro) {

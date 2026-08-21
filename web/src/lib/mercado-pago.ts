@@ -186,6 +186,93 @@ export async function consultarOrdemMercadoPago(client: PoolClient, estabelecime
   return buscarOrdem(await accessTokenDoEstabelecimento(client, estabelecimentoId), orderId);
 }
 
+type CobrancaPixLocal = {
+  pedidoId: string;
+  valor: number;
+  status: string;
+};
+
+// A notificação do Mercado Pago é o caminho principal para liberar um pedido.
+// Esta rotina também é usada pela tela pública como contingência: se um
+// webhook atrasar, a própria tela confere a cobrança já criada, sem confiar em
+// nenhum dado vindo do navegador.
+export async function sincronizarCobrancaPixMercadoPago(
+  client: PoolClient,
+  estabelecimentoId: string,
+  orderId: string,
+) {
+  const { rows } = await client.query<CobrancaPixLocal>(
+    `select pedido_id as "pedidoId", valor, status
+       from pagamentos_pix
+      where order_id = $1
+      for update`,
+    [orderId],
+  );
+  const local = rows[0];
+  if (!local || local.status === "pago" || local.status === "estornado") {
+    return { status: local?.status ?? "ausente", pedidoId: local?.pedidoId ?? null };
+  }
+
+  const ordem = await consultarOrdemMercadoPago(client, estabelecimentoId, orderId);
+  const remoto = dadosPagamento(ordem);
+  if (
+    ordem.external_reference !== local.pedidoId ||
+    Math.abs(remoto.valor - local.valor) > 0.009
+  ) {
+    throw new Error("A cobrança recebida não corresponde ao pedido local.");
+  }
+
+  if (pagamentoAprovado(ordem)) {
+    await client.query(
+      `update pagamentos_pix
+          set status = 'pago', payment_id = coalesce($2, payment_id),
+              confirmado_em = now(), detalhe_erro = null
+        where order_id = $1`,
+      [orderId, remoto.paymentId],
+    );
+    const { rows: liberados } = await client.query(
+      `update pedidos
+          set pagamento_status = 'pago', enviado_cozinha = true,
+              enviado_cozinha_em = coalesce(enviado_cozinha_em, now())
+        where id = $1 and enviado_cozinha = false and forma_pagamento = 'pix'
+        returning id`,
+      [local.pedidoId],
+    );
+    if (liberados[0]) {
+      await client.query("select baixar_estoque_pedido_confirmado($1::uuid)", [
+        local.pedidoId,
+      ]);
+    }
+    return { status: "pago", pedidoId: local.pedidoId };
+  }
+
+  const statusRemoto = String(remoto.status).toLowerCase();
+  const expirado = ["cancelled", "canceled", "rejected", "expired"].includes(
+    statusRemoto,
+  );
+  if (expirado) {
+    await client.query(
+      `update pagamentos_pix
+          set status = $2, payment_id = coalesce($3, payment_id), detalhe_erro = $4
+        where order_id = $1`,
+      [
+        orderId,
+        statusRemoto === "expired" ? "expirado" : "falhou",
+        remoto.paymentId,
+        `Status Mercado Pago: ${statusRemoto}`,
+      ],
+    );
+    await client.query(
+      `update pedidos set pagamento_status = 'falhou'
+        where id = $1 and enviado_cozinha = false`,
+      [local.pedidoId],
+    );
+    return { status: statusRemoto === "expired" ? "expirado" : "falhou", pedidoId: local.pedidoId };
+  }
+
+  return { status: "pendente", pedidoId: local.pedidoId };
+}
+
 export function pagamentoAprovado(ordem: OrdemMercadoPago) {
   const pagamento = ordem.transactions?.payments?.[0];
   return ordem.status === "processed" || pagamento?.status === "approved";

@@ -8,7 +8,6 @@ import {
   ArrowRight,
   BookOpenText,
   Check,
-  ChevronDown,
   CircleHelp,
   Info,
   Menu,
@@ -77,8 +76,17 @@ interface CobrancaPix {
   expiraEm: string;
 }
 
+interface CarrinhoSalvo {
+  itens: Record<string, number>;
+  observacoes: Record<string, string>;
+}
+
 function chavePedidoAtivo(slug: string) {
   return `ohfome_pedido_ativo_${slug}`;
+}
+
+function chaveCarrinho(slug: string) {
+  return `ohfome_carrinho_${slug}`;
 }
 
 function carregarPedidoAtivo(slug: string): PedidoAtivo | null {
@@ -86,6 +94,21 @@ function carregarPedidoAtivo(slug: string): PedidoAtivo | null {
   try {
     const bruto = window.localStorage.getItem(chavePedidoAtivo(slug));
     return bruto ? (JSON.parse(bruto) as PedidoAtivo) : null;
+  } catch {
+    return null;
+  }
+}
+
+function carregarCarrinho(slug: string): CarrinhoSalvo | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const bruto = window.localStorage.getItem(chaveCarrinho(slug));
+    if (!bruto) return null;
+    const carrinho = JSON.parse(bruto) as Partial<CarrinhoSalvo>;
+    return {
+      itens: carrinho.itens ?? {},
+      observacoes: carrinho.observacoes ?? {},
+    };
   } catch {
     return null;
   }
@@ -162,9 +185,13 @@ export function CardapioPublico({ slug }: { slug: string }) {
   const [busca, setBusca] = useState("");
   const [codigoPedido, setCodigoPedido] = useState<number | null>(null);
   const [linkWhatsapp, setLinkWhatsapp] = useState<string | null>(null);
+  const [pagamentoPixConfirmado, setPagamentoPixConfirmado] = useState(false);
   const [pedidoAtivo, setPedidoAtivo] = useState<PedidoAtivo | null>(null);
   const [cobrancaPix, setCobrancaPix] = useState<CobrancaPix | null>(null);
   const [indiceBanner, setIndiceBanner] = useState(0);
+  const overlayAtual = useRef<Overlay>(null);
+  const historicoDoOverlay = useRef(false);
+  const carrinhoHidratado = useRef(false);
 
   const bannersAtivos = useMemo(
     () => (dados?.banners ?? []).slice().sort((a, b) => a.ordem - b.ordem),
@@ -179,6 +206,46 @@ export function CardapioPublico({ slug }: { slug: string }) {
     );
     return () => window.clearTimeout(carregar);
   }, [slug]);
+
+  useEffect(() => {
+    const restaurar = window.setTimeout(() => {
+      const salvo = carregarCarrinho(slug);
+      if (salvo) {
+        setCarrinho(salvo.itens);
+        setObservacoesItens(salvo.observacoes);
+      }
+      carrinhoHidratado.current = true;
+    }, 0);
+    return () => window.clearTimeout(restaurar);
+  }, [slug]);
+
+  useEffect(() => {
+    if (!carrinhoHidratado.current) return;
+    try {
+      if (Object.keys(carrinho).length) {
+        window.localStorage.setItem(
+          chaveCarrinho(slug),
+          JSON.stringify({ itens: carrinho, observacoes: observacoesItens }),
+        );
+      } else {
+        window.localStorage.removeItem(chaveCarrinho(slug));
+      }
+    } catch {
+      /* carrinho continua funcional mesmo sem armazenamento local */
+    }
+  }, [carrinho, observacoesItens, slug]);
+
+  useEffect(() => {
+    const aoVoltar = () => {
+      if (!overlayAtual.current) return;
+      overlayAtual.current = null;
+      historicoDoOverlay.current = false;
+      setOverlay(null);
+      setProdutoSelecionado(null);
+    };
+    window.addEventListener("popstate", aoVoltar);
+    return () => window.removeEventListener("popstate", aoVoltar);
+  }, []);
 
   useEffect(() => {
     const resetar = window.setTimeout(() => setIndiceBanner(0), 0);
@@ -370,6 +437,39 @@ export function CardapioPublico({ slug }: { slug: string }) {
     });
   }
 
+  function abrirOverlay(novoOverlay: Exclude<Overlay, null>) {
+    if (typeof window !== "undefined") {
+      if (!historicoDoOverlay.current) {
+        window.history.pushState({ ohfomeOverlay: novoOverlay }, "");
+        historicoDoOverlay.current = true;
+      } else {
+        window.history.replaceState({ ohfomeOverlay: novoOverlay }, "");
+      }
+    }
+    overlayAtual.current = novoOverlay;
+    setOverlay(novoOverlay);
+  }
+
+  function fecharOverlay() {
+    if (typeof window !== "undefined" && historicoDoOverlay.current) {
+      window.history.back();
+      return;
+    }
+    overlayAtual.current = null;
+    setOverlay(null);
+    setProdutoSelecionado(null);
+  }
+
+  function limparCarrinho() {
+    setCarrinho({});
+    setObservacoesItens({});
+    try {
+      window.localStorage.removeItem(chaveCarrinho(slug));
+    } catch {
+      /* armazenamento local indisponível */
+    }
+  }
+
   function atualizarObservacaoItem(produtoId: string, observacao: string) {
     setObservacoesItens((atual) => ({
       ...atual,
@@ -379,15 +479,15 @@ export function CardapioPublico({ slug }: { slug: string }) {
 
   function abrirProduto(produto: ProdutoPublico) {
     setProdutoSelecionado(produto);
-    setOverlay("produto");
+    abrirOverlay("produto");
   }
 
   function irParaCategoria(nome: string) {
     const destino = refsCategoria.current[nome];
-    if (!destino) return;
     const categoria = categorias.find((item) => item.nome === nome);
     if (categoria) setGrupo(categoria.grupo);
     setCategoriaAtiva(nome);
+    if (!destino) return;
     const topo = Math.max(
       0,
       window.scrollY + destino.getBoundingClientRect().top - 154,
@@ -410,16 +510,18 @@ export function CardapioPublico({ slug }: { slug: string }) {
       (categoria) => categoria.grupo === novoGrupo,
     );
     setGrupo(novoGrupo);
-    if (primeiraCategoria) irParaCategoria(primeiraCategoria.nome);
+    if (!primeiraCategoria) return;
+    setCategoriaAtiva(primeiraCategoria.nome);
+    window.setTimeout(() => irParaCategoria(primeiraCategoria.nome), 0);
   }
 
   function abrirMenuLateral() {
     setBuscaAberta(false);
-    setOverlay("menu");
+    abrirOverlay("menu");
   }
 
   function irParaTopo() {
-    setOverlay(null);
+    fecharOverlay();
     rolarPara(0);
   }
 
@@ -432,7 +534,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
       style={{ fontFamily: "var(--font-lexend)" }}
     >
       <header className="mx-auto max-w-4xl px-4 pt-4 sm:px-6 sm:pt-6 lg:max-w-6xl lg:px-8 lg:pt-5">
-        <div className="grid grid-cols-[48px_1fr_48px] items-center py-2">
+        <div className="grid grid-cols-[48px_1fr_auto] items-center py-2">
           <button
             onClick={abrirMenuLateral}
             className="flex h-12 w-12 items-center justify-center rounded-full bg-black/[.035] text-[#181714] transition active:scale-95"
@@ -443,13 +545,22 @@ export function CardapioPublico({ slug }: { slug: string }) {
           <span className="text-center font-display text-xl font-semibold tracking-[-.04em] sm:text-2xl">
             Menu
           </span>
-          <button
-            onClick={() => setBuscaAberta((aberta) => !aberta)}
-            className="flex h-12 w-12 items-center justify-center rounded-full bg-black/[.035] text-[#181714] transition active:scale-95"
-            aria-label="Buscar no cardápio"
-          >
-            <Search size={22} strokeWidth={1.8} />
-          </button>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={() => setBuscaAberta((aberta) => !aberta)}
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-black/[.035] text-[#181714] transition active:scale-95"
+              aria-label="Buscar no cardápio"
+            >
+              <Search size={22} strokeWidth={1.8} />
+            </button>
+            <button
+              onClick={() => abrirOverlay("carrinho")}
+              className="hidden min-h-12 items-center gap-2 rounded-full bg-[#0e7775] px-4 text-sm font-semibold text-white shadow-lg shadow-[#0e7775]/20 lg:inline-flex"
+            >
+              <ShoppingBag size={17} />
+              {totalItens ? `${totalItens} no pedido` : "Meu pedido"}
+            </button>
+          </div>
         </div>
 
         {buscaAberta && (
@@ -609,7 +720,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
             )}
           </div>
           <button
-            onClick={() => setOverlay("info")}
+            onClick={() => abrirOverlay("info")}
             className="absolute right-0 top-16 flex min-h-11 items-center gap-2 rounded-full bg-black/[.035] px-4 text-xs font-semibold text-[#0e7775] transition active:scale-95 sm:right-4"
           >
             <Info size={15} /> Info <ArrowRight size={14} />
@@ -672,7 +783,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
             </p>
           </section>
         )}
-        {categorias.map((categoria, indice) => (
+        {categoriasVisiveis.map((categoria) => (
           <section
             key={categoria.nome}
             data-categoria={categoria.nome}
@@ -681,12 +792,6 @@ export function CardapioPublico({ slug }: { slug: string }) {
             }}
             className="scroll-mt-40 pt-9 lg:pt-12"
           >
-            {indice > 0 &&
-              categoria.grupo !== categorias[indice - 1]?.grupo && (
-                <p className="mb-3 text-[10px] font-semibold uppercase tracking-[.17em] text-black/35">
-                  {categoria.grupo}
-                </p>
-              )}
             <div className="mb-4 flex items-end justify-between border-b border-black/[.1] pb-4">
               <h2 className="font-display text-2xl font-semibold tracking-[-.055em] text-[#0e7775]">
                 {categoria.nome}
@@ -753,7 +858,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
         </div>
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-black/[.08] bg-[#eee8df]/97 pb-[max(.45rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-xl">
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-black/[.08] bg-[#eee8df]/97 pb-[max(.45rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-xl lg:hidden">
         <div className="mx-auto grid max-w-xl grid-cols-4 px-2">
           <BottomAction
             ativo
@@ -765,26 +870,26 @@ export function CardapioPublico({ slug }: { slug: string }) {
             label="Pedido"
             icon={ShoppingBag}
             badge={totalItens}
-            onClick={() => setOverlay("carrinho")}
+            onClick={() => abrirOverlay("carrinho")}
           />
           {pedidoAtivo ? (
             <BottomAction
               label="Meus pedidos"
               icon={PackageSearch}
               destaque
-              onClick={() => setOverlay("pedidos")}
+              onClick={() => abrirOverlay("pedidos")}
             />
           ) : (
             <BottomAction
               label="Atendimento"
               icon={MessageCircle}
-              onClick={() => setOverlay("info")}
+              onClick={() => abrirOverlay("info")}
             />
           )}
           <BottomAction
             label="Info"
             icon={CircleHelp}
-            onClick={() => setOverlay("info")}
+            onClick={() => abrirOverlay("info")}
           />
         </div>
       </nav>
@@ -796,8 +901,8 @@ export function CardapioPublico({ slug }: { slug: string }) {
           observacao={observacoesItens[produtoSelecionado.id] ?? ""}
           ajustar={ajustar}
           onAtualizarObservacao={atualizarObservacaoItem}
-          onFechar={() => setOverlay(null)}
-          onAbrirCarrinho={() => setOverlay("carrinho")}
+          onFechar={fecharOverlay}
+          onAbrirCarrinho={() => abrirOverlay("carrinho")}
         />
       )}
       {overlay === "carrinho" && (
@@ -809,12 +914,12 @@ export function CardapioPublico({ slug }: { slug: string }) {
           ajustar={ajustar}
           onAtualizarObservacao={atualizarObservacaoItem}
           totalValor={totalValor}
-          onFechar={() => setOverlay(null)}
+          onFechar={fecharOverlay}
           onConfirmado={(codigo, whatsapp, pedidoId) => {
-            setCarrinho({});
-            setObservacoesItens({});
+            limparCarrinho();
             setCodigoPedido(codigo);
             setLinkWhatsapp(whatsapp);
+            setPagamentoPixConfirmado(false);
             const ativo = { id: pedidoId, codigo };
             setPedidoAtivo(ativo);
             try {
@@ -825,11 +930,11 @@ export function CardapioPublico({ slug }: { slug: string }) {
             } catch {
               /* localStorage indisponível */
             }
-            setOverlay("sucesso");
+            abrirOverlay("sucesso");
           }}
           onAguardandoPix={(cobranca) => {
-            setCarrinho({});
-            setObservacoesItens({});
+            limparCarrinho();
+            setPagamentoPixConfirmado(false);
             const ativo = { id: cobranca.pedidoId, codigo: cobranca.codigo };
             setPedidoAtivo(ativo);
             setCobrancaPix(cobranca);
@@ -841,7 +946,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
             } catch {
               /* localStorage indisponível */
             }
-            setOverlay("pix");
+            abrirOverlay("pix");
           }}
         />
       )}
@@ -852,13 +957,14 @@ export function CardapioPublico({ slug }: { slug: string }) {
           onPago={() => {
             setCodigoPedido(cobrancaPix.codigo);
             setLinkWhatsapp(null);
-            setOverlay("sucesso");
+            setPagamentoPixConfirmado(true);
+            abrirOverlay("sucesso");
           }}
-          onFechar={() => setOverlay("pedidos")}
+          onFechar={() => abrirOverlay("pedidos")}
         />
       )}
       {overlay === "info" && (
-        <InfoSheet dados={dados} onFechar={() => setOverlay(null)} />
+        <InfoSheet dados={dados} onFechar={fecharOverlay} />
       )}
       {overlay === "menu" && (
         <MenuLateral
@@ -866,31 +972,32 @@ export function CardapioPublico({ slug }: { slug: string }) {
           categorias={categorias}
           categoriaAtiva={categoriaAtivaExibida}
           carrinhoItens={totalItens}
-          onFechar={() => setOverlay(null)}
+          onFechar={fecharOverlay}
           onSelecionar={(nome) => {
-            setOverlay(null);
+            fecharOverlay();
             requestAnimationFrame(() =>
               requestAnimationFrame(() => irParaCategoria(nome)),
             );
           }}
-          onAbrirPedido={() => setOverlay("carrinho")}
-          onAbrirInfo={() => setOverlay("info")}
+          onAbrirPedido={() => abrirOverlay("carrinho")}
+          onAbrirInfo={() => abrirOverlay("info")}
         />
       )}
       {overlay === "sucesso" && (
         <TelaSucesso
           codigo={codigoPedido}
           whatsappUrl={linkWhatsapp}
+          pagamentoPixConfirmado={pagamentoPixConfirmado}
           temAcompanhamento={Boolean(pedidoAtivo)}
-          onAcompanhar={() => setOverlay("pedidos")}
-          onNovoPedido={() => setOverlay(null)}
+          onAcompanhar={() => abrirOverlay("pedidos")}
+          onNovoPedido={fecharOverlay}
         />
       )}
       {overlay === "pedidos" && pedidoAtivo && (
         <PedidoSheet
           slug={slug}
           pedidoId={pedidoAtivo.id}
-          onFechar={() => setOverlay(null)}
+          onFechar={fecharOverlay}
         />
       )}
     </div>
@@ -952,6 +1059,7 @@ function MenuLateral({
   onAbrirPedido: () => void;
   onAbrirInfo: () => void;
 }) {
+  const painelRef = usePainelAcessivel(onFechar);
   return (
     <div
       className="fixed inset-0 z-[60] flex bg-black/45 backdrop-blur-[2px]"
@@ -959,14 +1067,21 @@ function MenuLateral({
       aria-modal="true"
       aria-label="Navegação do cardápio"
     >
-      <aside className="flex min-h-full w-[min(88vw,360px)] flex-col bg-[#f4eee6] shadow-2xl animate-in slide-in-from-left duration-200">
+      <aside
+        ref={painelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="menu-lateral-titulo"
+        tabIndex={-1}
+        className="flex min-h-full w-[min(88vw,360px)] flex-col bg-[#f4eee6] shadow-2xl outline-none animate-in slide-in-from-left duration-200"
+      >
         <header className="border-b border-black/[.08] px-5 pb-5 pt-[max(1.25rem,env(safe-area-inset-top))]">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-[.18em] text-[#0e7775]">
                 Navegue pelo menu
               </p>
-              <h2 className="mt-1 truncate font-display text-2xl font-semibold tracking-[-.055em]">
+              <h2 id="menu-lateral-titulo" className="mt-1 truncate font-display text-2xl font-semibold tracking-[-.055em]">
                 {dados.nome}
               </h2>
             </div>
@@ -1056,6 +1171,65 @@ function MenuLateral({
   );
 }
 
+function usePainelAcessivel(onFechar: () => void) {
+  const painelRef = useRef<HTMLElement | null>(null);
+  const fecharAtual = useRef(onFechar);
+
+  useEffect(() => {
+    fecharAtual.current = onFechar;
+  }, [onFechar]);
+
+  useEffect(() => {
+    const focoAnterior = document.activeElement as HTMLElement | null;
+    const overflowAnterior = document.body.style.overflow;
+    const paddingAnterior = document.body.style.paddingRight;
+    const larguraDaBarra = window.innerWidth - document.documentElement.clientWidth;
+    document.body.style.overflow = "hidden";
+    if (larguraDaBarra > 0)
+      document.body.style.paddingRight = `${larguraDaBarra}px`;
+
+    const focarPainel = () => painelRef.current?.focus();
+    const temporizador = window.setTimeout(focarPainel, 0);
+    const aoTeclar = (evento: KeyboardEvent) => {
+      if (evento.key === "Escape") {
+        evento.preventDefault();
+        fecharAtual.current();
+        return;
+      }
+      if (evento.key !== "Tab" || !painelRef.current) return;
+      const focoPossivel = Array.from(
+        painelRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((elemento) => !elemento.hasAttribute("aria-hidden"));
+      if (!focoPossivel.length) {
+        evento.preventDefault();
+        focarPainel();
+        return;
+      }
+      const primeiro = focoPossivel[0];
+      const ultimo = focoPossivel.at(-1)!;
+      if (evento.shiftKey && document.activeElement === primeiro) {
+        evento.preventDefault();
+        ultimo.focus();
+      } else if (!evento.shiftKey && document.activeElement === ultimo) {
+        evento.preventDefault();
+        primeiro.focus();
+      }
+    };
+    document.addEventListener("keydown", aoTeclar);
+    return () => {
+      window.clearTimeout(temporizador);
+      document.removeEventListener("keydown", aoTeclar);
+      document.body.style.overflow = overflowAnterior;
+      document.body.style.paddingRight = paddingAnterior;
+      focoAnterior?.focus?.();
+    };
+  }, []);
+
+  return painelRef;
+}
+
 function ProdutoDetalhe({
   produto,
   quantidade,
@@ -1073,31 +1247,40 @@ function ProdutoDetalhe({
   onFechar: () => void;
   onAbrirCarrinho: () => void;
 }) {
+  const painelRef = usePainelAcessivel(onFechar);
   return (
     <div
       data-lenis-prevent
       className="fixed inset-0 z-50 overflow-y-auto bg-[#eee8df] sm:flex sm:items-center sm:justify-center sm:overflow-hidden sm:bg-black/55 sm:p-6 sm:backdrop-blur-sm"
     >
-      <article className="relative mx-auto min-h-dvh max-w-3xl overflow-hidden bg-[#eee8df] sm:min-h-0 sm:w-full sm:rounded-[2rem] sm:shadow-2xl lg:grid lg:h-[min(82dvh,42rem)] lg:max-w-5xl lg:grid-cols-[minmax(22rem,.92fr)_minmax(0,1.08fr)] lg:rounded-[2.25rem]">
+      <article
+        ref={painelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="produto-detalhe-titulo"
+        tabIndex={-1}
+        className="relative mx-auto min-h-dvh max-w-3xl overflow-hidden bg-[#eee8df] outline-none sm:min-h-0 sm:w-full sm:rounded-[2rem] sm:shadow-2xl lg:grid lg:h-[min(82dvh,42rem)] lg:max-w-5xl lg:grid-cols-[minmax(22rem,.92fr)_minmax(0,1.08fr)] lg:rounded-[2.25rem]"
+      >
         <div
-          className="relative aspect-[4/3] max-h-[58dvh] bg-cover bg-center lg:h-full lg:max-h-none lg:aspect-auto"
+          className="relative aspect-[4/3] max-h-[45dvh] bg-cover bg-center lg:h-full lg:max-h-none lg:aspect-auto"
           style={fotoDoProduto(produto)}
         >
           <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/25 to-transparent" />
           <span className="absolute left-1/2 top-4 h-1.5 w-14 -translate-x-1/2 rounded-full bg-white/75 lg:hidden" />
           <button
             onClick={onFechar}
-            className="absolute right-4 top-4 flex h-12 w-12 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur transition hover:bg-black/65"
-            aria-label="Fechar detalhes"
+            className="absolute right-4 top-4 inline-flex min-h-11 items-center gap-2 rounded-full bg-black/55 px-3 text-sm font-semibold text-white backdrop-blur transition hover:bg-black/70"
+            aria-label="Voltar ao cardápio"
           >
-            <ChevronDown size={24} />
+            <ArrowLeft size={18} />
+            <span>Voltar</span>
           </button>
         </div>
         <div className="p-5 pb-36 sm:p-8 sm:pb-32 lg:max-h-full lg:overflow-y-auto lg:p-9 lg:pb-36">
           <p className="text-[10px] font-semibold uppercase tracking-[.17em] text-[#0e7775]">
             {produto.categoriaNome}
           </p>
-          <h2 className="mt-2 font-display text-3xl font-semibold uppercase leading-[1.02] tracking-[-.055em] sm:text-4xl">
+          <h2 id="produto-detalhe-titulo" className="mt-2 font-display text-3xl font-semibold uppercase leading-[1.02] tracking-[-.055em] sm:text-4xl">
             {produto.nome}
           </h2>
           <p className="mt-3 font-display text-2xl font-semibold text-[#0e7775]">
@@ -1246,7 +1429,8 @@ function CarrinhoSheet({
   ) => void;
   onAguardandoPix: (cobranca: CobrancaPix) => void;
 }) {
-  const [etapa, setEtapa] = useState<"itens" | "dados">("itens");
+  const painelRef = usePainelAcessivel(onFechar);
+  const [etapa, setEtapa] = useState<"itens" | "dados" | "pagamento">("itens");
   const clienteSalvo = useMemo(() => carregarClienteSalvo(slug), [slug]);
   const { dados: bairros } = usePolling<BairroPublico[]>(
     `/api/publico/${slug}/bairros`,
@@ -1293,19 +1477,25 @@ function CarrinhoSheet({
   const taxaEntrega = entregaSelecionada ? (bairroSelecionado?.taxa ?? 0) : 0;
   const totalComTaxa = totalValor + taxaEntrega;
 
-  async function confirmar() {
+  function validarDados() {
     if (!nome.trim() || telefone.trim().length < 8) {
       setErro("Preencha seu nome e WhatsApp.");
-      return;
+      return false;
     }
     if (entregaSelecionada && !bairroId) {
       setErro("Selecione o bairro de entrega.");
-      return;
+      return false;
     }
     if (entregaSelecionada && endereco.trim().length < 10) {
       setErro("Informe o endereço completo para entrega.");
-      return;
+      return false;
     }
+    setErro("");
+    return true;
+  }
+
+  async function confirmar() {
+    if (!validarDados()) return;
     const emailPagador = email.trim();
     if (
       formaPagamento === "pix" &&
@@ -1427,16 +1617,25 @@ function CarrinhoSheet({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 backdrop-blur-sm sm:items-center sm:p-6">
-      <section className="flex max-h-[94dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-[2rem] bg-[#eee8df] shadow-2xl sm:rounded-[2rem]">
+      <section
+        ref={painelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="carrinho-titulo"
+        tabIndex={-1}
+        className="flex max-h-[96dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-[2rem] bg-[#eee8df] shadow-2xl outline-none sm:max-h-[90dvh] sm:rounded-[2rem]"
+      >
         <header className="flex items-center justify-between border-b border-black/[.08] p-5">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#0e7775]">
               Seu pedido
             </p>
-            <h2 className="mt-1 font-display text-2xl font-semibold tracking-[-.05em]">
+            <h2 id="carrinho-titulo" className="mt-1 font-display text-2xl font-semibold tracking-[-.05em]">
               {etapa === "itens"
                 ? "Revise sua seleção"
-                : "Como você prefere receber?"}
+                : etapa === "dados"
+                  ? "Entrega e contato"
+                  : "Pagamento e confirmação"}
             </h2>
           </div>
           <button
@@ -1542,10 +1741,9 @@ function CarrinhoSheet({
           </>
         ) : (
           <>
-            <div
-              data-lenis-prevent
-              className="flex-1 space-y-4 overflow-y-auto p-5"
-            >
+            <div data-lenis-prevent className="flex-1 space-y-4 overflow-y-auto p-5">
+              {etapa === "dados" ? (
+                <>
               <div
                 className="grid grid-cols-2 gap-3"
                 aria-label="Forma de recebimento"
@@ -1599,54 +1797,6 @@ function CarrinhoSheet({
                   </small>
                 </button>
               </div>
-              {dados.pix && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFormaPagamento("pix");
-                      setPrecisaTroco(false);
-                    }}
-                    className={`flex w-full items-center gap-3 rounded-2xl border p-3.5 text-left transition ${formaPagamento === "pix" ? "border-[#0e7775] bg-[#0e7775] text-white shadow-md" : "border-[#0e7775]/20 bg-[#0e7775]/[.05] text-black"}`}
-                  >
-                    <Banknote size={19} />
-                    <span>
-                      <b className="block text-sm">
-                        {dados.pix.modo === "mercado_pago"
-                          ? "Pix agora"
-                          : "Pix na entrega"}
-                      </b>
-                      <small
-                        className={
-                          formaPagamento === "pix"
-                            ? "text-white/75"
-                            : "text-black/55"
-                        }
-                      >
-                        {dados.pix.modo === "mercado_pago"
-                          ? "O pedido só será enviado à cozinha depois do pagamento confirmado."
-                          : "Você paga ao receber; a equipe confirma depois."}
-                      </small>
-                    </span>
-                  </button>
-                  {formaPagamento === "pix" &&
-                    dados.pix.modo === "mercado_pago" && (
-                      <Campo label="Seu e-mail para o Pix">
-                        <input
-                          type="email"
-                          autoComplete="email"
-                          value={email}
-                          onChange={(evento) => setEmail(evento.target.value)}
-                          placeholder="voce@exemplo.com"
-                          className="menu-field"
-                        />
-                        <small className="mt-1 block text-xs text-black/45">
-                          O Mercado Pago usa este e-mail para gerar a cobrança.
-                        </small>
-                      </Campo>
-                    )}
-                </>
-              )}
               <Campo label="Seu nome">
                 <input
                   value={nome}
@@ -1732,8 +1882,106 @@ function CarrinhoSheet({
                   Você poderá retirar seu pedido diretamente no estabelecimento.
                 </div>
               )}
-              <Campo label="Forma de pagamento">
-                <div className="grid grid-cols-2 gap-2">
+              {erro && (
+                <p role="alert" className="rounded-xl bg-red-500/10 p-3 text-xs text-red-700">
+                  {erro}
+                </p>
+              )}
+            </>
+              ) : (
+                <>
+                  <div className="rounded-2xl border border-[#0e7775]/15 bg-[#0e7775]/[.06] p-3.5 text-sm leading-5 text-black/65">
+                    <b className="block text-black">{entregaSelecionada ? "Entrega selecionada" : "Retirada no estabelecimento"}</b>
+                    <span>{entregaSelecionada ? `${bairroSelecionado?.nome ?? "Bairro não informado"} · ${endereco || "Endereço não informado"}` : "Seu pedido será preparado para retirada."}</span>
+                  </div>
+                  <Campo label="Como deseja pagar?">
+                    <div className="grid grid-cols-2 gap-2">
+                      {dados.pix && (
+                        <button
+                          type="button"
+                          aria-pressed={formaPagamento === "pix"}
+                          onClick={() => { setFormaPagamento("pix"); setPrecisaTroco(false); }}
+                          className={`col-span-2 flex min-h-[76px] items-center gap-3 rounded-2xl border p-3 text-left transition ${formaPagamento === "pix" ? "border-[#0e7775] bg-[#0e7775] text-white shadow-md" : "border-black/[.1] bg-white/65 text-black"}`}
+                        >
+                          <Banknote size={19} />
+                          <span><b className="block text-sm">{dados.pix.modo === "mercado_pago" ? "Pix agora" : "Pix na entrega"}</b><small className={formaPagamento === "pix" ? "text-white/75" : "text-black/50"}>{dados.pix.modo === "mercado_pago" ? "O pedido só vai para a cozinha após a confirmação." : "Pague ao receber seu pedido."}</small></span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        aria-pressed={formaPagamento === "cartao"}
+                        onClick={() => { setFormaPagamento("cartao"); setPrecisaTroco(false); }}
+                        className={`flex min-h-[76px] items-center gap-3 rounded-2xl border p-3 text-left transition ${formaPagamento === "cartao" ? "border-[#0e7775] bg-[#0e7775] text-white shadow-md" : "border-black/[.1] bg-white/65 text-black"}`}
+                      >
+                        <CreditCard size={19} /><span className="text-sm font-semibold">Cartão</span>
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={formaPagamento === "dinheiro"}
+                        onClick={() => setFormaPagamento("dinheiro")}
+                        className={`flex min-h-[76px] items-center gap-3 rounded-2xl border p-3 text-left transition ${formaPagamento === "dinheiro" ? "border-[#0e7775] bg-[#0e7775] text-white shadow-md" : "border-black/[.1] bg-white/65 text-black"}`}
+                      >
+                        <Banknote size={19} /><span className="text-sm font-semibold">Dinheiro</span>
+                      </button>
+                    </div>
+                  </Campo>
+                  {formaPagamento === "pix" && dados.pix?.modo === "mercado_pago" && (
+                    <Campo label="Seu e-mail para o Pix">
+                      <input type="email" autoComplete="email" value={email} onChange={(evento) => setEmail(evento.target.value)} placeholder="voce@exemplo.com" className="menu-field" />
+                      <small className="mt-1 block text-xs text-black/45">Usamos esse e-mail apenas para criar a cobrança no Mercado Pago.</small>
+                    </Campo>
+                  )}
+                  {formaPagamento === "pix" && (
+                    <div className="rounded-2xl border border-[#0e7775]/15 bg-[#0e7775]/[.06] p-3 text-sm leading-5 text-black/65">
+                      {dados.pix?.modo === "mercado_pago" ? "Você receberá um QR Code Pix válido por 30 minutos. A cozinha só receberá a comanda após a confirmação do pagamento." : "O Pix será pago na entrega. A equipe receberá seu pedido agora e confirmará o pagamento depois."}
+                    </div>
+                  )}
+                  {formaPagamento === "cartao" ? (
+                    <Campo label="Tipo de cartão">
+                      <div className="grid grid-cols-2 gap-2">
+                        <button type="button" onClick={() => setTipoCartao("credito")} className={`rounded-xl border px-3 py-3 text-sm font-semibold ${tipoCartao === "credito" ? "border-[#0e7775] bg-[#0e7775]/10 text-[#0e7775]" : "border-black/[.1] bg-white/55 text-black/65"}`}>Crédito</button>
+                        <button type="button" onClick={() => setTipoCartao("debito")} className={`rounded-xl border px-3 py-3 text-sm font-semibold ${tipoCartao === "debito" ? "border-[#0e7775] bg-[#0e7775]/10 text-[#0e7775]" : "border-black/[.1] bg-white/55 text-black/65"}`}>Débito</button>
+                      </div>
+                    </Campo>
+                  ) : formaPagamento === "dinheiro" ? (
+                    <div className="rounded-2xl border border-black/[.09] bg-white/55 p-3">
+                      <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium text-black/75">Precisa de troco?</span><div className="flex rounded-xl bg-black/[.05] p-1"><button type="button" onClick={() => setPrecisaTroco(false)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${!precisaTroco ? "bg-white text-[#0e7775] shadow-sm" : "text-black/50"}`}>Não</button><button type="button" onClick={() => setPrecisaTroco(true)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${precisaTroco ? "bg-white text-[#0e7775] shadow-sm" : "text-black/50"}`}>Sim</button></div></div>
+                      {precisaTroco && <label className="mt-3 flex items-center overflow-hidden rounded-xl border border-black/[.1] bg-white"><span className="px-3 text-sm font-semibold text-black/45">R$</span><input inputMode="decimal" value={trocoPara} onChange={(evento) => setTrocoPara(mascararMoeda(evento.target.value))} placeholder="0,00" className="min-w-0 flex-1 bg-transparent py-3 pr-3 text-sm outline-none" /></label>}
+                    </div>
+                  ) : null}
+                  <Campo label="Observações do pedido (opcional)">
+                    <textarea value={observacoes} onChange={(evento) => setObservacoes(evento.target.value)} placeholder="Ex.: sem cebola ou ponto da carne" rows={3} maxLength={1000} className="menu-field resize-none" />
+                  </Campo>
+                  <div className="rounded-2xl border border-black/[.08] bg-white/55 p-4">
+                    <div className="flex items-center justify-between"><b className="text-sm">Resumo do pedido</b><span className="text-xs text-black/45">{itens.reduce((soma, item) => soma + item.quantidade, 0)} item(ns)</span></div>
+                    <div className="mt-3 space-y-2 text-xs text-black/60">{itens.map((item) => <div key={item.produto.id} className="flex justify-between gap-3"><span className="min-w-0 truncate">{item.quantidade}× {item.produto.nome}</span><span>{moeda(item.produto.precoVenda * item.quantidade)}</span></div>)}</div>
+                  </div>
+                  {erro && <p role="alert" className="rounded-xl bg-red-500/10 p-3 text-xs text-red-700">{erro}</p>}
+                </>
+              )}
+            </div>
+            <footer className="border-t border-black/[.08] bg-[#eee8df] p-5">
+              <div className="mb-4 space-y-1">
+                <div className="flex items-end justify-between"><span className="text-xs text-black/50">Subtotal</span><span className="text-sm text-black/60">{moeda(totalValor)}</span></div>
+                {entregaSelecionada && <div className="flex items-end justify-between"><span className="text-xs text-black/50">Taxa de entrega</span><span className="text-sm text-black/60">{taxaEntrega > 0 ? moeda(taxaEntrega) : "Grátis"}</span></div>}
+                <div className="flex items-end justify-between"><span className="text-xs font-semibold text-black/50">Total</span><strong className="font-display text-2xl text-[#0e7775]">{moeda(totalComTaxa)}</strong></div>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setEtapa(etapa === "dados" ? "itens" : "dados")} className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-white" aria-label="Voltar"><ArrowLeft size={18} /></button>
+                {etapa === "dados" ? (
+                  <button onClick={() => { if (validarDados()) setEtapa("pagamento"); }} className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-full bg-[#0e7775] text-sm font-semibold text-white">Continuar para pagamento <ArrowRight size={16} /></button>
+                ) : (
+                  <button onClick={confirmar} disabled={enviando} className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-full bg-[#0e7775] text-sm font-semibold text-white disabled:opacity-50">{enviando ? "Enviando..." : "Confirmar pedido"}<Check size={16} /></button>
+                )}
+              </div>
+            </footer>
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
+/*
                   <button
                     type="button"
                     onClick={() => setFormaPagamento("cartao")}
@@ -1900,7 +2148,7 @@ function CarrinhoSheet({
       </section>
     </div>
   );
-}
+*/
 
 function Campo({
   label,
@@ -1926,15 +2174,16 @@ function InfoSheet({
   dados: CardapioData;
   onFechar: () => void;
 }) {
+  const painelRef = usePainelAcessivel(onFechar);
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center sm:p-6">
-      <section className="w-full max-w-lg rounded-t-[2rem] bg-[#eee8df] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-[2rem] sm:p-7">
+      <section ref={painelRef} role="dialog" aria-modal="true" aria-labelledby="informacoes-titulo" tabIndex={-1} className="w-full max-w-lg rounded-t-[2rem] bg-[#eee8df] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl outline-none sm:rounded-[2rem] sm:p-7">
         <div className="flex items-start justify-between">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#0e7775]">
               Sobre a casa
             </p>
-            <h2 className="mt-1 font-display text-2xl font-semibold tracking-[-.05em]">
+            <h2 id="informacoes-titulo" className="mt-1 font-display text-2xl font-semibold tracking-[-.05em]">
               {dados.nome}
             </h2>
           </div>
@@ -1969,12 +2218,14 @@ function InfoSheet({
 function TelaSucesso({
   codigo,
   whatsappUrl,
+  pagamentoPixConfirmado,
   temAcompanhamento,
   onAcompanhar,
   onNovoPedido,
 }: {
   codigo: number | null;
   whatsappUrl: string | null;
+  pagamentoPixConfirmado: boolean;
   temAcompanhamento: boolean;
   onAcompanhar: () => void;
   onNovoPedido: () => void;
@@ -1993,11 +2244,13 @@ function TelaSucesso({
         <Check size={44} strokeWidth={2.2} />
       </span>
       <p className="mt-7 font-display text-3xl font-semibold tracking-[-.055em]">
-        Pedido enviado
+        {pagamentoPixConfirmado ? "Pagamento confirmado" : "Pedido enviado"}
       </p>
       <p className="mt-3 max-w-sm text-sm leading-6 text-black/55">
-        {codigo ? `Seu código é #${codigo}. ` : ""}O estabelecimento recebeu seu
-        pedido e dará andamento em instantes.
+        {codigo ? `Seu código é #${codigo}. ` : ""}
+        {pagamentoPixConfirmado
+          ? "Seu Pix foi aprovado e o pedido já foi enviado para o estabelecimento."
+          : "O estabelecimento recebeu seu pedido e dará andamento em instantes."}
       </p>
       {whatsappUrl ? (
         <>
@@ -2046,8 +2299,10 @@ function TelaPix({
   onPago: () => void;
   onFechar: () => void;
 }) {
+  const painelRef = usePainelAcessivel(onFechar);
+  const urlStatus = `/api/publico/${slug}/pedidos/${cobranca.pedidoId}`;
   const { dados } = usePolling<PedidoStatusPublico>(
-    `/api/publico/${slug}/pedidos/${cobranca.pedidoId}`,
+    urlStatus,
     3000,
   );
   const [copiado, setCopiado] = useState(false);
@@ -2056,6 +2311,18 @@ function TelaPix({
   useEffect(() => {
     if (dados?.pagamentoStatus === "pago") onPago();
   }, [dados?.pagamentoStatus, onPago]);
+
+  useEffect(() => {
+    // O webhook é a confirmação principal. Esta consulta espaçada cobre uma
+    // indisponibilidade ou atraso pontual do webhook sem sobrecarregar a API
+    // do Mercado Pago enquanto o cliente deixa o QR Code aberto.
+    const sincronizar = () => {
+      void fetch(`${urlStatus}?sincronizarPix=1`, { cache: "no-store" });
+    };
+    sincronizar();
+    const intervalo = window.setInterval(sincronizar, 12_000);
+    return () => window.clearInterval(intervalo);
+  }, [urlStatus]);
 
   async function copiar() {
     try {
@@ -2068,13 +2335,13 @@ function TelaPix({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm sm:p-6">
-      <section className="w-full max-w-md overflow-hidden rounded-[2rem] bg-[#eee8df] shadow-2xl">
+      <section ref={painelRef} role="dialog" aria-modal="true" aria-labelledby="pix-titulo" tabIndex={-1} className="w-full max-w-md overflow-hidden rounded-[2rem] bg-[#eee8df] shadow-2xl outline-none">
         <header className="flex items-start justify-between border-b border-black/[.08] p-5">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#0e7775]">
               Pix automático
             </p>
-            <h2 className="mt-1 font-display text-2xl font-semibold tracking-[-.05em]">
+            <h2 id="pix-titulo" className="mt-1 font-display text-2xl font-semibold tracking-[-.05em]">
               Pague para enviar o pedido
             </h2>
           </div>
@@ -2164,6 +2431,7 @@ function PedidoSheet({
   pedidoId: string;
   onFechar: () => void;
 }) {
+  const painelRef = usePainelAcessivel(onFechar);
   const { dados } = usePolling<PedidoStatusPublico>(
     `/api/publico/${slug}/pedidos/${pedidoId}`,
     5000,
@@ -2178,13 +2446,13 @@ function PedidoSheet({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 backdrop-blur-sm sm:items-center sm:p-6">
-      <section className="flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-[2rem] bg-[#eee8df] shadow-2xl sm:rounded-[2rem]">
+      <section ref={painelRef} role="dialog" aria-modal="true" aria-labelledby="pedido-titulo" tabIndex={-1} className="flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-[2rem] bg-[#eee8df] shadow-2xl outline-none sm:rounded-[2rem]">
         <header className="flex items-center justify-between border-b border-black/[.08] p-5">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#0e7775]">
               Meus pedidos
             </p>
-            <h2 className="mt-1 font-display text-2xl font-semibold tracking-[-.05em]">
+            <h2 id="pedido-titulo" className="mt-1 font-display text-2xl font-semibold tracking-[-.05em]">
               {dados ? `Pedido #${dados.codigo}` : "Acompanhando..."}
             </h2>
           </div>

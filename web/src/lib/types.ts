@@ -54,7 +54,7 @@ export interface ResumoFinanceiro {
   custoProdutosVendidos: number;
   entradasAvulsas: number;
   saidasAvulsas: number;
-  custosFixosMensais: number;
+  custosFixosPeriodo: number;
   resultadoOperacional: number;
 }
 

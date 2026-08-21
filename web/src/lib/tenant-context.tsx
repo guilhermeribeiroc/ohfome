@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { ModuloSistema, PapelUsuario, TipoEstabelecimento } from "./tenant-types";
+import { limparCachePolling } from "./use-polling";
 
 interface UsuarioSessao {
   id: string;
@@ -72,6 +73,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     });
     if (!res.ok) return extrairErro(res);
     const dados = await res.json();
+    limparCachePolling();
     setEstabelecimento(dados.estabelecimento);
     setUsuarioAtual(dados.usuario);
     return null;
@@ -79,6 +81,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
 
   const sair = useCallback(async () => {
     await fetch("/api/auth/logout", { method: "POST" });
+    limparCachePolling();
     setEstabelecimento(null);
     setUsuarioAtual(null);
   }, []);
@@ -91,6 +94,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     });
     if (!res.ok) return extrairErro(res);
     const dados = await res.json();
+    limparCachePolling();
     setEstabelecimento(dados.estabelecimento);
     setUsuarioAtual(dados.usuario);
     return null;

@@ -1,18 +1,70 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { queryPublico } from "@/lib/db";
+import { comEstabelecimento, queryPublico } from "@/lib/db";
+import { sincronizarCobrancaPixMercadoPago } from "@/lib/mercado-pago";
 
-export async function GET(_request: NextRequest, { params }: { params: Promise<{ slug: string; id: string }> }) {
+type PedidoStatusInterno = Record<string, unknown> & {
+  estabelecimentoIdInterno?: string;
+  pixOrderIdInterno?: string;
+  pagamentoStatus?: string;
+};
+
+// O navegador consulta o status local a cada poucos segundos. Limitamos a
+// consulta remota ao Mercado Pago para não transformar uma espera de 30 min
+// em centenas de chamadas, mantendo um caminho de recuperação rápido.
+const ultimaConsultaPix = new Map<string, number>();
+const INTERVALO_CONSULTA_PIX_MS = 12_000;
+
+async function buscarPedido(slug: string, id: string) {
+  const linhas = await queryPublico<{
+    fn_pedido_publico_status: PedidoStatusInterno | null;
+  }>("select fn_pedido_publico_status($1, $2::uuid)", [slug, id]).catch(() => []);
+  return linhas[0]?.fn_pedido_publico_status ?? null;
+}
+
+export async function GET(request: NextRequest, { params }: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await params;
-
-  const linhas = await queryPublico<{ fn_pedido_publico_status: Record<string, unknown> | null }>(
-    "select fn_pedido_publico_status($1, $2::uuid)",
-    [slug, id]
-  ).catch(() => []);
-
-  const pedido = linhas[0]?.fn_pedido_publico_status;
+  let pedido = await buscarPedido(slug, id);
   if (!pedido) {
     return NextResponse.json({ erro: "Pedido não encontrado." }, { status: 404 });
   }
 
-  return NextResponse.json(pedido);
+  const deveSincronizar = request.nextUrl.searchParams.get("sincronizarPix") === "1";
+  const pendente = pedido.pagamentoStatus === "pendente";
+  const estabelecimentoId = pedido.estabelecimentoIdInterno;
+  const orderId = pedido.pixOrderIdInterno;
+  const agora = Date.now();
+  const ultimaConsulta = ultimaConsultaPix.get(id) ?? 0;
+
+  if (
+    deveSincronizar &&
+    pendente &&
+    estabelecimentoId &&
+    orderId &&
+    agora - ultimaConsulta >= INTERVALO_CONSULTA_PIX_MS
+  ) {
+    ultimaConsultaPix.set(id, agora);
+    try {
+      await comEstabelecimento(estabelecimentoId, (client) =>
+        sincronizarCobrancaPixMercadoPago(client, estabelecimentoId, orderId),
+      );
+      pedido = await buscarPedido(slug, id);
+    } catch (erro) {
+      // A tela continua consultando o status local e o webhook segue como o
+      // fluxo principal. Uma falha temporária nesta contingência não deve
+      // impedir o cliente de manter o QR Code aberto.
+      console.error("Consulta de contingência do Pix", erro);
+    }
+  }
+
+  if (!pedido) {
+    return NextResponse.json({ erro: "Pedido não encontrado." }, { status: 404 });
+  }
+
+  const pedidoPublico = Object.fromEntries(
+    Object.entries(pedido).filter(([chave]) =>
+      chave !== "estabelecimentoIdInterno" && chave !== "pixOrderIdInterno",
+    ),
+  );
+  if (pedidoPublico.pagamentoStatus !== "pendente") ultimaConsultaPix.delete(id);
+  return NextResponse.json(pedidoPublico);
 }
