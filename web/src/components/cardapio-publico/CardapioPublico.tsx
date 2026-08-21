@@ -50,7 +50,7 @@ interface CardapioData {
   bannerModo?: "padrao" | "fixo" | "carrossel";
   banners?: { id: string; url: string; ordem: number }[];
   pix?: { modo: "manual" | "mercado_pago" } | null;
-  disponibilidade?: { aberto: boolean; pausado: boolean; motivo?: string | null; turnos: Record<string, { inicio: string; fim: string }[]> };
+  disponibilidade?: { aberto: boolean; pausado: boolean; configurado?: boolean; motivo?: string | null; turnos: Record<string, { inicio: string; fim: string }[]> };
   produtos: ProdutoPublico[];
 }
 
@@ -125,6 +125,7 @@ const ATLAS_POSITIONS = [
   "50% 100%",
   "100% 100%",
 ];
+const DIAS_SEMANA = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
 function hashDe(texto: string) {
   let hash = 0;
@@ -735,6 +736,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
             <i className={`h-2 w-2 rounded-full ${cardapioDisponivel ? "bg-[#0e7775]" : "bg-[#941c42]"}`} />
             {cardapioDisponivel ? "Aberto agora" : dados.disponibilidade?.motivo ?? "Fechado no momento"}
           </span>
+          {dados.disponibilidade?.configurado && <details className="mt-3 w-full max-w-md rounded-2xl border border-black/[.07] bg-white/45 px-4 py-3 text-left text-xs text-black/65"><summary className="cursor-pointer list-none text-center font-semibold text-[#0e7775]">Ver dias e horários de funcionamento</summary><div className="mt-3 grid gap-1 border-t border-black/[.06] pt-3">{DIAS_SEMANA.map((dia, indice) => { const turnos = dados.disponibilidade?.turnos[String(indice)] ?? []; return <div key={dia} className="flex justify-between gap-3"><span className="font-medium text-black/70">{dia}</span><span>{turnos.length ? turnos.map((turno) => `${turno.inicio}–${turno.fim}`).join(" · ") : "Fechado"}</span></div>; })}</div></details>}
         </div>
       </header>
 
