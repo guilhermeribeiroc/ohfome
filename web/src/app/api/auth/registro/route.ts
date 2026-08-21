@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       return linhas[0].fn_registrar_estabelecimento;
     } catch (erro) {
       const detalhes = erro as { code?: string; constraint?: string };
-      if (detalhes.code === "23505" && detalhes.constraint === "uq_estabelecimentos_slug") {
+      if (detalhes.code === "23505" && detalhes.constraint === "estabelecimentos_slug_key") {
         throw Object.assign(new Error("Já existe um restaurante cadastrado com este nome. Use um nome diferente."), { status: 409 });
       }
       throw erro;
