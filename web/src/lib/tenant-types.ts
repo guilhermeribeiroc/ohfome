@@ -25,7 +25,7 @@ export type ModuloNavegacaoInfo = Omit<ModuloInfo, "id"> & { id: ModuloNavegacao
 export const MODULOS: ModuloInfo[] = [
   {
     id: "balcao",
-    label: "Controle de pedidos",
+    label: "Central de pedidos",
     descricao: "Recebe e acompanha todos os pedidos do estabelecimento.",
     papel: "balcao",
     href: "/pedidos",
@@ -95,31 +95,31 @@ export const PLANOS_COMERCIAIS: Record<PlanoComercialId, PlanoComercialInfo> = {
   basico: {
     id: "basico",
     label: "Plano Básico",
-    descricao: "Administração e Controle de pedidos para centralizar a operação.",
+    descricao: "Administração e Central de pedidos para organizar a operação.",
     precoMensal: 89,
   },
   profissional: {
     id: "profissional",
     label: "Plano Profissional",
-    descricao: "Administração, Controle de pedidos e Garçom para uma operação conectada no salão.",
+    descricao: "Administração, Central de pedidos e Garçom para uma operação conectada no salão.",
     precoMensal: 129,
   },
   intermediario: {
     id: "intermediario",
     label: "Plano Intermediário",
-    descricao: "Administração, Controle de pedidos, Garçom e Cozinha integrados em tempo real.",
+    descricao: "Administração, Central de pedidos, Garçom e Cozinha integrados em tempo real.",
     precoMensal: 139,
   },
   basico_2: {
     id: "basico_2",
     label: "Plano Básico 2.0",
-    descricao: "Administração, Controle de pedidos, Cardápio Digital e controle de Delivery para pedidos online.",
+    descricao: "Administração, Central de pedidos, Cardápio Digital e controle de Delivery para pedidos online.",
     precoMensal: 159,
   },
   plus: {
     id: "plus",
     label: "Plano Plus",
-    descricao: "Administração, Controle de pedidos, Garçom, Cardápio Digital e controle de Delivery, com Cozinha opcional.",
+    descricao: "Administração, Central de pedidos, Garçom, Cardápio Digital e controle de Delivery, com Cozinha opcional.",
     precoMensal: 199,
   },
 };

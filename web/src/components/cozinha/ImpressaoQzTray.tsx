@@ -84,7 +84,7 @@ function modalidadePedido(pedido: Pedido) {
   if (pedido.mesaNumero) return `MESA ${pedido.mesaNumero}`;
   if (pedido.formaRecebimento === "entrega" || pedido.tipo === "delivery") return "DELIVERY";
   if (pedido.formaRecebimento === "retirada") return "RETIRADA";
-  return "CONTROLE DE PEDIDOS";
+  return "CENTRAL DE PEDIDOS";
 }
 
 function exibeClienteNaComanda(pedido: Pedido) {

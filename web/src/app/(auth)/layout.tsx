@@ -17,7 +17,7 @@ export default function AuthLayout({ children }: LayoutProps<"/">) {
         <div className="relative max-w-lg">
           <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[.15em] text-white/65"><Sparkles size={13} className="text-coral-400" /> Operação em um só ritmo</span>
           <h2 className="font-display text-4xl font-semibold leading-[1.02] tracking-[-.055em] xl:text-5xl">Da primeira comanda ao último fechamento.</h2>
-          <p className="mt-5 max-w-md text-sm leading-7 text-white/52">Controle de pedidos, cozinha, salão, estoque e delivery conectados em uma experiência simples para toda a equipe.</p>
+          <p className="mt-5 max-w-md text-sm leading-7 text-white/52">Central de pedidos, cozinha, salão, estoque e delivery conectados em uma experiência simples para toda a equipe.</p>
           <div className="mt-9 grid gap-3 text-xs text-white/65">
             {["Dados separados por estabelecimento", "Permissões por função", "Operação atualizada em tempo real"].map((item) => <span key={item} className="flex items-center gap-2.5"><CheckCircle2 size={15} className="text-basil-400" />{item}</span>)}
           </div>
