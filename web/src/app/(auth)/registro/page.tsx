@@ -146,7 +146,7 @@ export default function RegistroPage() {
         <div className="space-y-5">
           <div>
             <span className="mb-1 block text-xs font-semibold text-ink-600">Monte a operação do seu cliente</span>
-            <p className="mb-3 text-[11px] leading-5 text-ink-400">Administração está incluída em todos os planos. Balcão é a base da operação.</p>
+            <p className="mb-3 text-[11px] leading-5 text-ink-400">Administração está incluída em todos os planos. Controle de pedidos é a base da operação.</p>
             <div className="space-y-2">
               {MODULOS_DE_VENDA.map((id) => {
                 const modulo = MODULOS.find((item) => item.id === id)!;
@@ -204,7 +204,7 @@ export default function RegistroPage() {
                 </div>
               </>
             ) : (
-              <p className="mt-1 text-xs leading-5 text-ink-400">Selecione Balcão para visualizar o plano correspondente.</p>
+              <p className="mt-1 text-xs leading-5 text-ink-400">Selecione Controle de pedidos para visualizar o plano correspondente.</p>
             )}
           </div>
 

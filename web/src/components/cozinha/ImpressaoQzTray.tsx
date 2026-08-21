@@ -84,7 +84,7 @@ function modalidadePedido(pedido: Pedido) {
   if (pedido.mesaNumero) return `MESA ${pedido.mesaNumero}`;
   if (pedido.formaRecebimento === "entrega" || pedido.tipo === "delivery") return "DELIVERY";
   if (pedido.formaRecebimento === "retirada") return "RETIRADA";
-  return "BALCAO";
+  return "CONTROLE DE PEDIDOS";
 }
 
 function exibeClienteNaComanda(pedido: Pedido) {
@@ -283,7 +283,7 @@ export function ImpressaoQzTray({ compacta = false }: ImpressaoQzTrayProps) {
       setConectado(true);
       setUltimoContato(Date.now());
       setTentativaReconexao(0);
-      setMensagem(lista.length ? "QZ Tray conectado à estação do balcão." : "QZ Tray conectado, mas nenhuma impressora foi encontrada.");
+      setMensagem(lista.length ? "QZ Tray conectado à estação de impressão." : "QZ Tray conectado, mas nenhuma impressora foi encontrada.");
     } catch (erro) {
       setConectado(false);
       setMensagem((erro as Error).message || "Não foi possível conectar ao QZ Tray.");
@@ -305,7 +305,7 @@ export function ImpressaoQzTray({ compacta = false }: ImpressaoQzTrayProps) {
     try {
       await imprimir({
         id: "teste", codigo: 0, tipo: "balcao", origem: "presencial", status: "novo", total: 0,
-        usuarioNome: "Estacao do balcao", itens: [{ id: "teste", produtoId: "teste", produtoNome: "QZ TRAY CONECTADO", quantidade: 1, precoUnitario: 0, status: "pendente" }],
+        usuarioNome: "Estação de impressão", itens: [{ id: "teste", produtoId: "teste", produtoNome: "QZ TRAY CONECTADO", quantidade: 1, precoUnitario: 0, status: "pendente" }],
         createdAt: new Date().toISOString(),
       });
       setMensagem("Teste enviado para a impressora.");

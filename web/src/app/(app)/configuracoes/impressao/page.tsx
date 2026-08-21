@@ -140,7 +140,7 @@ export default function ConfiguracaoImpressaoPage() {
   return <div className="of-page pb-28">
     <div className="of-page-header">
       <div>
-        <p className="of-eyebrow">Estação do balcão</p>
+        <p className="of-eyebrow">Estação de impressão</p>
         <h1 className="of-title">Impressão</h1>
         <p className="of-subtitle">Prepare este computador uma única vez. Depois, os pedidos imprimem em qualquer tela do OhFome.</p>
       </div>

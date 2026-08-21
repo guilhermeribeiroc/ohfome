@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
   if (!segmento) return NextResponse.json({ erro: "Tipo de estabelecimento inválido." }, { status: 400 });
   const tipoComida = segmento.exemploCardapio;
   if (!modulos.every((modulo) => MODULOS_DE_VENDA.includes(modulo)) || new Set(modulos).size !== modulos.length) return NextResponse.json({ erro: "Módulo inválido." }, { status: 400 });
-  if (!planoParaModulos(modulos)) return NextResponse.json({ erro: "Selecione uma combinação válida: Balcão é obrigatório e Cozinha exige Garçom." }, { status: 400 });
+  if (!planoParaModulos(modulos)) return NextResponse.json({ erro: "Selecione uma combinação válida: Controle de pedidos é obrigatório e Cozinha exige Garçom." }, { status: 400 });
   // Delivery é um recurso incluído no Cardápio Digital; não exige que o
   // cliente crie um segundo usuário nem escolha outro plano.
   const modulosAtivos: ModuloSistema[] = modulos.includes("site") ? [...modulos, "delivery"] : modulos;
