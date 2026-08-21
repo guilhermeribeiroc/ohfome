@@ -39,6 +39,23 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (!sessao) return NextResponse.json({ erro: "Apenas administradores podem alterar o banner." }, { status: 403 });
   const { id } = await params;
   const body = await request.json().catch(() => null);
+
+  if (typeof body?.enquadramento === "string") {
+    const enquadramento = body.enquadramento;
+    if (!["topo", "centro", "base"].includes(enquadramento)) {
+      return NextResponse.json({ erro: "Enquadramento inválido." }, { status: 400 });
+    }
+    const banner = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
+      const { rows } = await client.query(
+        "update banners_cardapio set enquadramento = $1 where id = $2 and estabelecimento_id = $3 returning id, url, ordem, enquadramento",
+        [enquadramento, id, sessao.estabelecimentoId]
+      );
+      return rows[0] ?? null;
+    });
+    if (!banner) return NextResponse.json({ erro: "Banner não encontrado." }, { status: 404 });
+    return NextResponse.json(banner);
+  }
+
   const ordem = Number(body?.ordem);
   if (!Number.isInteger(ordem) || ordem < 0 || ordem > 4) return NextResponse.json({ erro: "Posição inválida." }, { status: 400 });
   const banner = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
@@ -49,7 +66,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     ids.splice(Math.min(ordem, ids.length), 0, id);
     await client.query("update banners_cardapio set ordem = ordem + 10 where estabelecimento_id = $1 and ativo", [sessao.estabelecimentoId]);
     for (const [indice, bannerId] of ids.entries()) await client.query("update banners_cardapio set ordem = $1 where id = $2", [indice, bannerId]);
-    const { rows } = await client.query("select id, url, ordem from banners_cardapio where id = $1", [id]);
+    const { rows } = await client.query("select id, url, ordem, enquadramento from banners_cardapio where id = $1", [id]);
     return rows[0];
   });
   if (!banner) return NextResponse.json({ erro: "Banner não encontrado." }, { status: 404 });

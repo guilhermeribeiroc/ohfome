@@ -14,6 +14,7 @@ create table if not exists banners_cardapio (
   unique (estabelecimento_id, ordem)
 );
 
+drop trigger if exists trg_banners_cardapio_updated_at on banners_cardapio;
 create trigger trg_banners_cardapio_updated_at
   before update on banners_cardapio
   for each row execute function set_updated_at();

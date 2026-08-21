@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   const dados = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     const [estabelecimento, banners] = await Promise.all([
       client.query("select cardapio_banner_modo as \"modo\" from estabelecimentos where id = $1", [sessao.estabelecimentoId]),
-      client.query("select id, url, ordem from banners_cardapio where estabelecimento_id = $1 and ativo order by ordem", [sessao.estabelecimentoId]),
+      client.query("select id, url, ordem, enquadramento from banners_cardapio where estabelecimento_id = $1 and ativo order by ordem", [sessao.estabelecimentoId]),
     ]);
     return { modo: estabelecimento.rows[0]?.modo ?? "padrao", banners: banners.rows };
   });
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     const { rows } = await client.query(
       `insert into banners_cardapio (estabelecimento_id, url, ordem)
        values ($1, $2, $3)
-       returning id, url, ordem`,
+       returning id, url, ordem, enquadramento`,
       [sessao.estabelecimentoId, url, total.rows[0].total]
     );
     return rows[0];

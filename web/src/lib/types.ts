@@ -31,10 +31,13 @@ export function nomeItemComTamanho(item: { produtoNome: string; produtoTamanho?:
   return item.produtoTamanho ? `${item.produtoNome} (${item.produtoTamanho})` : item.produtoNome;
 }
 
+export type EnquadramentoBanner = "topo" | "centro" | "base";
+
 export interface BannerCardapio {
   id: string;
   url: string;
   ordem: number;
+  enquadramento: EnquadramentoBanner;
 }
 
 export type EntregaStatus = "aguardando" | "em_rota" | "entregue" | "cancelada";

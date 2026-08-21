@@ -49,7 +49,7 @@ interface CardapioData {
   logoUrl?: string | null;
   whatsappAtendimento?: string | null;
   bannerModo?: "padrao" | "fixo" | "carrossel";
-  banners?: { id: string; url: string; ordem: number }[];
+  banners?: { id: string; url: string; ordem: number; enquadramento?: "topo" | "centro" | "base" }[];
   pix?: { modo: "manual" | "mercado_pago" } | null;
   disponibilidade?: { aberto: boolean; pausado: boolean; configurado?: boolean; motivo?: string | null; turnos: Record<string, { inicio: string; fim: string }[]> };
   produtos: ProdutoPublico[];
@@ -638,10 +638,13 @@ export function CardapioPublico({ slug }: { slug: string }) {
         <div className="relative mt-3 aspect-[16/9] overflow-hidden rounded-[1.4rem] bg-[#181714] shadow-[0_22px_60px_-38px_rgba(0,0,0,.6)] sm:rounded-[1.8rem] lg:mt-4 lg:h-72 lg:aspect-auto lg:rounded-[2rem]">
           <div
             aria-hidden
-            className="absolute inset-0 bg-cover bg-center transition-opacity duration-700"
+            className="absolute inset-0 bg-cover transition-opacity duration-700"
             style={
               bannerAtual && dados.bannerModo !== "padrao"
-                ? { backgroundImage: `url(${bannerAtual.url})` }
+                ? {
+                    backgroundImage: `url(${bannerAtual.url})`,
+                    backgroundPosition: bannerAtual.enquadramento === "topo" ? "top" : bannerAtual.enquadramento === "base" ? "bottom" : "center",
+                  }
                 : {
                     background:
                       "radial-gradient(circle at 15% 12%, rgba(215,181,139,.32), transparent 31%), radial-gradient(circle at 88% 88%, rgba(14,119,117,.58), transparent 40%), linear-gradient(125deg, #181714 0%, #26241f 48%, #0e7775 150%)",
@@ -862,9 +865,9 @@ export function CardapioPublico({ slug }: { slug: string }) {
             Feito com cuidado, servido com presença.
           </p>
           <img
-            src="/marca/ohfome-logo.svg"
+            src="/marca/ohfome-icone-quadrado.png"
             alt="OhFome"
-            className="mt-4 h-12 w-auto"
+            className="mt-4 h-10 w-10 rounded-xl"
           />
           <small className="mt-1 text-[10px] uppercase tracking-[.14em] text-black/35">
             Cardápio digital

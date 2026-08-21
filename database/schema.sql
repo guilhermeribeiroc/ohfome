@@ -97,6 +97,8 @@ create table banners_cardapio (
   estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade,
   url text not null,
   ordem smallint not null default 0 check (ordem >= 0 and ordem < 20),
+  -- qual parte da foto fica visivel no recorte largo do topo do cardapio
+  enquadramento text not null default 'centro' check (enquadramento in ('topo', 'centro', 'base')),
   ativo boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -944,8 +946,12 @@ as $$
     'logoUrl', e.logo_url,
     'whatsappAtendimento', e.whatsapp_atendimento,
     'bannerModo', e.cardapio_banner_modo,
+    'pix', (
+      select case when cp.ativo then jsonb_build_object('modo', cp.modo) else null end
+      from configuracoes_pix cp where cp.estabelecimento_id = e.id
+    ),
     'banners', coalesce((
-      select jsonb_agg(jsonb_build_object('id', b.id, 'url', b.url, 'ordem', b.ordem) order by b.ordem)
+      select jsonb_agg(jsonb_build_object('id', b.id, 'url', b.url, 'ordem', b.ordem, 'enquadramento', b.enquadramento) order by b.ordem)
       from banners_cardapio b
       where b.estabelecimento_id = e.id and b.ativo
     ), '[]'::jsonb),
@@ -958,7 +964,7 @@ as $$
         'imagemUrl', p.imagem_url,
         'categoriaNome', coalesce(c.nome, 'Geral'),
         'precoVenda', p.preco_venda
-      ) order by coalesce(c.ordem_exibicao, 0), p.nome)
+      ) order by coalesce(c.ordem_exibicao, 0), p.nome, p.tamanho)
       from produtos p
       left join categorias_produto c on c.id = p.categoria_id
       where p.estabelecimento_id = e.id and p.ativo
