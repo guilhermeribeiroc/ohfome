@@ -60,7 +60,7 @@ Cliente confirma o pedido
 → pedido é liberado uma única vez para cozinha e impressão
 ```
 
-O QR Code será de uso único e terá vencimento configurável, inicialmente 15 minutos. Vencido ou recusado, o pedido permanece fora da cozinha; a tela permite recomeçar a cobrança sem duplicar o pedido nem imprimir comandas.
+O QR Code será de uso único e terá vencimento configurável, inicialmente 30 minutos. Vencido ou recusado, o pedido permanece fora da cozinha; a tela permite recomeçar a cobrança sem duplicar o pedido nem imprimir comandas.
 
 ## Estado e dados
 
