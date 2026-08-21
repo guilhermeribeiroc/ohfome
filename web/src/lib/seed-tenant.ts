@@ -49,12 +49,13 @@ export async function semearEstabelecimento(
   for (const produto of produtos) {
     await client.query(
       `insert into produtos
-         (estabelecimento_id, categoria_id, nome, modo_precificacao, preco_custo, margem_percentual, preco_venda)
-       values ($1, $2, $3, $4, $5, $6, $7)`,
+         (estabelecimento_id, categoria_id, nome, tamanho, modo_precificacao, preco_custo, margem_percentual, preco_venda)
+       values ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         estabelecimentoId,
         categoriaIds.get(produto.categoriaNome),
         produto.nome,
+        produto.tamanho ?? null,
         produto.modoPrecificacao,
         produto.precoCusto,
         produto.margemPercentual,

@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
          en.tempo_estimado_min as "tempoEstimadoMin",
          coalesce((
            select json_agg(json_build_object(
-             'produtoNome', pr.nome,
+             'produtoNome', pr.nome || case when ip.tamanho is not null then ' (' || ip.tamanho::text || ')' else '' end,
+             'produtoTamanho', ip.tamanho,
              'quantidade', ip.quantidade,
              'precoUnitario', ip.preco_unitario
            ) order by ip.created_at)

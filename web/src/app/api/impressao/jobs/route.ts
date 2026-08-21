@@ -30,7 +30,8 @@ const PEDIDO_IMPRESSAO_SELECT = `
         select json_agg(json_build_object(
           'id', ip.id,
           'produtoId', ip.produto_id,
-          'produtoNome', pr.nome,
+          'produtoNome', pr.nome || case when ip.tamanho is not null then ' (' || ip.tamanho::text || ')' else '' end,
+          'produtoTamanho', ip.tamanho,
           'quantidade', ip.quantidade,
           'precoUnitario', ip.preco_unitario,
           'observacoes', ip.observacoes,

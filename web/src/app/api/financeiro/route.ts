@@ -65,7 +65,8 @@ export async function GET(request: NextRequest) {
           m.numero as "mesaNumero", c.nome as "clienteNome",
           coalesce(sum(ip.quantidade * coalesce(pr.preco_custo, 0)), 0) as "custoProdutos",
           coalesce(json_agg(json_build_object(
-            'produtoNome', pr.nome,
+            'produtoNome', pr.nome || case when ip.tamanho is not null then ' (' || ip.tamanho::text || ')' else '' end,
+            'produtoTamanho', ip.tamanho,
             'quantidade', ip.quantidade,
             'precoUnitario', ip.preco_unitario,
             'custoUnitario', coalesce(pr.preco_custo, 0)

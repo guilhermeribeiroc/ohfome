@@ -40,6 +40,8 @@ create type movimentacao_tipo as enum ('entrada', 'saida', 'ajuste', 'perda');
 
 create type modo_precificacao as enum ('margem', 'preco_manual');
 
+create type tamanho_produto as enum ('P', 'M', 'G');
+
 create type entrega_status as enum ('aguardando', 'em_rota', 'entregue', 'cancelada');
 
 create type destino_preparo as enum ('cozinha', 'balcao');
@@ -72,6 +74,7 @@ $$ language plpgsql;
 create table estabelecimentos (
   id uuid primary key default gen_random_uuid(),
   nome text not null,
+  tamanho tamanho_produto,
   tipo tipo_estabelecimento not null,
   tipo_comida text not null,
   -- usado na URL publica do cardapio digital: ohfome.app/cardapio/<slug>
@@ -515,12 +518,26 @@ create table itens_pedido (
   produto_id uuid not null references produtos(id),
   quantidade integer not null check (quantidade > 0),
   preco_unitario numeric(10, 2) not null, -- snapshot do preco de venda no momento do pedido
+  tamanho tamanho_produto, -- snapshot do tamanho no momento do pedido
   observacoes text,
   status item_pedido_status not null default 'pendente',
   created_at timestamptz not null default now()
 );
 
 create index idx_itens_pedido_pedido on itens_pedido(pedido_id);
+
+create function copiar_tamanho_produto_no_item() returns trigger as $$
+begin
+  if new.tamanho is null then
+    select tamanho into new.tamanho from produtos where id = new.produto_id;
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+create trigger trg_itens_pedido_tamanho
+  before insert on itens_pedido
+  for each row execute function copiar_tamanho_produto_no_item();
 
 -- Auditoria: registra toda mudanca de status de um pedido (alimenta o Kanban)
 create table historico_status_pedido (
@@ -936,6 +953,7 @@ as $$
       select jsonb_agg(jsonb_build_object(
         'id', p.id,
         'nome', p.nome,
+        'tamanho', p.tamanho,
         'descricao', p.descricao,
         'imagemUrl', p.imagem_url,
         'categoriaNome', coalesce(c.nome, 'Geral'),
@@ -1113,7 +1131,7 @@ as $$
     'notificadoMensagem', p.notificado_mensagem,
     'estabelecimentoNome', e.nome,
     'itens', coalesce(
-      (select jsonb_agg(jsonb_build_object('produtoNome', pr.nome, 'quantidade', ip.quantidade) order by ip.created_at)
+      (select jsonb_agg(jsonb_build_object('produtoNome', pr.nome || case when ip.tamanho is not null then ' (' || ip.tamanho::text || ')' else '' end, 'produtoTamanho', ip.tamanho, 'quantidade', ip.quantidade) order by ip.created_at)
        from itens_pedido ip join produtos pr on pr.id = ip.produto_id
        where ip.pedido_id = p.id),
       '[]'::jsonb

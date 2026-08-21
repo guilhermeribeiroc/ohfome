@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { ArrowRight, Bell, BellOff, BellRing, Check, ChefHat, Clock3, MapPin, MessageSquareText, Minus, PackageCheck, PackageSearch, Plus, Printer, Search, ShoppingBag, Truck, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Mesa, Pedido, PedidoStatus, Produto } from "@/lib/types";
-import { MESA_STATUS_LABEL, PEDIDO_STATUS_LABEL } from "@/lib/types";
+import { MESA_STATUS_LABEL, PEDIDO_STATUS_LABEL, nomeProdutoComTamanho } from "@/lib/types";
 import { usePolling } from "@/lib/use-polling";
 import { imprimirPedido } from "@/lib/impressao";
 
@@ -204,7 +204,9 @@ function NovoPedidoModal({ onFechar, onCriado }: { onFechar: () => void; onCriad
   const { dados: produtos } = usePolling<Produto[]>("/api/produtos", 60000);
   const { dados: mesas } = usePolling<Mesa[]>("/api/mesas", 60000);
   const [itens, setItens] = useState<Record<string, number>>({}); const [busca, setBusca] = useState(""); const [mesaId, setMesaId] = useState(""); const [enviando, setEnviando] = useState(false); const [erro, setErro] = useState("");
-  const filtrados = (produtos ?? []).filter((produto) => produto.nome.toLowerCase().includes(busca.toLowerCase()));
+  const filtrados = (produtos ?? [])
+    .map((produto) => ({ ...produto, nome: nomeProdutoComTamanho(produto) }))
+    .filter((produto) => produto.nome.toLowerCase().includes(busca.toLowerCase()));
   const total = useMemo(() => Object.entries(itens).reduce((soma, [id, qtd]) => soma + ((produtos ?? []).find((produto) => produto.id === id)?.precoVenda ?? 0) * qtd, 0), [itens, produtos]);
 
   function ajustar(id: string, delta: number) { setItens((atual) => { const qtd = (atual[id] ?? 0) + delta; if (qtd <= 0) return Object.fromEntries(Object.entries(atual).filter(([chave]) => chave !== id)); return { ...atual, [id]: qtd }; }); }
