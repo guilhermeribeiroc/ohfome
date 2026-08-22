@@ -1,12 +1,14 @@
 "use client";
 
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { ArrowDownRight, ArrowUpRight, CalendarDays, CircleDollarSign, Plus, ReceiptText, Trash2, Truck, UtensilsCrossed, WalletCards, type LucideIcon } from "lucide-react";
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, CalendarDays, CircleDollarSign, Plus, ReceiptText, Trash2, Truck, UtensilsCrossed, WalletCards, type LucideIcon } from "lucide-react";
 import type { CustoFixo, FinanceiroTipo, MovimentoFinanceiro, ResumoFinanceiro, VendaFinanceira } from "@/lib/types";
 import { mascararMoeda, moedaComCentavos, numeroDaMoeda } from "@/lib/moeda";
 import { usePolling } from "@/lib/use-polling";
 
 type DadosFinanceiros = { movimentos: MovimentoFinanceiro[]; custosFixos: CustoFixo[]; vendasFinalizadas: VendaFinanceira[]; resumo: ResumoFinanceiro; resumoHoje: ResumoFinanceiro; hoje: string };
+type PedidoAntigo = { id: string; codigo: number; tipo: "mesa" | "balcao" | "delivery"; total: number; createdAt: string; mesaNumero?: number; clienteNome?: string };
+type PendentesAntigos = { pedidos: PedidoAntigo[]; total: number };
 type Aba = "movimento" | "custo_fixo";
 type PeriodoFinanceiro = "dia" | "semana" | "mes" | "personalizado";
 type Intervalo = { inicio: string; fim: string };
@@ -91,6 +93,8 @@ export function FinanceiroModule() {
   const resumoHoje = useMemo(() => dados?.resumoHoje ?? { vendasFinalizadas: 0, custoProdutosVendidos: 0, entradasAvulsas: 0, saidasAvulsas: 0, custosFixosPeriodo: 0, resultadoOperacional: 0 }, [dados]);
   const vendasPresencial = useMemo(() => (dados?.vendasFinalizadas ?? []).filter((venda) => venda.tipo !== "delivery"), [dados]);
   const vendasDelivery = useMemo(() => (dados?.vendasFinalizadas ?? []).filter((venda) => venda.tipo === "delivery"), [dados]);
+  const { dados: pendentesAntigos, recarregar: recarregarPendentes } = usePolling<PendentesAntigos>("/api/financeiro/pendentes", 30_000);
+  const [fechandoPendentes, setFechandoPendentes] = useState(false);
 
   function selecionarPeriodo(periodo: PeriodoFinanceiro) {
     setPeriodoSelecionado(periodo);
@@ -148,6 +152,21 @@ export function FinanceiroModule() {
     alert(retorno?.erro ?? "Não foi possível excluir esta venda.");
   }
 
+  async function fecharPendentesAntigos() {
+    const quantidade = pendentesAntigos?.pedidos.length ?? 0;
+    if (!quantidade) return;
+    if (!confirm(`Fechar ${quantidade} pedido${quantidade === 1 ? "" : "s"} de dias anteriores ainda em aberto? Eles serão finalizados e contabilizados no financeiro do dia em que foram criados, e as mesas correspondentes serão liberadas.`)) return;
+    setFechandoPendentes(true);
+    const resposta = await fetch("/api/financeiro/pendentes", { method: "POST" });
+    setFechandoPendentes(false);
+    if (!resposta.ok) {
+      const retorno = await jsonSeguro(resposta);
+      alert(retorno?.erro ?? "Não foi possível fechar os pedidos antigos.");
+      return;
+    }
+    await Promise.all([recarregarPendentes(), recarregar()]);
+  }
+
   const margemOperacional = resumo.vendasFinalizadas > 0 ? (resumo.resultadoOperacional / resumo.vendasFinalizadas) * 100 : null;
 
   return <div className="of-page">
@@ -160,6 +179,29 @@ export function FinanceiroModule() {
       {erroPeriodo && <p className="mt-2 text-xs font-medium text-coral-600">{erroPeriodo}</p>}
       {erroCarregamento && <p className="mt-3 text-xs font-medium text-coral-600">{erroCarregamento}</p>}
     </div></header>
+
+    {!!pendentesAntigos?.pedidos.length && (
+      <section className="of-panel mb-5 overflow-hidden border-mango-400/50 bg-mango-500/10">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-5">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-mango-500/15 text-mango-500"><AlertTriangle size={19} /></span>
+            <div className="min-w-0">
+              <h2 className="font-display text-base font-bold text-ink-900">Pedidos de dias anteriores ainda em aberto</h2>
+              <p className="mt-0.5 text-xs leading-5 text-ink-500">{pendentesAntigos.pedidos.length} pedido{pendentesAntigos.pedidos.length === 1 ? "" : "s"} totalizando {moeda(pendentesAntigos.total)} — provavelmente mesa ou comanda esquecida aberta virando o dia. Feche pra contar no financeiro do dia certo.</p>
+            </div>
+          </div>
+          <button onClick={() => void fecharPendentesAntigos()} disabled={fechandoPendentes} className="of-primary-btn !min-h-11 shrink-0 px-4 text-xs">{fechandoPendentes ? "Fechando..." : "Fechar tudo agora"}</button>
+        </div>
+        <ul className="divide-y divide-mango-400/20 border-t border-mango-400/20 px-5">
+          {pendentesAntigos.pedidos.map((pedido) => (
+            <li key={pedido.id} className="flex items-center justify-between gap-3 py-2.5 text-xs">
+              <span className="min-w-0 truncate text-ink-600">Pedido #{pedido.codigo} · {pedido.mesaNumero ? `Mesa ${pedido.mesaNumero}` : pedido.clienteNome || (pedido.tipo === "delivery" ? "Delivery" : "Central de pedidos")} · {dataHoraBrasileira(pedido.createdAt)}</span>
+              <strong className="shrink-0 text-ink-900">{moeda(pedido.total)}</strong>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )}
 
     <section className="of-panel overflow-hidden !border-ink-900/10 !bg-ink-900"><div className="flex items-center gap-3 border-b border-white/10 px-5 py-4"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-mango-400"><CalendarDays size={19} /></span><div><h2 className="font-display text-lg font-bold tracking-tight text-white">Financeiro de hoje</h2><p className="mt-0.5 text-xs text-white/50">Resumo de {dataBrasileira(dados?.hoje ?? hoje)}, independente do período selecionado acima.</p></div></div>
       <div className="grid gap-px bg-white/10 sm:grid-cols-2 xl:grid-cols-4">
@@ -207,14 +249,14 @@ export function FinanceiroModule() {
       </aside>
     </div>
 
-    <section className="of-panel mt-5 overflow-hidden"><div className="flex items-center justify-between border-b border-cream-200 px-5 py-4"><div><h2 className="font-display text-xl font-bold tracking-tight">Custos fixos</h2><p className="mt-0.5 text-xs text-ink-400">Compromissos recorrentes rateados no período selecionado.</p></div><strong className="text-sm text-coral-600">{moeda(resumo.custosFixosPeriodo)} no período</strong></div><div className="divide-y divide-cream-200">{carregando ? <LinhasCarregando /> : dados?.custosFixos.length ? dados.custosFixos.map((custo) => <div key={custo.id} className="flex items-center gap-3 px-5 py-4"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-050 text-amber-700"><CalendarDays size={18} /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-ink-900">{custo.descricao}</p><p className="mt-0.5 text-xs text-ink-400">{custo.categoria} · vence dia {custo.diaVencimento}</p></div><strong className="text-sm text-ink-900">{moeda(custo.valorMensal)}/mês</strong><button onClick={() => excluir(custo.id, "custo_fixo")} className="of-icon-btn !h-9 !min-h-9 !w-9 text-ink-400 hover:!text-coral-600" aria-label={`Excluir ${custo.descricao}`}><Trash2 size={15} /></button></div>) : <Vazio texto="Nenhum custo fixo cadastrado." />}</div></section>
+    <section className="of-panel mt-5 overflow-hidden"><div className="flex items-center justify-between border-b border-cream-200 px-5 py-4"><div><h2 className="font-display text-xl font-bold tracking-tight">Custos fixos</h2><p className="mt-0.5 text-xs text-ink-400">Compromissos recorrentes rateados no período selecionado.</p></div><strong className="text-sm text-coral-600">{moeda(resumo.custosFixosPeriodo)} no período</strong></div><div className="divide-y divide-cream-200">{carregando ? <LinhasCarregando /> : dados?.custosFixos.length ? dados.custosFixos.map((custo) => <div key={custo.id} className="flex items-center gap-3 px-5 py-4"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-mango-500/10 text-mango-500"><CalendarDays size={18} /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-ink-900">{custo.descricao}</p><p className="mt-0.5 text-xs text-ink-400">{custo.categoria} · vence dia {custo.diaVencimento}</p></div><strong className="text-sm text-ink-900">{moeda(custo.valorMensal)}/mês</strong><button onClick={() => excluir(custo.id, "custo_fixo")} className="of-icon-btn !h-9 !min-h-9 !w-9 text-ink-400 hover:!text-coral-600" aria-label={`Excluir ${custo.descricao}`}><Trash2 size={15} /></button></div>) : <Vazio texto="Nenhum custo fixo cadastrado." />}</div></section>
   </div>;
 }
 
 function Campo({ label, children }: { label: string; children: ReactNode }) { return <label className="block"><span className="mb-1.5 block text-xs font-semibold text-ink-600">{label}</span>{children}</label>; }
 function Vazio({ texto }: { texto: string }) { return <p className="px-5 py-10 text-center text-sm text-ink-400">{texto}</p>; }
 function LinhasCarregando() { return <div className="space-y-3 p-5">{[1, 2, 3].map((item) => <i key={item} className="of-skeleton block h-14 rounded-xl" />)}</div>; }
-function ResumoCard({ label, valor, icon: Icon, tom, destaque = false, descricao }: { label: string; valor: number; icon: LucideIcon; tom: "basil" | "amber" | "coral"; destaque?: boolean; descricao?: string }) { const cores = { basil: "bg-basil-050 text-basil-600", amber: "bg-amber-050 text-amber-700", coral: "bg-coral-050 text-coral-600" }; return <article className={`of-panel p-4 sm:p-5 ${destaque ? "!border-ink-900 !bg-ink-900 text-white" : ""}`}><span className={`flex h-9 w-9 items-center justify-center rounded-xl ${destaque ? "bg-white/10 text-coral-400" : cores[tom]}`}><Icon size={18} /></span><p className={`mt-4 text-[11px] font-semibold uppercase tracking-[.12em] ${destaque ? "text-white/50" : "text-ink-400"}`}>{label}</p><strong className={`mt-1 block font-display text-2xl font-bold tracking-tight ${destaque ? "text-white" : "text-ink-900"}`}>{moeda(valor)}</strong>{descricao && <p className={`mt-2 text-xs font-medium ${destaque ? "text-basil-400" : "text-ink-400"}`}>{descricao}</p>}</article>; }
+function ResumoCard({ label, valor, icon: Icon, tom, destaque = false, descricao }: { label: string; valor: number; icon: LucideIcon; tom: "basil" | "amber" | "coral"; destaque?: boolean; descricao?: string }) { const cores = { basil: "bg-basil-050 text-basil-600", amber: "bg-mango-500/10 text-mango-500", coral: "bg-coral-050 text-coral-600" }; return <article className={`of-panel p-4 sm:p-5 ${destaque ? "!border-ink-900 !bg-ink-900 text-white" : ""}`}><span className={`flex h-9 w-9 items-center justify-center rounded-xl ${destaque ? "bg-white/10 text-coral-400" : cores[tom]}`}><Icon size={18} /></span><p className={`mt-4 text-[11px] font-semibold uppercase tracking-[.12em] ${destaque ? "text-white/50" : "text-ink-400"}`}>{label}</p><strong className={`mt-1 block font-display text-2xl font-bold tracking-tight ${destaque ? "text-white" : "text-ink-900"}`}>{moeda(valor)}</strong>{descricao && <p className={`mt-2 text-xs font-medium ${destaque ? "text-basil-400" : "text-ink-400"}`}>{descricao}</p>}</article>; }
 function ResumoMini({ label, valor, destaque }: { label: string; valor: number; destaque?: "basil" | "coral" }) { return <div className="bg-ink-900 p-4 sm:p-5"><p className="text-[11px] font-semibold uppercase tracking-[.12em] text-white/50">{label}</p><strong className={`mt-1 block font-display text-xl font-bold tracking-tight ${destaque === "coral" ? "text-coral-400" : destaque === "basil" ? "text-basil-400" : "text-white"}`}>{moeda(valor)}</strong></div>; }
 
 function PainelVendas({ titulo, icon: Icon, tom, vendas, carregando, onExcluir, textoVazio }: { titulo: string; icon: LucideIcon; tom: "basil" | "coral"; vendas: VendaFinanceira[]; carregando: boolean; onExcluir: (venda: VendaFinanceira) => void; textoVazio: string }) {
@@ -231,5 +273,5 @@ function PainelVendas({ titulo, icon: Icon, tom, vendas, carregando, onExcluir, 
 
 function VendaFinalizadaLinha({ venda, onExcluir }: { venda: VendaFinanceira; onExcluir: (venda: VendaFinanceira) => void }) {
   const identificacao = venda.mesaNumero ? `Mesa ${venda.mesaNumero}` : venda.clienteNome || (venda.tipo === "delivery" ? "Delivery" : "Central de pedidos");
-  return <details className="group px-5 py-4"><summary className="flex cursor-pointer list-none items-center gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-basil-050 text-basil-600"><ReceiptText size={18} /></span><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="text-sm font-semibold text-ink-900">Pedido #{venda.codigo}</p><span className="truncate text-xs text-ink-400">{identificacao}</span></div><p className="mt-0.5 text-xs text-ink-400">Finalizado em {dataHoraBrasileira(venda.createdAt)}</p></div><div className="text-right"><strong className="block text-sm text-ink-900">{moeda(venda.total)}</strong><span className={`text-xs font-semibold ${venda.lucroBruto >= 0 ? "text-basil-600" : "text-coral-600"}`}>Lucro {moeda(venda.lucroBruto)}</span></div><button onClick={(evento) => { evento.preventDefault(); evento.stopPropagation(); onExcluir(venda); }} className="of-icon-btn !h-9 !min-h-9 !w-9 shrink-0 text-ink-400 hover:!text-coral-600" aria-label={`Excluir venda do pedido ${venda.codigo}`}><Trash2 size={15} /></button></summary><div className="mt-4 rounded-2xl border border-cream-200 bg-cream-50/70 p-3.5"><div className="grid grid-cols-2 gap-2 border-b border-cream-200 pb-3 text-xs"><div><p className="text-ink-400">Venda</p><strong className="mt-1 block text-ink-900">{moeda(venda.total)}</strong></div><div><p className="text-ink-400">Custo dos produtos</p><strong className="mt-1 block text-amber-700">{moeda(venda.custoProdutos)}</strong></div></div><ul className="mt-3 space-y-2">{venda.itens.map((item, indice) => <li key={`${item.produtoNome}-${indice}`} className="flex items-start justify-between gap-4 text-xs"><span className="text-ink-600"><b className="mr-1.5 text-ink-900">{item.quantidade}×</b>{item.produtoNome}</span><span className="shrink-0 text-right text-ink-500">Venda {moeda(item.precoUnitario * item.quantidade)}<br />Custo {moeda(item.custoUnitario * item.quantidade)}</span></li>)}</ul></div></details>;
+  return <details className="group px-5 py-4"><summary className="flex cursor-pointer list-none items-center gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-basil-050 text-basil-600"><ReceiptText size={18} /></span><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="text-sm font-semibold text-ink-900">Pedido #{venda.codigo}</p><span className="truncate text-xs text-ink-400">{identificacao}</span></div><p className="mt-0.5 text-xs text-ink-400">Finalizado em {dataHoraBrasileira(venda.createdAt)}</p></div><div className="text-right"><strong className="block text-sm text-ink-900">{moeda(venda.total)}</strong><span className={`text-xs font-semibold ${venda.lucroBruto >= 0 ? "text-basil-600" : "text-coral-600"}`}>Lucro {moeda(venda.lucroBruto)}</span></div><button onClick={(evento) => { evento.preventDefault(); evento.stopPropagation(); onExcluir(venda); }} className="of-icon-btn !h-9 !min-h-9 !w-9 shrink-0 text-ink-400 hover:!text-coral-600" aria-label={`Excluir venda do pedido ${venda.codigo}`}><Trash2 size={15} /></button></summary><div className="mt-4 rounded-2xl border border-cream-200 bg-cream-50/70 p-3.5"><div className="grid grid-cols-2 gap-2 border-b border-cream-200 pb-3 text-xs"><div><p className="text-ink-400">Venda</p><strong className="mt-1 block text-ink-900">{moeda(venda.total)}</strong></div><div><p className="text-ink-400">Custo dos produtos</p><strong className="mt-1 block text-mango-500">{moeda(venda.custoProdutos)}</strong></div></div><ul className="mt-3 space-y-2">{venda.itens.map((item, indice) => <li key={`${item.produtoNome}-${indice}`} className="flex items-start justify-between gap-4 text-xs"><span className="text-ink-600"><b className="mr-1.5 text-ink-900">{item.quantidade}×</b>{item.produtoNome}</span><span className="shrink-0 text-right text-ink-500">Venda {moeda(item.precoUnitario * item.quantidade)}<br />Custo {moeda(item.custoUnitario * item.quantidade)}</span></li>)}</ul></div></details>;
 }
