@@ -83,6 +83,10 @@ create table estabelecimentos (
   whatsapp_atendimento text,
   cardapio_banner_modo text not null default 'padrao' check (cardapio_banner_modo in ('padrao', 'fixo', 'carrossel')),
   onboarding_concluido boolean not null default false,
+  -- proximo numero de ticket (pedidos.codigo) deste estabelecimento — cada
+  -- um tem sua propria contagem, comecando do 1, em vez de um numero global
+  -- compartilhado entre todos os clientes do OhFome.
+  proximo_codigo_pedido integer not null default 1,
   ativo boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -434,7 +438,7 @@ create index idx_clientes_estabelecimento on clientes(estabelecimento_id);
 create table pedidos (
   id uuid primary key default gen_random_uuid(),
   estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade,
-  codigo serial unique, -- numero curto e legivel para exibir no painel/cozinha
+  codigo integer, -- numero curto e legivel (ticket); atribuido por estabelecimento via trigger, ver fn_atribuir_codigo_pedido
   tipo pedido_tipo not null,
   origem pedido_origem not null default 'presencial',
   status pedido_status not null default 'novo',
@@ -463,7 +467,8 @@ create table pedidos (
   ),
   constraint chk_pedido_delivery_cliente check (
     (tipo = 'delivery' and cliente_id is not null) or (tipo <> 'delivery')
-  )
+  ),
+  constraint uq_pedidos_estabelecimento_codigo unique (estabelecimento_id, codigo)
 );
 
 alter table movimentacoes_estoque
@@ -479,6 +484,24 @@ create index idx_pedidos_created_at on pedidos(created_at desc);
 create trigger trg_pedidos_updated_at
   before update on pedidos
   for each row execute function set_updated_at();
+
+-- Atribui o proximo ticket daquele estabelecimento (nunca um numero global
+-- compartilhado entre todos os clientes do OhFome). Usa update+returning
+-- pra travar a linha de estabelecimentos e serializar inserts concorrentes.
+create function fn_atribuir_codigo_pedido() returns trigger as $$
+begin
+  if new.codigo is null then
+    update estabelecimentos set proximo_codigo_pedido = proximo_codigo_pedido + 1
+    where id = new.estabelecimento_id
+    returning proximo_codigo_pedido - 1 into new.codigo;
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+create trigger trg_pedidos_atribui_codigo
+  before insert on pedidos
+  for each row execute function fn_atribuir_codigo_pedido();
 
 -- Fila persistente de impressao. A estacao da cozinha reserva um trabalho,
 -- envia o ticket via QZ Tray e confirma o resultado. Dessa forma o pedido
