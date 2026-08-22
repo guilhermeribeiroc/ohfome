@@ -37,8 +37,9 @@ export async function GET(request: NextRequest) {
        from entregas en
        join pedidos p on p.id = en.pedido_id
        left join clientes c on c.id = p.cliente_id
-       where en.status not in ('entregue', 'cancelada')
-          or en.created_at > now() - interval '12 hours'
+       where p.status <> 'cancelado'
+         and (en.status not in ('entregue', 'cancelada')
+              or en.created_at > now() - interval '12 hours')
        order by en.created_at desc`
     );
     return rows;

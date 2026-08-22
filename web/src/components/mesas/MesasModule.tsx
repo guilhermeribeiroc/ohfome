@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowRight, Check, Minus, Plus, Printer, Search, Settings2, Users, X } from "lucide-react";
+import { ArrowRight, Check, DoorOpen, Minus, Plus, Printer, Search, Settings2, Users, X } from "lucide-react";
 import type { Mesa, MesaStatus, Pedido, Produto } from "@/lib/types";
 import { MESA_STATUS_LABEL, nomeProdutoComTamanho } from "@/lib/types";
 import { usePolling } from "@/lib/use-polling";
@@ -41,6 +41,7 @@ export function MesasModule() {
   const [enviados, setEnviados] = useState<Record<string, boolean>>({});
   const [gerenciarAberto, setGerenciarAberto] = useState(false);
   const [busca, setBusca] = useState("");
+  const [desocupando, setDesocupando] = useState(false);
 
   const mesaAberta = (mesas ?? []).find((m) => m.id === mesaAbertaId) ?? null;
   const itensAtuais = useMemo(() => mesaAbertaId ? itensPorMesa[mesaAbertaId] ?? [] : [], [itensPorMesa, mesaAbertaId]);
@@ -108,6 +109,25 @@ export function MesasModule() {
     setTimeout(() => setEnviados((atual) => ({ ...atual, [mesaAbertaId]: false })), 2500);
   }
 
+  async function desocuparMesa(mesa: Mesa) {
+    if (!confirm(`Desocupar a mesa ${mesa.numero}? Qualquer pedido dela ainda pendente no controle de pedidos será finalizado automaticamente.`)) return;
+    setDesocupando(true);
+    const resposta = await fetch(`/api/mesas/${mesa.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "livre" }),
+    });
+    setDesocupando(false);
+    if (!resposta.ok) {
+      const dados = await resposta.json().catch(() => null);
+      alert(dados?.erro ?? "Não foi possível desocupar a mesa.");
+      return;
+    }
+    navigator.vibrate?.(12);
+    setMesaAbertaId(null);
+    recarregarMesas();
+  }
+
   function imprimirComanda() {
     if (!mesaAberta) return;
     const escapar = (valor: string) => valor.replace(/[&<>"']/g, (caractere) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[caractere] ?? caractere);
@@ -161,12 +181,23 @@ export function MesasModule() {
 
       {mesaAberta && (
         <div className="fixed inset-0 z-50 flex flex-col bg-cream-50 md:left-[272px]">
-          <div className="flex items-center justify-between border-b border-cream-200 bg-surface/95 p-4 backdrop-blur sm:p-5">
-            <div>
+          <div className="flex items-center justify-between gap-2 border-b border-cream-200 bg-surface/95 p-4 backdrop-blur sm:p-5">
+            <div className="min-w-0">
               <p className="font-display text-lg font-bold text-ink-900">Mesa {mesaAberta.numero}</p>
               <p className="text-xs text-ink-400">{mesaAberta.capacidade} lugares</p>
             </div>
-            <button onClick={() => setMesaAbertaId(null)} className="of-icon-btn" aria-label="Fechar comanda"><X size={18} /></button>
+            <div className="flex shrink-0 items-center gap-2">
+              {mesaAberta.status !== "livre" && (
+                <button
+                  onClick={() => void desocuparMesa(mesaAberta)}
+                  disabled={desocupando}
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-basil-050 px-3.5 text-xs font-semibold text-basil-700 transition active:scale-95 disabled:opacity-50"
+                >
+                  <DoorOpen size={16} /> {desocupando ? "Desocupando..." : "Desocupar"}
+                </button>
+              )}
+              <button onClick={() => setMesaAbertaId(null)} className="of-icon-btn shrink-0" aria-label="Fechar comanda"><X size={18} /></button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 sm:p-6">

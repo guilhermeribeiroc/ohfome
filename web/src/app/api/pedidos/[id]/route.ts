@@ -44,6 +44,42 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (entregadoresIds.length) await client.query("update entregadores set disponivel = true where id = any($1::uuid[])", [entregadoresIds]);
     }
 
+    if (status === "cancelado") {
+      // Sem isso a entrega ficava orfa: sumia do Kanban mas continuava
+      // "aguardando"/"em_rota" no Delivery, deixando a equipe marcar como
+      // entregue um pedido que ja tinha sido cancelado (e essa venda nunca
+      // aparecia no financeiro, porque o pedido nunca virava "finalizado").
+      const { rows: entregas } = await client.query(
+        `update entregas set status = 'cancelada'
+         where pedido_id = $1 and status not in ('entregue', 'cancelada')
+         returning entregador_id`,
+        [id]
+      );
+      const entregadoresIds = entregas.map((entrega) => entrega.entregador_id).filter((entregadorId): entregadorId is string => typeof entregadorId === "string");
+      if (entregadoresIds.length) await client.query("update entregadores set disponivel = true where id = any($1::uuid[])", [entregadoresIds]);
+    }
+
+    if (status === "finalizado" || status === "cancelado") {
+      // Fecha a comanda (e libera a mesa, via trigger) assim que nenhum
+      // pedido dela sobrar pendente no Kanban. Sem isso a mesa nunca
+      // desocupava sozinha: nada no sistema fechava a comanda automaticamente.
+      const { rows: comandaRows } = await client.query(
+        `select cm.id from pedidos p join comandas cm on cm.id = p.comanda_id
+         where p.id = $1 and cm.status = 'aberta'`,
+        [id]
+      );
+      const comandaId = comandaRows[0]?.id as string | undefined;
+      if (comandaId) {
+        const { rows: pendentes } = await client.query(
+          `select 1 from pedidos where comanda_id = $1 and status not in ('finalizado', 'cancelado') limit 1`,
+          [comandaId]
+        );
+        if (pendentes.length === 0) {
+          await client.query(`update comandas set status = 'fechada', fechada_em = now() where id = $1`, [comandaId]);
+        }
+      }
+    }
+
     return atualizado;
   });
 

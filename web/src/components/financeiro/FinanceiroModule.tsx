@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { ArrowDownRight, ArrowUpRight, CalendarDays, CircleDollarSign, PackageCheck, Plus, ReceiptText, Trash2, WalletCards, type LucideIcon } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, CalendarDays, CircleDollarSign, Plus, ReceiptText, Trash2, Truck, UtensilsCrossed, WalletCards, type LucideIcon } from "lucide-react";
 import type { CustoFixo, FinanceiroTipo, MovimentoFinanceiro, ResumoFinanceiro, VendaFinanceira } from "@/lib/types";
 import { mascararMoeda, moedaComCentavos, numeroDaMoeda } from "@/lib/moeda";
 import { usePolling } from "@/lib/use-polling";
@@ -89,6 +89,8 @@ export function FinanceiroModule() {
   const { dados, carregando, erro: erroCarregamento, recarregar } = usePolling<DadosFinanceiros>(urlFinanceiro, 15_000);
   const resumo = useMemo(() => dados?.resumo ?? { vendasFinalizadas: 0, custoProdutosVendidos: 0, entradasAvulsas: 0, saidasAvulsas: 0, custosFixosPeriodo: 0, resultadoOperacional: 0 }, [dados]);
   const resumoHoje = useMemo(() => dados?.resumoHoje ?? { vendasFinalizadas: 0, custoProdutosVendidos: 0, entradasAvulsas: 0, saidasAvulsas: 0, custosFixosPeriodo: 0, resultadoOperacional: 0 }, [dados]);
+  const vendasPresencial = useMemo(() => (dados?.vendasFinalizadas ?? []).filter((venda) => venda.tipo !== "delivery"), [dados]);
+  const vendasDelivery = useMemo(() => (dados?.vendasFinalizadas ?? []).filter((venda) => venda.tipo === "delivery"), [dados]);
 
   function selecionarPeriodo(periodo: PeriodoFinanceiro) {
     setPeriodoSelecionado(periodo);
@@ -175,7 +177,13 @@ export function FinanceiroModule() {
       <ResumoCard label="Resultado operacional" valor={resumo.resultadoOperacional} icon={WalletCards} tom={resumo.resultadoOperacional >= 0 ? "basil" : "coral"} destaque descricao={margemOperacional === null ? "Aguardando vendas finalizadas" : `${margemOperacional >= 0 ? "Margem operacional" : "Margem negativa"} de ${Math.abs(margemOperacional).toFixed(1).replace(".", ",")}%`} />
     </section>
 
-    <section className="of-panel mt-5 overflow-hidden"><div className="flex items-center justify-between border-b border-cream-200 px-5 py-4"><div><h2 className="font-display text-xl font-bold tracking-tight">Vendas finalizadas</h2><p className="mt-0.5 text-xs text-ink-400">Receita, custo dos produtos e lucro bruto de cada pedido concluído no período.</p></div><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-basil-050 text-basil-600"><PackageCheck size={19} /></span></div><div className="max-h-[430px] divide-y divide-cream-200 overflow-y-auto">{carregando ? <LinhasCarregando /> : dados?.vendasFinalizadas.length ? dados.vendasFinalizadas.map((venda) => <VendaFinalizadaLinha key={venda.id} venda={venda} onExcluir={excluirVenda} />) : <Vazio texto="Nenhuma venda finalizada neste período." />}</div></section>
+    <section className="mt-5">
+      <div className="mb-3"><h2 className="font-display text-xl font-bold tracking-tight text-ink-900">Vendas finalizadas</h2><p className="mt-0.5 text-xs text-ink-400">Receita, custo dos produtos e lucro bruto de cada pedido concluído no período, separadas por canal.</p></div>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <PainelVendas titulo="Mesa & Balcão" icon={UtensilsCrossed} tom="basil" vendas={vendasPresencial} carregando={carregando} onExcluir={excluirVenda} textoVazio="Nenhuma venda de mesa ou balcão finalizada neste período." />
+        <PainelVendas titulo="Delivery" icon={Truck} tom="coral" vendas={vendasDelivery} carregando={carregando} onExcluir={excluirVenda} textoVazio="Nenhuma venda delivery finalizada neste período." />
+      </div>
+    </section>
 
     <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
       <section className="of-panel overflow-hidden">
@@ -208,6 +216,18 @@ function Vazio({ texto }: { texto: string }) { return <p className="px-5 py-10 t
 function LinhasCarregando() { return <div className="space-y-3 p-5">{[1, 2, 3].map((item) => <i key={item} className="of-skeleton block h-14 rounded-xl" />)}</div>; }
 function ResumoCard({ label, valor, icon: Icon, tom, destaque = false, descricao }: { label: string; valor: number; icon: LucideIcon; tom: "basil" | "amber" | "coral"; destaque?: boolean; descricao?: string }) { const cores = { basil: "bg-basil-050 text-basil-600", amber: "bg-amber-050 text-amber-700", coral: "bg-coral-050 text-coral-600" }; return <article className={`of-panel p-4 sm:p-5 ${destaque ? "!border-ink-900 !bg-ink-900 text-white" : ""}`}><span className={`flex h-9 w-9 items-center justify-center rounded-xl ${destaque ? "bg-white/10 text-coral-400" : cores[tom]}`}><Icon size={18} /></span><p className={`mt-4 text-[11px] font-semibold uppercase tracking-[.12em] ${destaque ? "text-white/50" : "text-ink-400"}`}>{label}</p><strong className={`mt-1 block font-display text-2xl font-bold tracking-tight ${destaque ? "text-white" : "text-ink-900"}`}>{moeda(valor)}</strong>{descricao && <p className={`mt-2 text-xs font-medium ${destaque ? "text-basil-400" : "text-ink-400"}`}>{descricao}</p>}</article>; }
 function ResumoMini({ label, valor, destaque }: { label: string; valor: number; destaque?: "basil" | "coral" }) { return <div className="bg-ink-900 p-4 sm:p-5"><p className="text-[11px] font-semibold uppercase tracking-[.12em] text-white/50">{label}</p><strong className={`mt-1 block font-display text-xl font-bold tracking-tight ${destaque === "coral" ? "text-coral-400" : destaque === "basil" ? "text-basil-400" : "text-white"}`}>{moeda(valor)}</strong></div>; }
+
+function PainelVendas({ titulo, icon: Icon, tom, vendas, carregando, onExcluir, textoVazio }: { titulo: string; icon: LucideIcon; tom: "basil" | "coral"; vendas: VendaFinanceira[]; carregando: boolean; onExcluir: (venda: VendaFinanceira) => void; textoVazio: string }) {
+  const subtotal = useMemo(() => vendas.reduce((soma, venda) => soma + venda.total, 0), [vendas]);
+  const cores = tom === "basil" ? "bg-basil-050 text-basil-600" : "bg-coral-050 text-coral-600";
+  return <section className="of-panel overflow-hidden">
+    <div className="flex items-center justify-between gap-3 border-b border-cream-200 px-5 py-4">
+      <div className="flex min-w-0 items-center gap-3"><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${cores}`}><Icon size={19} /></span><div className="min-w-0"><h3 className="font-display text-base font-bold tracking-tight text-ink-900">{titulo}</h3><p className="mt-0.5 text-xs text-ink-400">{vendas.length} {vendas.length === 1 ? "venda" : "vendas"}</p></div></div>
+      <strong className="shrink-0 font-display text-base font-bold text-ink-900">{moeda(subtotal)}</strong>
+    </div>
+    <div className="max-h-[380px] divide-y divide-cream-200 overflow-y-auto">{carregando ? <LinhasCarregando /> : vendas.length ? vendas.map((venda) => <VendaFinalizadaLinha key={venda.id} venda={venda} onExcluir={onExcluir} />) : <Vazio texto={textoVazio} />}</div>
+  </section>;
+}
 
 function VendaFinalizadaLinha({ venda, onExcluir }: { venda: VendaFinanceira; onExcluir: (venda: VendaFinanceira) => void }) {
   const identificacao = venda.mesaNumero ? `Mesa ${venda.mesaNumero}` : venda.clienteNome || (venda.tipo === "delivery" ? "Delivery" : "Central de pedidos");
