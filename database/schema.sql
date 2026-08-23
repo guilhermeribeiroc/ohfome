@@ -1141,6 +1141,47 @@ $$;
 
 revoke all on function fn_bairros_publico(text) from public;
 
+-- Exportacao somente-leitura dos "clientes" (administradores ativos, um por
+-- estabelecimento) pro sistema de gestao externo, consumida por
+-- GET /api/integracoes/gestao/clientes (autenticada por secret, nao por
+-- sessao) — por isso precisa enxergar todos os tenants via SECURITY DEFINER,
+-- retornando so os campos abaixo (nunca senha_hash).
+create function fn_integracao_gestao_clientes(
+  p_limit integer,
+  p_cursor_created_at timestamptz,
+  p_cursor_id uuid
+)
+returns table (
+  id uuid,
+  estabelecimento_id uuid,
+  nome text,
+  email text,
+  telefone text,
+  created_at timestamptz,
+  updated_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with admins as (
+    select distinct on (u.estabelecimento_id)
+      u.id, u.estabelecimento_id, u.nome, u.email, u.telefone, u.created_at, u.updated_at
+    from usuarios u
+    where u.role = 'admin' and u.ativo
+    order by u.estabelecimento_id, u.created_at asc, u.id asc
+  )
+  select a.id, a.estabelecimento_id, a.nome, a.email, a.telefone, a.created_at, a.updated_at
+  from admins a
+  where p_cursor_created_at is null
+     or (a.created_at, a.id) > (p_cursor_created_at, p_cursor_id)
+  order by a.created_at asc, a.id asc
+  limit p_limit;
+$$;
+
+revoke all on function fn_integracao_gestao_clientes(integer, timestamptz, uuid) from public;
+
 -- Consulta publica de status: usada pela aba de acompanhamento do cliente.
 -- So enxerga pedidos com origem='app' (feitos pelo cardapio) do slug pedido,
 -- e o proprio uuid do pedido (imprevisivel) funciona como o "token" de acesso.
@@ -1213,6 +1254,7 @@ grant execute on function fn_cardapio_publico(text) to ohfome_app;
 grant execute on function fn_pedido_publico_status(text, uuid) to ohfome_app;
 grant execute on function fn_criar_pedido_publico(text, text, text, text, text, text, text, text, numeric, jsonb, text, boolean, uuid) to ohfome_app;
 grant execute on function fn_bairros_publico(text) to ohfome_app;
+grant execute on function fn_integracao_gestao_clientes(integer, timestamptz, uuid) to ohfome_app;
 
 -- Colunas serial (ex.: pedidos.codigo) usam uma sequence por baixo; inserir
 -- nelas exige USAGE/SELECT na sequence, nao so privilegio na tabela.
