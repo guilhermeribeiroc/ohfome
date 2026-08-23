@@ -23,6 +23,12 @@ Evitar que clientes montem pedidos quando o delivery estiver fechado e simplific
 - A validação exige rua, número e bairro somente para entrega.
 - Antes de enviar o pedido, a interface compõe os campos em uma única descrição de endereço. A API e a impressão permanecem compatíveis com a coluna de endereço existente e pedidos anteriores.
 
+## Responsividade do cabeçalho
+
+- A palavra "Menu" permanece geometricamente centralizada no desktop, independente da largura dos controles laterais.
+- Em telas estreitas, o botão de informações deixa de sobrepor o nome ou a foto do restaurante.
+- Textos extensos do banner, tipo de estabelecimento, nome e horários podem quebrar linha sem exceder sua área visual.
+
 ## Verificação
 
 - Testar cardápio aberto, fechado por agenda e fechado por pausa manual.

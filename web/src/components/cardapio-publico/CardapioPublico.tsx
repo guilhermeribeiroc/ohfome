@@ -191,6 +191,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
   const [pedidoAtivo, setPedidoAtivo] = useState<PedidoAtivo | null>(null);
   const [cobrancaPix, setCobrancaPix] = useState<CobrancaPix | null>(null);
   const [indiceBanner, setIndiceBanner] = useState(0);
+  const [avisoCarrinho, setAvisoCarrinho] = useState<string | null>(null);
   const overlayAtual = useRef<Overlay>(null);
   const historicoDoOverlay = useRef(false);
   const carrinhoHidratado = useRef(false);
@@ -267,6 +268,12 @@ export function CardapioPublico({ slug }: { slug: string }) {
     );
     return () => window.clearInterval(intervalo);
   }, [dados?.bannerModo, bannersAtivos.length]);
+
+  useEffect(() => {
+    if (!avisoCarrinho) return;
+    const temporizador = window.setTimeout(() => setAvisoCarrinho(null), 4_000);
+    return () => window.clearTimeout(temporizador);
+  }, [avisoCarrinho]);
   const refsCategoria = useRef<Record<string, HTMLElement | null>>({});
   const lenisRef = useRef<Lenis | null>(null);
 
@@ -441,6 +448,18 @@ export function CardapioPublico({ slug }: { slug: string }) {
     });
   }
 
+  function adicionarEVoltarAoCardapio(produto: ProdutoPublico) {
+    if (!cardapioDisponivel) {
+      setAvisoCarrinho(
+        dados?.disponibilidade?.motivo ?? "O delivery está fechado no momento.",
+      );
+      return;
+    }
+    ajustar(produto.id, 1);
+    setAvisoCarrinho(`${produto.nome} foi adicionado ao pedido.`);
+    fecharOverlay();
+  }
+
   function abrirOverlay(novoOverlay: Exclude<Overlay, null>) {
     if (typeof window !== "undefined") {
       if (!historicoDoOverlay.current) {
@@ -538,18 +557,18 @@ export function CardapioPublico({ slug }: { slug: string }) {
       style={{ fontFamily: "var(--font-lexend)" }}
     >
       <header className="mx-auto max-w-4xl px-4 pt-4 sm:px-6 sm:pt-6 lg:max-w-6xl lg:px-8 lg:pt-5">
-        <div className="grid grid-cols-[48px_1fr_auto] items-center py-2">
+        <div className="grid grid-cols-3 items-center py-2">
           <button
             onClick={abrirMenuLateral}
-            className="flex h-12 w-12 items-center justify-center rounded-full bg-black/[.035] text-[#181714] transition active:scale-95"
+            className="justify-self-start flex h-12 w-12 items-center justify-center rounded-full bg-black/[.035] text-[#181714] transition active:scale-95"
             aria-label="Abrir menu lateral"
           >
             <Menu size={23} strokeWidth={1.8} />
           </button>
-          <span className="text-center font-display text-xl font-semibold tracking-[-.04em] sm:text-2xl">
+          <span className="justify-self-center text-center font-display text-xl font-semibold tracking-[-.04em] sm:text-2xl">
             Menu
           </span>
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex items-center justify-self-end gap-2">
             <button
               onClick={() => setBuscaAberta((aberta) => !aberta)}
               className="flex h-12 w-12 items-center justify-center rounded-full bg-black/[.035] text-[#181714] transition active:scale-95"
@@ -678,12 +697,12 @@ export function CardapioPublico({ slug }: { slug: string }) {
               </small>
             </span>
           </a>
-          <div className="absolute inset-x-0 bottom-0 flex items-end justify-between p-6 text-white sm:p-8">
-            <div>
+          <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4 text-white sm:p-8">
+            <div className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-[.2em] text-white/60">
                 Cardápio digital
               </p>
-              <p className="mt-2 max-w-[15rem] font-display text-2xl font-semibold leading-none tracking-[-.055em] sm:max-w-xs sm:text-3xl">
+              <p className="mt-2 max-w-[12rem] break-words font-display text-xl font-semibold leading-none tracking-[-.055em] sm:max-w-xs sm:text-3xl">
                 Seu sabor.
                 <br />
                 Sua marca.
@@ -691,7 +710,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
                 Seu menu.
               </p>
             </div>
-            <span className="mb-1 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[.14em] backdrop-blur">
+            <span className="mb-1 max-w-[42%] truncate rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[.14em] backdrop-blur">
               {dados.tipo}
             </span>
           </div>
@@ -725,18 +744,18 @@ export function CardapioPublico({ slug }: { slug: string }) {
           </div>
           <button
             onClick={() => abrirOverlay("info")}
-            className="absolute right-0 top-16 flex min-h-11 items-center gap-2 rounded-full bg-black/[.035] px-4 text-xs font-semibold text-[#0e7775] transition active:scale-95 sm:right-4"
+            className="mt-3 self-end flex min-h-11 items-center gap-2 rounded-full bg-black/[.035] px-4 text-xs font-semibold text-[#0e7775] transition active:scale-95 sm:absolute sm:right-4 sm:top-16 sm:mt-0"
           >
             <Info size={15} /> Info <ArrowRight size={14} />
           </button>
-          <h1 className="mt-4 text-center font-display text-2xl font-semibold tracking-[-.055em] sm:text-3xl">
+          <h1 className="mt-4 max-w-full break-words px-3 text-center font-display text-2xl font-semibold tracking-[-.055em] sm:text-3xl">
             {dados.nome}
           </h1>
           <span className={`mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-semibold ${cardapioDisponivel ? "bg-[#0e7775]/10 text-[#0e7775]" : "bg-[#941c42]/10 text-[#941c42]"}`}>
             <i className={`h-2 w-2 rounded-full ${cardapioDisponivel ? "bg-[#0e7775]" : "bg-[#941c42]"}`} />
-            {cardapioDisponivel ? "Aberto agora" : dados.disponibilidade?.motivo ?? "Fechado no momento"}
+            {cardapioDisponivel ? "Delivery aberto agora" : dados.disponibilidade?.motivo ?? "Delivery fechado no momento"}
           </span>
-          {dados.disponibilidade?.configurado && <details className="mt-3 w-full max-w-md rounded-2xl border border-black/[.07] bg-white/45 px-4 py-3 text-left text-xs text-black/65"><summary className="cursor-pointer list-none text-center font-semibold text-[#0e7775]">Ver dias e horários de funcionamento</summary><div className="mt-3 grid gap-1 border-t border-black/[.06] pt-3">{DIAS_SEMANA.map((dia, indice) => { const turnos = dados.disponibilidade?.turnos[String(indice)] ?? []; return <div key={dia} className="flex justify-between gap-3"><span className="font-medium text-black/70">{dia}</span><span>{turnos.length ? turnos.map((turno) => `${turno.inicio}–${turno.fim}`).join(" · ") : "Fechado"}</span></div>; })}</div></details>}
+          {dados.disponibilidade?.configurado && <details className="mt-3 w-full max-w-md rounded-2xl border border-black/[.07] bg-white/45 px-4 py-3 text-left text-xs text-black/65"><summary className="cursor-pointer list-none text-center font-semibold text-[#0e7775]">Ver horários de delivery</summary><div className="mt-3 grid gap-2 border-t border-black/[.06] pt-3">{DIAS_SEMANA.map((dia, indice) => { const turnos = dados.disponibilidade?.turnos[String(indice)] ?? []; return <div key={dia} className="grid grid-cols-[3.2rem_minmax(0,1fr)] gap-3"><span className="font-medium text-black/70">{dia}</span><span className="text-right break-words">{turnos.length ? turnos.map((turno) => `${turno.inicio}–${turno.fim}`).join(" · ") : "Fechado"}</span></div>; })}</div></details>}
         </div>
       </header>
 
@@ -912,6 +931,9 @@ export function CardapioPublico({ slug }: { slug: string }) {
           onAtualizarObservacao={atualizarObservacaoItem}
           onFechar={fecharOverlay}
           onAbrirCarrinho={() => abrirOverlay("carrinho")}
+          onAdicionarAoPedido={() => adicionarEVoltarAoCardapio(produtoSelecionado)}
+          disponivel={cardapioDisponivel}
+          motivoIndisponivel={dados.disponibilidade?.motivo ?? "O delivery está fechado no momento."}
         />
       )}
       {overlay === "carrinho" && (
@@ -960,6 +982,13 @@ export function CardapioPublico({ slug }: { slug: string }) {
           disponivel={cardapioDisponivel}
           motivoIndisponivel={dados.disponibilidade?.motivo ?? "Não estamos recebendo pedidos no momento."}
         />
+      )}
+      {avisoCarrinho && (
+        <div className="fixed inset-x-4 bottom-24 z-[70] mx-auto flex max-w-md items-center gap-3 rounded-2xl bg-[#181714] p-3.5 text-sm text-white shadow-2xl sm:bottom-6">
+          <Check size={18} className="shrink-0 text-[#d7b58b]" />
+          <span className="min-w-0 flex-1 leading-5">{avisoCarrinho}</span>
+          {cardapioDisponivel && totalItens > 0 && <button type="button" onClick={() => { setAvisoCarrinho(null); abrirOverlay("carrinho"); }} className="shrink-0 rounded-full bg-white/12 px-3 py-2 text-xs font-semibold">Ver pedido</button>}
+        </div>
       )}
       {overlay === "pix" && cobrancaPix && (
         <TelaPix
@@ -1249,6 +1278,9 @@ function ProdutoDetalhe({
   onAtualizarObservacao,
   onFechar,
   onAbrirCarrinho,
+  onAdicionarAoPedido,
+  disponivel,
+  motivoIndisponivel,
 }: {
   produto: ProdutoPublico;
   quantidade: number;
@@ -1257,6 +1289,9 @@ function ProdutoDetalhe({
   onAtualizarObservacao: (id: string, observacao: string) => void;
   onFechar: () => void;
   onAbrirCarrinho: () => void;
+  onAdicionarAoPedido: () => void;
+  disponivel: boolean;
+  motivoIndisponivel: string;
 }) {
   const painelRef = usePainelAcessivel(onFechar);
   return (
@@ -1300,6 +1335,12 @@ function ProdutoDetalhe({
           <p className="mt-7 text-base leading-7 text-black/70 sm:max-w-2xl sm:text-lg sm:leading-8">
             {descricaoDoProduto(produto)}
           </p>
+          {!disponivel && (
+            <div className="mt-6 rounded-2xl border border-[#941c42]/15 bg-[#941c42]/[.07] p-4 text-sm leading-5 text-[#941c42]">
+              <b className="block">Delivery fechado</b>
+              <span>{motivoIndisponivel} Consulte os horários no início do cardápio.</span>
+            </div>
+          )}
           <label className="mt-7 block rounded-2xl border border-[#0e7775]/15 bg-[#0e7775]/[.045] p-4">
             <span className="block text-xs font-semibold text-[#0e7775]">
               Observação deste item
@@ -1340,7 +1381,7 @@ function ProdutoDetalhe({
             <div className="flex shrink-0 items-center rounded-full bg-white p-1 shadow-sm">
               <button
                 onClick={() => ajustar(produto.id, -1)}
-                disabled={quantidade === 0}
+                disabled={quantidade === 0 || !disponivel}
                 className="flex h-11 w-11 items-center justify-center rounded-full disabled:opacity-25"
                 aria-label="Remover"
               >
@@ -1351,6 +1392,7 @@ function ProdutoDetalhe({
               </strong>
               <button
                 onClick={() => ajustar(produto.id, 1)}
+                disabled={!disponivel}
                 className="flex h-11 w-11 items-center justify-center rounded-full bg-[#181714] text-white"
                 aria-label="Adicionar"
               >
@@ -1359,12 +1401,13 @@ function ProdutoDetalhe({
             </div>
             <button
               onClick={() => {
-                if (quantidade === 0) ajustar(produto.id, 1);
+                if (quantidade === 0) onAdicionarAoPedido();
                 else onAbrirCarrinho();
               }}
-              className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-full bg-[#0e7775] px-5 text-sm font-semibold text-white shadow-lg shadow-[#0e7775]/20"
+              disabled={!disponivel}
+              className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-full bg-[#0e7775] px-5 text-sm font-semibold text-white shadow-lg shadow-[#0e7775]/20 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {quantidade === 0 ? "Adicionar ao pedido" : "Ver pedido"}
+              {!disponivel ? "Delivery fechado" : quantidade === 0 ? "Adicionar ao pedido" : "Ver pedido"}
               <ArrowRight size={16} />
             </button>
           </div>
@@ -1458,7 +1501,9 @@ function CarrinhoSheet({
   const [notificar, setNotificar] = useState(
     () => clienteSalvo?.notificar ?? true,
   );
-  const [endereco, setEndereco] = useState("");
+  const [rua, setRua] = useState("");
+  const [numeroEndereco, setNumeroEndereco] = useState("");
+  const [complementoEndereco, setComplementoEndereco] = useState("");
   const [bairroId, setBairroId] = useState("");
   const [formaRecebimento, setFormaRecebimento] = useState<
     "entrega" | "retirada"
@@ -1491,6 +1536,10 @@ function CarrinhoSheet({
   const bairroSelecionado = (bairros ?? []).find((b) => b.id === bairroId);
   const taxaEntrega = entregaSelecionada ? (bairroSelecionado?.taxa ?? 0) : 0;
   const totalComTaxa = totalValor + taxaEntrega;
+  const enderecoFormatado = [
+    rua.trim() && `${rua.trim()}, ${numeroEndereco.trim()}`,
+    complementoEndereco.trim(),
+  ].filter(Boolean).join(" · ");
 
   function validarDados() {
     if (!nome.trim() || telefone.trim().length < 8) {
@@ -1501,8 +1550,12 @@ function CarrinhoSheet({
       setErro("Selecione o bairro de entrega.");
       return false;
     }
-    if (entregaSelecionada && endereco.trim().length < 10) {
-      setErro("Informe o endereço completo para entrega.");
+    if (entregaSelecionada && !rua.trim()) {
+      setErro("Informe a rua ou avenida para entrega.");
+      return false;
+    }
+    if (entregaSelecionada && !numeroEndereco.trim()) {
+      setErro("Informe o número do endereço.");
       return false;
     }
     setErro("");
@@ -1544,7 +1597,10 @@ function CarrinhoSheet({
         email: emailPagador,
         notificar,
         formaRecebimento,
-        endereco,
+        endereco: enderecoFormatado,
+        rua: rua.trim(),
+        numero: numeroEndereco.trim(),
+        complemento: complementoEndereco.trim() || undefined,
         bairroId: entregaSelecionada ? bairroId : undefined,
         formaPagamento,
         tipoCartao: formaPagamento === "cartao" ? tipoCartao : null,
@@ -1609,7 +1665,7 @@ function CarrinhoSheet({
         ? `*Troco para:* ${moeda(numeroDaMoeda(trocoPara))}`
         : "",
       entregaSelecionada ? `*Bairro:* ${bairroSelecionado?.nome ?? ""}` : "",
-      entregaSelecionada ? `*Endereço:* ${endereco.trim()}` : "",
+      entregaSelecionada ? `*Endereço:* ${enderecoFormatado}` : "",
       entregaSelecionada && taxaEntrega > 0
         ? `*Taxa de entrega:* ${moeda(taxaEntrega)}`
         : "",
@@ -1876,13 +1932,33 @@ function CarrinhoSheet({
                       ))}
                     </select>
                   </Campo>
-                  <Campo label="Endereço completo">
-                    <textarea
-                      value={endereco}
-                      onChange={(evento) => setEndereco(evento.target.value)}
-                      placeholder="Rua, número e complemento"
-                      rows={3}
-                      className="menu-field resize-none"
+                  <div className="grid grid-cols-[minmax(0,1fr)_7rem] gap-3">
+                    <Campo label="Rua ou avenida">
+                      <input
+                        value={rua}
+                        onChange={(evento) => setRua(evento.target.value)}
+                        placeholder="Ex.: Rua das Flores"
+                        autoComplete="address-line1"
+                        className="menu-field"
+                      />
+                    </Campo>
+                    <Campo label="Número">
+                      <input
+                        value={numeroEndereco}
+                        onChange={(evento) => setNumeroEndereco(evento.target.value)}
+                        placeholder="123"
+                        autoComplete="address-line2"
+                        className="menu-field"
+                      />
+                    </Campo>
+                  </div>
+                  <Campo label="Complemento (opcional)">
+                    <input
+                      value={complementoEndereco}
+                      onChange={(evento) => setComplementoEndereco(evento.target.value)}
+                      placeholder="Ex.: Apt. 202, próximo à praça"
+                      autoComplete="address-line2"
+                      className="menu-field"
                     />
                   </Campo>
                 </>
@@ -1912,7 +1988,7 @@ function CarrinhoSheet({
                 <>
                   <div className="rounded-2xl border border-[#0e7775]/15 bg-[#0e7775]/[.06] p-3.5 text-sm leading-5 text-black/65">
                     <b className="block text-black">{entregaSelecionada ? "Entrega selecionada" : "Retirada no estabelecimento"}</b>
-                    <span>{entregaSelecionada ? `${bairroSelecionado?.nome ?? "Bairro não informado"} · ${endereco || "Endereço não informado"}` : "Seu pedido será preparado para retirada."}</span>
+                    <span>{entregaSelecionada ? `${bairroSelecionado?.nome ?? "Bairro não informado"} · ${enderecoFormatado || "Endereço não informado"}` : "Seu pedido será preparado para retirada."}</span>
                   </div>
                   <Campo label="Como deseja pagar?">
                     <div className="grid grid-cols-2 gap-2">

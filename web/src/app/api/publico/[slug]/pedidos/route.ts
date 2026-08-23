@@ -17,7 +17,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const body = await request.json().catch(() => null);
   const clienteNome = typeof body?.clienteNome === "string" ? body.clienteNome.trim() : "";
   const telefone = typeof body?.telefone === "string" ? body.telefone.trim() : "";
-  const endereco = typeof body?.endereco === "string" ? body.endereco.trim() : "";
+  const enderecoInformado = typeof body?.endereco === "string" ? body.endereco.trim() : "";
+  const rua = typeof body?.rua === "string" ? body.rua.trim() : "";
+  const numeroEndereco = typeof body?.numero === "string" ? body.numero.trim() : "";
+  const complementoEndereco = typeof body?.complemento === "string" ? body.complemento.trim() : "";
+  const endereco = rua || numeroEndereco || complementoEndereco
+    ? [`${rua}${numeroEndereco ? `, ${numeroEndereco}` : ""}`, complementoEndereco]
+        .filter(Boolean)
+        .join(" · ")
+    : enderecoInformado;
   const formaRecebimento = body?.formaRecebimento === "retirada" ? "retirada" : body?.formaRecebimento === "entrega" ? "entrega" : "";
   const formaPagamento = body?.formaPagamento === "cartao" ? "cartao" : body?.formaPagamento === "dinheiro" ? "dinheiro" : body?.formaPagamento === "pix" ? "pix" : "";
   const tipoCartao = body?.tipoCartao === "credito" ? "credito" : body?.tipoCartao === "debito" ? "debito" : "";
@@ -35,7 +43,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!formaPagamento) return NextResponse.json({ erro: "Escolha a forma de pagamento." }, { status: 400 });
   if (formaPagamento === "cartao" && !tipoCartao) return NextResponse.json({ erro: "Escolha crédito ou débito." }, { status: 400 });
   if (trocoPara !== null && (!Number.isFinite(trocoPara) || trocoPara <= 0)) return NextResponse.json({ erro: "Informe um valor de troco válido." }, { status: 400 });
-  if (formaRecebimento === "entrega" && endereco.length < 10) return NextResponse.json({ erro: "Informe o endereço completo para entrega." }, { status: 400 });
+  if (formaRecebimento === "entrega" && (rua || numeroEndereco || complementoEndereco)) {
+    if (!rua) return NextResponse.json({ erro: "Informe a rua ou avenida para entrega." }, { status: 400 });
+    if (!numeroEndereco) return NextResponse.json({ erro: "Informe o número do endereço." }, { status: 400 });
+  } else if (formaRecebimento === "entrega" && endereco.length < 10) return NextResponse.json({ erro: "Informe o endereço completo para entrega." }, { status: 400 });
   if (formaRecebimento === "entrega" && !bairroId) return NextResponse.json({ erro: "Selecione o bairro de entrega." }, { status: 400 });
   if (observacoes.length > 1000) return NextResponse.json({ erro: "As observações podem ter até 1.000 caracteres." }, { status: 400 });
   if (itens.length === 0) return NextResponse.json({ erro: "Adicione ao menos um item ao pedido." }, { status: 400 });
