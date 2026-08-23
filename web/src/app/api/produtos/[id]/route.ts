@@ -3,7 +3,7 @@ import { autenticarRequisicao, respostaNaoAutenticado } from "@/lib/api-auth";
 import { comEstabelecimento } from "@/lib/db";
 
 const RETORNO = `
-  id, nome, descricao, imagem_url as "imagemUrl",
+  id, nome, tamanho, descricao, imagem_url as "imagemUrl",
   coalesce((select nome from categorias_produto where id = produtos.categoria_id), 'Geral') as "categoriaNome",
   modo_precificacao as "modoPrecificacao",
   preco_custo as "precoCusto",
@@ -34,6 +34,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (typeof body.descricao === "string") set("descricao", body.descricao.trim() || null);
   if (body.imagemUrl === null || typeof body.imagemUrl === "string") set("imagem_url", typeof body.imagemUrl === "string" ? body.imagemUrl.trim() || null : null);
   if (body.categoriaId === null || typeof body.categoriaId === "string") set("categoria_id", body.categoriaId);
+  if (body.tamanho === null || body.tamanho === "P" || body.tamanho === "M" || body.tamanho === "G") set("tamanho", body.tamanho);
   if (typeof body.ativo === "boolean") set("ativo", body.ativo);
 
   if (body.modoPrecificacao !== undefined) {

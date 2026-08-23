@@ -40,6 +40,8 @@ create type movimentacao_tipo as enum ('entrada', 'saida', 'ajuste', 'perda');
 
 create type modo_precificacao as enum ('margem', 'preco_manual');
 
+create type tamanho_produto as enum ('P', 'M', 'G');
+
 create type entrega_status as enum ('aguardando', 'em_rota', 'entregue', 'cancelada');
 
 create type destino_preparo as enum ('cozinha', 'balcao');
@@ -72,6 +74,7 @@ $$ language plpgsql;
 create table estabelecimentos (
   id uuid primary key default gen_random_uuid(),
   nome text not null,
+  tamanho tamanho_produto,
   tipo tipo_estabelecimento not null,
   tipo_comida text not null,
   -- usado na URL publica do cardapio digital: ohfome.app/cardapio/<slug>
@@ -80,6 +83,10 @@ create table estabelecimentos (
   whatsapp_atendimento text,
   cardapio_banner_modo text not null default 'padrao' check (cardapio_banner_modo in ('padrao', 'fixo', 'carrossel')),
   onboarding_concluido boolean not null default false,
+  -- proximo numero de ticket (pedidos.codigo) deste estabelecimento — cada
+  -- um tem sua propria contagem, comecando do 1, em vez de um numero global
+  -- compartilhado entre todos os clientes do OhFome.
+  proximo_codigo_pedido integer not null default 1,
   ativo boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -94,6 +101,8 @@ create table banners_cardapio (
   estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade,
   url text not null,
   ordem smallint not null default 0 check (ordem >= 0 and ordem < 20),
+  -- qual parte da foto fica visivel no recorte largo do topo do cardapio
+  enquadramento text not null default 'centro' check (enquadramento in ('topo', 'centro', 'base')),
   ativo boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -429,7 +438,7 @@ create index idx_clientes_estabelecimento on clientes(estabelecimento_id);
 create table pedidos (
   id uuid primary key default gen_random_uuid(),
   estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade,
-  codigo serial unique, -- numero curto e legivel para exibir no painel/cozinha
+  codigo integer, -- numero curto e legivel (ticket); atribuido por estabelecimento via trigger, ver fn_atribuir_codigo_pedido
   tipo pedido_tipo not null,
   origem pedido_origem not null default 'presencial',
   status pedido_status not null default 'novo',
@@ -458,7 +467,8 @@ create table pedidos (
   ),
   constraint chk_pedido_delivery_cliente check (
     (tipo = 'delivery' and cliente_id is not null) or (tipo <> 'delivery')
-  )
+  ),
+  constraint uq_pedidos_estabelecimento_codigo unique (estabelecimento_id, codigo)
 );
 
 alter table movimentacoes_estoque
@@ -474,6 +484,24 @@ create index idx_pedidos_created_at on pedidos(created_at desc);
 create trigger trg_pedidos_updated_at
   before update on pedidos
   for each row execute function set_updated_at();
+
+-- Atribui o proximo ticket daquele estabelecimento (nunca um numero global
+-- compartilhado entre todos os clientes do OhFome). Usa update+returning
+-- pra travar a linha de estabelecimentos e serializar inserts concorrentes.
+create function fn_atribuir_codigo_pedido() returns trigger as $$
+begin
+  if new.codigo is null then
+    update estabelecimentos set proximo_codigo_pedido = proximo_codigo_pedido + 1
+    where id = new.estabelecimento_id
+    returning proximo_codigo_pedido - 1 into new.codigo;
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+create trigger trg_pedidos_atribui_codigo
+  before insert on pedidos
+  for each row execute function fn_atribuir_codigo_pedido();
 
 -- Fila persistente de impressao. A estacao da cozinha reserva um trabalho,
 -- envia o ticket via QZ Tray e confirma o resultado. Dessa forma o pedido
@@ -515,12 +543,26 @@ create table itens_pedido (
   produto_id uuid not null references produtos(id),
   quantidade integer not null check (quantidade > 0),
   preco_unitario numeric(10, 2) not null, -- snapshot do preco de venda no momento do pedido
+  tamanho tamanho_produto, -- snapshot do tamanho no momento do pedido
   observacoes text,
   status item_pedido_status not null default 'pendente',
   created_at timestamptz not null default now()
 );
 
 create index idx_itens_pedido_pedido on itens_pedido(pedido_id);
+
+create function copiar_tamanho_produto_no_item() returns trigger as $$
+begin
+  if new.tamanho is null then
+    select tamanho into new.tamanho from produtos where id = new.produto_id;
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+create trigger trg_itens_pedido_tamanho
+  before insert on itens_pedido
+  for each row execute function copiar_tamanho_produto_no_item();
 
 -- Auditoria: registra toda mudanca de status de um pedido (alimenta o Kanban)
 create table historico_status_pedido (
@@ -927,8 +969,12 @@ as $$
     'logoUrl', e.logo_url,
     'whatsappAtendimento', e.whatsapp_atendimento,
     'bannerModo', e.cardapio_banner_modo,
+    'pix', (
+      select case when cp.ativo then jsonb_build_object('modo', cp.modo) else null end
+      from configuracoes_pix cp where cp.estabelecimento_id = e.id
+    ),
     'banners', coalesce((
-      select jsonb_agg(jsonb_build_object('id', b.id, 'url', b.url, 'ordem', b.ordem) order by b.ordem)
+      select jsonb_agg(jsonb_build_object('id', b.id, 'url', b.url, 'ordem', b.ordem, 'enquadramento', b.enquadramento) order by b.ordem)
       from banners_cardapio b
       where b.estabelecimento_id = e.id and b.ativo
     ), '[]'::jsonb),
@@ -936,11 +982,12 @@ as $$
       select jsonb_agg(jsonb_build_object(
         'id', p.id,
         'nome', p.nome,
+        'tamanho', p.tamanho,
         'descricao', p.descricao,
         'imagemUrl', p.imagem_url,
         'categoriaNome', coalesce(c.nome, 'Geral'),
         'precoVenda', p.preco_venda
-      ) order by coalesce(c.ordem_exibicao, 0), p.nome)
+      ) order by coalesce(c.ordem_exibicao, 0), p.nome, p.tamanho)
       from produtos p
       left join categorias_produto c on c.id = p.categoria_id
       where p.estabelecimento_id = e.id and p.ativo
@@ -1113,7 +1160,7 @@ as $$
     'notificadoMensagem', p.notificado_mensagem,
     'estabelecimentoNome', e.nome,
     'itens', coalesce(
-      (select jsonb_agg(jsonb_build_object('produtoNome', pr.nome, 'quantidade', ip.quantidade) order by ip.created_at)
+      (select jsonb_agg(jsonb_build_object('produtoNome', pr.nome || case when ip.tamanho is not null then ' (' || ip.tamanho::text || ')' else '' end, 'produtoTamanho', ip.tamanho, 'quantidade', ip.quantidade) order by ip.created_at)
        from itens_pedido ip join produtos pr on pr.id = ip.produto_id
        where ip.pedido_id = p.id),
       '[]'::jsonb

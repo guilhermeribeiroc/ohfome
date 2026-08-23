@@ -16,6 +16,7 @@ create table if not exists configuracoes_pix (
   updated_at timestamptz not null default now()
 );
 
+drop trigger if exists trg_configuracoes_pix_updated_at on configuracoes_pix;
 create trigger trg_configuracoes_pix_updated_at
   before update on configuracoes_pix
   for each row execute function set_updated_at();
@@ -31,6 +32,7 @@ create table if not exists mercado_pago_conexoes (
   updated_at timestamptz not null default now()
 );
 
+drop trigger if exists trg_mercado_pago_conexoes_updated_at on mercado_pago_conexoes;
 create trigger trg_mercado_pago_conexoes_updated_at
   before update on mercado_pago_conexoes
   for each row execute function set_updated_at();
@@ -68,6 +70,7 @@ create table if not exists pagamentos_pix (
   updated_at timestamptz not null default now()
 );
 
+drop trigger if exists trg_pagamentos_pix_updated_at on pagamentos_pix;
 create trigger trg_pagamentos_pix_updated_at
   before update on pagamentos_pix
   for each row execute function set_updated_at();

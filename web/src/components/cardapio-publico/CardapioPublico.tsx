@@ -34,6 +34,7 @@ import { Bell, ChefHat, PackageCheck, PackageSearch } from "lucide-react";
 interface ProdutoPublico {
   id: string;
   nome: string;
+  tamanho?: "P" | "M" | "G" | null;
   descricao: string | null;
   categoriaNome: string;
   precoVenda: number;
@@ -48,7 +49,7 @@ interface CardapioData {
   logoUrl?: string | null;
   whatsappAtendimento?: string | null;
   bannerModo?: "padrao" | "fixo" | "carrossel";
-  banners?: { id: string; url: string; ordem: number }[];
+  banners?: { id: string; url: string; ordem: number; enquadramento?: "topo" | "centro" | "base" }[];
   pix?: { modo: "manual" | "mercado_pago" } | null;
   disponibilidade?: { aberto: boolean; pausado: boolean; configurado?: boolean; motivo?: string | null; turnos: Record<string, { inicio: string; fim: string }[]> };
   produtos: ProdutoPublico[];
@@ -151,6 +152,10 @@ function fotoDoProduto(produto: ProdutoPublico): CSSProperties {
 
 function moeda(valor: number) {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function nomeProdutoExibicao(produto: ProdutoPublico) {
+  return produto.tamanho ? `${produto.nome} (${produto.tamanho})` : produto.nome;
 }
 
 function grupoDaCategoria(nome: string): GrupoMenu {
@@ -631,7 +636,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
                     />
                     <span className="min-w-0 flex-1">
                       <strong className="block truncate font-display text-sm">
-                        {produto.nome}
+                        {nomeProdutoExibicao(produto)}
                       </strong>
                       <small className="text-[#0e7775]">
                         {moeda(produto.precoVenda)}
@@ -652,10 +657,13 @@ export function CardapioPublico({ slug }: { slug: string }) {
         <div className="relative mt-3 aspect-[16/9] overflow-hidden rounded-[1.4rem] bg-[#181714] shadow-[0_22px_60px_-38px_rgba(0,0,0,.6)] sm:rounded-[1.8rem] lg:mt-4 lg:h-72 lg:aspect-auto lg:rounded-[2rem]">
           <div
             aria-hidden
-            className="absolute inset-0 bg-cover bg-center transition-opacity duration-700"
+            className="absolute inset-0 bg-cover transition-opacity duration-700"
             style={
               bannerAtual && dados.bannerModo !== "padrao"
-                ? { backgroundImage: `url(${bannerAtual.url})` }
+                ? {
+                    backgroundImage: `url(${bannerAtual.url})`,
+                    backgroundPosition: bannerAtual.enquadramento === "topo" ? "top" : bannerAtual.enquadramento === "base" ? "bottom" : "center",
+                  }
                 : {
                     background:
                       "radial-gradient(circle at 15% 12%, rgba(215,181,139,.32), transparent 31%), radial-gradient(circle at 88% 88%, rgba(14,119,117,.58), transparent 40%), linear-gradient(125deg, #181714 0%, #26241f 48%, #0e7775 150%)",
@@ -751,7 +759,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
           <h1 className="mt-4 max-w-full break-words px-3 text-center font-display text-2xl font-semibold tracking-[-.055em] sm:text-3xl">
             {dados.nome}
           </h1>
-          <span className={`mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-semibold ${cardapioDisponivel ? "bg-[#0e7775]/10 text-[#0e7775]" : "bg-[#941c42]/10 text-[#941c42]"}`}>
+          <span className={`mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-semibold ${cardapioDisponivel ? "bg-coral-050 text-coral-600" : "bg-danger-050 text-danger-600"}`}>
             <i className={`h-2 w-2 rounded-full ${cardapioDisponivel ? "bg-[#0e7775]" : "bg-[#941c42]"}`} />
             {cardapioDisponivel ? "Delivery aberto agora" : dados.disponibilidade?.motivo ?? "Delivery fechado no momento"}
           </span>
@@ -850,7 +858,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
                     </span>
                     <span className="min-w-0 self-center">
                       <strong className="block font-display text-[17px] font-semibold leading-[1.08] tracking-[-.035em] text-[#181714] sm:text-[21px]">
-                        {produto.nome}
+                        {nomeProdutoExibicao(produto)}
                       </strong>
                       <b className="mt-1.5 block text-sm font-semibold text-[#0e7775] sm:text-base">
                         {moeda(produto.precoVenda)}
@@ -876,9 +884,9 @@ export function CardapioPublico({ slug }: { slug: string }) {
             Feito com cuidado, servido com presença.
           </p>
           <img
-            src="/marca/ohfome-logo.svg"
+            src="/marca/ohfome-icone-quadrado.png"
             alt="OhFome"
-            className="mt-4 h-12 w-auto"
+            className="mt-4 h-10 w-10 rounded-xl"
           />
           <small className="mt-1 text-[10px] uppercase tracking-[.14em] text-black/35">
             Cardápio digital
@@ -1327,7 +1335,7 @@ function ProdutoDetalhe({
             {produto.categoriaNome}
           </p>
           <h2 id="produto-detalhe-titulo" className="mt-2 font-display text-3xl font-semibold uppercase leading-[1.02] tracking-[-.055em] sm:text-4xl">
-            {produto.nome}
+            {nomeProdutoExibicao(produto)}
           </h2>
           <p className="mt-3 font-display text-2xl font-semibold text-[#0e7775]">
             {moeda(produto.precoVenda)}
@@ -1341,7 +1349,7 @@ function ProdutoDetalhe({
               <span>{motivoIndisponivel} Consulte os horários no início do cardápio.</span>
             </div>
           )}
-          <label className="mt-7 block rounded-2xl border border-[#0e7775]/15 bg-[#0e7775]/[.045] p-4">
+          <label className="mt-7 block rounded-2xl border border-coral-100 bg-coral-050 p-4">
             <span className="block text-xs font-semibold text-[#0e7775]">
               Observação deste item
             </span>
@@ -1362,6 +1370,7 @@ function ProdutoDetalhe({
           <h3 className="mt-9 font-display text-lg font-semibold">Detalhes</h3>
           <div className="mt-3 flex flex-wrap gap-2">
             <DetailTag icon={UtensilsCrossed} label={produto.categoriaNome} />
+            {produto.tamanho && <DetailTag icon={Info} label={`Tamanho ${produto.tamanho}`} />}
             <DetailTag icon={Sparkles} label="Feito na casa" />
             <DetailTag icon={Info} label="Consulte ingredientes" />
           </div>
@@ -1674,7 +1683,7 @@ function CarrinhoSheet({
       "*Itens:*",
       ...itens.map(
         (item) =>
-          `${item.quantidade}× ${item.produto.nome} — ${moeda(item.produto.precoVenda * item.quantidade)}${item.observacoes ? `\n   Obs.: ${item.observacoes}` : ""}`,
+          `${item.quantidade}× ${nomeProdutoExibicao(item.produto)} — ${moeda(item.produto.precoVenda * item.quantidade)}${item.observacoes ? `\n   Obs.: ${item.observacoes}` : ""}`,
       ),
       "",
       `*Total:* ${moeda(totalComTaxa)}`,
@@ -1721,7 +1730,7 @@ function CarrinhoSheet({
             <X size={18} />
           </button>
         </header>
-        {!disponivel && <div className="mx-5 mt-4 rounded-2xl border border-[#941c42]/15 bg-[#941c42]/[.07] p-3 text-sm leading-5 text-[#941c42] sm:mx-6">{motivoIndisponivel} Você pode consultar o cardápio, mas novos pedidos estão temporariamente bloqueados.</div>}
+        {!disponivel && <div className="mx-5 mt-4 rounded-2xl border border-danger-500/15 bg-danger-050 p-3 text-sm leading-5 text-danger-600 sm:mx-6">{motivoIndisponivel} Você pode consultar o cardápio, mas novos pedidos estão temporariamente bloqueados.</div>}
         {etapa === "itens" ? (
           <>
             <div
@@ -1752,7 +1761,7 @@ function CarrinhoSheet({
                         />
                         <span className="min-w-0">
                           <strong className="block truncate font-display text-base">
-                            {produto.nome}
+                            {nomeProdutoExibicao(produto)}
                           </strong>
                           <small className="text-[#0e7775]">
                             {moeda(produto.precoVenda)}
@@ -1986,7 +1995,7 @@ function CarrinhoSheet({
             </>
               ) : (
                 <>
-                  <div className="rounded-2xl border border-[#0e7775]/15 bg-[#0e7775]/[.06] p-3.5 text-sm leading-5 text-black/65">
+                  <div className="rounded-2xl border border-coral-100 bg-coral-050 p-3.5 text-sm leading-5 text-black/65">
                     <b className="block text-black">{entregaSelecionada ? "Entrega selecionada" : "Retirada no estabelecimento"}</b>
                     <span>{entregaSelecionada ? `${bairroSelecionado?.nome ?? "Bairro não informado"} · ${enderecoFormatado || "Endereço não informado"}` : "Seu pedido será preparado para retirada."}</span>
                   </div>
@@ -2028,15 +2037,15 @@ function CarrinhoSheet({
                     </Campo>
                   )}
                   {formaPagamento === "pix" && (
-                    <div className="rounded-2xl border border-[#0e7775]/15 bg-[#0e7775]/[.06] p-3 text-sm leading-5 text-black/65">
+                    <div className="rounded-2xl border border-coral-100 bg-coral-050 p-3 text-sm leading-5 text-black/65">
                       {dados.pix?.modo === "mercado_pago" ? "Você receberá um QR Code Pix válido por 30 minutos. A cozinha só receberá a comanda após a confirmação do pagamento." : "O Pix será pago na entrega. A equipe receberá seu pedido agora e confirmará o pagamento depois."}
                     </div>
                   )}
                   {formaPagamento === "cartao" ? (
                     <Campo label="Tipo de cartão">
                       <div className="grid grid-cols-2 gap-2">
-                        <button type="button" onClick={() => setTipoCartao("credito")} className={`rounded-xl border px-3 py-3 text-sm font-semibold ${tipoCartao === "credito" ? "border-[#0e7775] bg-[#0e7775]/10 text-[#0e7775]" : "border-black/[.1] bg-white/55 text-black/65"}`}>Crédito</button>
-                        <button type="button" onClick={() => setTipoCartao("debito")} className={`rounded-xl border px-3 py-3 text-sm font-semibold ${tipoCartao === "debito" ? "border-[#0e7775] bg-[#0e7775]/10 text-[#0e7775]" : "border-black/[.1] bg-white/55 text-black/65"}`}>Débito</button>
+                        <button type="button" onClick={() => setTipoCartao("credito")} className={`rounded-xl border px-3 py-3 text-sm font-semibold ${tipoCartao === "credito" ? "border-coral-500 bg-coral-050 text-coral-600" : "border-black/[.1] bg-white/55 text-black/65"}`}>Crédito</button>
+                        <button type="button" onClick={() => setTipoCartao("debito")} className={`rounded-xl border px-3 py-3 text-sm font-semibold ${tipoCartao === "debito" ? "border-coral-500 bg-coral-050 text-coral-600" : "border-black/[.1] bg-white/55 text-black/65"}`}>Débito</button>
                       </div>
                     </Campo>
                   ) : formaPagamento === "dinheiro" ? (
@@ -2171,7 +2180,7 @@ function CarrinhoSheet({
                     )}
                   </div>
                 ) : (
-                  <div className="mt-2 rounded-2xl border border-[#0e7775]/15 bg-[#0e7775]/[.06] p-3 text-sm leading-5 text-black/65">
+                  <div className="mt-2 rounded-2xl border border-coral-100 bg-coral-050 p-3 text-sm leading-5 text-black/65">
                     {dados.pix?.modo === "mercado_pago"
                       ? "Você verá um QR Code Pix válido por 30 minutos. O pedido só seguirá para a cozinha e será impresso depois da confirmação do pagamento."
                       : "O Pix será pago na entrega. A equipe receberá seu pedido agora e confirmará o pagamento depois."}

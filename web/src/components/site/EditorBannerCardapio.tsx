@@ -2,12 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, ImagePlus, LoaderCircle, MonitorPlay, Trash2, Upload } from "lucide-react";
-import type { BannerCardapio, ModoBannerCardapio } from "@/lib/types";
+import type { BannerCardapio, EnquadramentoBanner, ModoBannerCardapio } from "@/lib/types";
 
 const MODOS: { id: ModoBannerCardapio; titulo: string; descricao: string }[] = [
   { id: "padrao", titulo: "Visual padrão", descricao: "Usa o fundo ilustrado do OhFome." },
   { id: "fixo", titulo: "Imagem fixa", descricao: "Uma foto de destaque do restaurante." },
   { id: "carrossel", titulo: "Carrossel", descricao: "Até cinco fotos alternando no topo." },
+];
+
+const ENQUADRAMENTOS: { id: EnquadramentoBanner; label: string; posicaoCss: string }[] = [
+  { id: "topo", label: "Topo", posicaoCss: "top" },
+  { id: "centro", label: "Centro", posicaoCss: "center" },
+  { id: "base", label: "Base", posicaoCss: "bottom" },
 ];
 
 type DadosBanner = { modo: ModoBannerCardapio; banners: BannerCardapio[] };
@@ -73,6 +79,15 @@ export function EditorBannerCardapio() {
     finally { setSalvando(false); }
   }
 
+  async function salvarEnquadramento(banner: BannerCardapio, enquadramento: EnquadramentoBanner) {
+    setDados((atual) => ({ ...atual, banners: atual.banners.map((b) => (b.id === banner.id ? { ...b, enquadramento } : b)) }));
+    setErro("");
+    try {
+      const resposta = await fetch(`/api/estabelecimento/banners/${banner.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enquadramento }) });
+      if (!resposta.ok) throw new Error((await resposta.json().catch(() => null))?.erro ?? "Não foi possível salvar o enquadramento.");
+    } catch (causa) { setErro(causa instanceof Error ? causa.message : "Não foi possível salvar o enquadramento."); }
+  }
+
   async function mover(banner: BannerCardapio, direcao: -1 | 1) {
     const destino = banner.ordem + direcao;
     if (destino < 0 || destino >= dados.banners.length) return;
@@ -90,8 +105,8 @@ export function EditorBannerCardapio() {
     <div className="space-y-4 p-5 sm:p-6">
       <div className="grid gap-2 sm:grid-cols-3">{MODOS.map((modo) => <button key={modo.id} disabled={salvando} onClick={() => void mudarModo(modo.id)} className={`rounded-xl border p-3 text-left transition ${dados.modo === modo.id ? "border-coral-500 bg-coral-050 ring-1 ring-coral-200" : "border-cream-200 bg-cream-50 hover:border-ink-300"}`}><strong className="block text-sm text-ink-900">{modo.titulo}</strong><span className="mt-1 block text-[11px] leading-4 text-ink-500">{modo.descricao}</span></button>)}</div>
       <div className="flex items-center justify-between gap-3"><p className="text-xs font-semibold text-ink-700">Fotos do banner <span className="font-normal text-ink-400">({dados.banners.length}/5)</span></p><label className={`inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl px-3 text-xs font-semibold transition ${dados.banners.length >= 5 || salvando ? "cursor-not-allowed bg-cream-100 text-ink-400" : "bg-ink-900 text-white hover:bg-ink-800"}`}><Upload size={14} />{salvando ? "Salvando..." : "Enviar foto"}<input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={salvando || dados.banners.length >= 5} onChange={(evento) => { void enviar(evento.target.files?.[0]); evento.currentTarget.value = ""; }} /></label></div>
-      {carregando ? <div className="flex min-h-28 items-center justify-center text-ink-400"><LoaderCircle size={20} className="animate-spin" /></div> : dados.banners.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{dados.banners.map((banner, indice) => <article key={banner.id} className="overflow-hidden rounded-xl border border-cream-200 bg-cream-50"><img src={banner.url} alt={`Banner ${indice + 1}`} className="aspect-video w-full object-cover" /><div className="flex items-center justify-between p-2"><span className="text-[11px] font-semibold text-ink-500">Foto {indice + 1}</span><div className="flex items-center gap-1"><button disabled={salvando || indice === 0} onClick={() => void mover(banner, -1)} className="of-icon-btn !h-8 !min-h-8 !w-8 disabled:opacity-30" aria-label="Mover foto para cima"><ArrowUp size={14} /></button><button disabled={salvando || indice === dados.banners.length - 1} onClick={() => void mover(banner, 1)} className="of-icon-btn !h-8 !min-h-8 !w-8 disabled:opacity-30" aria-label="Mover foto para baixo"><ArrowDown size={14} /></button><button disabled={salvando} onClick={() => void remover(banner.id)} className="of-icon-btn !h-8 !min-h-8 !w-8 text-danger-600 disabled:opacity-30" aria-label="Remover foto"><Trash2 size={14} /></button></div></div></article>)}</div> : <div className="flex min-h-28 flex-col items-center justify-center rounded-xl border border-dashed border-cream-300 bg-cream-50 text-center"><ImagePlus size={20} className="text-ink-400" /><p className="mt-2 text-xs text-ink-500">Envie uma foto do restaurante, prato ou ambiente.</p></div>}
-      <p className="text-[11px] leading-5 text-ink-400">JPG, PNG ou WebP, até 5 MB. O cardápio aplica contraste automático para os textos continuarem legíveis.</p>{erro && <p className="text-xs text-danger-600">{erro}</p>}
+      {carregando ? <div className="flex min-h-28 items-center justify-center text-ink-400"><LoaderCircle size={20} className="animate-spin" /></div> : dados.banners.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{dados.banners.map((banner, indice) => <article key={banner.id} className="overflow-hidden rounded-xl border border-cream-200 bg-cream-50"><img src={banner.url} alt={`Banner ${indice + 1}`} className="aspect-video w-full object-cover" style={{ objectPosition: ENQUADRAMENTOS.find((e) => e.id === banner.enquadramento)?.posicaoCss ?? "center" }} /><div className="flex items-center gap-1 border-b border-cream-200 p-2">{ENQUADRAMENTOS.map((opcao) => <button key={opcao.id} disabled={salvando} onClick={() => void salvarEnquadramento(banner, opcao.id)} className={`flex-1 rounded-lg py-1.5 text-[10px] font-semibold transition ${(banner.enquadramento ?? "centro") === opcao.id ? "bg-ink-900 text-white" : "bg-white text-ink-500 hover:bg-cream-100"}`}>{opcao.label}</button>)}</div><div className="flex items-center justify-between p-2"><span className="text-[11px] font-semibold text-ink-500">Foto {indice + 1}</span><div className="flex items-center gap-1"><button disabled={salvando || indice === 0} onClick={() => void mover(banner, -1)} className="of-icon-btn !h-8 !min-h-8 !w-8 disabled:opacity-30" aria-label="Mover foto para cima"><ArrowUp size={14} /></button><button disabled={salvando || indice === dados.banners.length - 1} onClick={() => void mover(banner, 1)} className="of-icon-btn !h-8 !min-h-8 !w-8 disabled:opacity-30" aria-label="Mover foto para baixo"><ArrowDown size={14} /></button><button disabled={salvando} onClick={() => void remover(banner.id)} className="of-icon-btn !h-8 !min-h-8 !w-8 text-danger-600 disabled:opacity-30" aria-label="Remover foto"><Trash2 size={14} /></button></div></div></article>)}</div> : <div className="flex min-h-28 flex-col items-center justify-center rounded-xl border border-dashed border-cream-300 bg-cream-50 text-center"><ImagePlus size={20} className="text-ink-400" /><p className="mt-2 text-xs text-ink-500">Envie uma foto do restaurante, prato ou ambiente.</p></div>}
+      <p className="text-[11px] leading-5 text-ink-400">JPG, PNG ou WebP, até 5 MB. O cardápio aplica contraste automático para os textos continuarem legíveis. Se a foto ficar cortada de um jeito ruim no link público, use os botões Topo/Centro/Base pra escolher qual parte dela aparece.</p>{erro && <p className="text-xs text-danger-600">{erro}</p>}
     </div>
   </section>;
 }

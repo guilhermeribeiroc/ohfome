@@ -20,12 +20,24 @@ export type ItemPedidoStatus = "pendente" | "em_preparo" | "pronto" | "entregue"
 export type UnidadeMedida = "kg" | "g" | "l" | "ml" | "un" | "cx" | "pct";
 
 export type ModoPrecificacao = "margem" | "preco_manual";
+export type TamanhoProduto = "P" | "M" | "G";
 export type ModoBannerCardapio = "padrao" | "fixo" | "carrossel";
+
+export function nomeProdutoComTamanho(produto: { nome: string; tamanho?: TamanhoProduto | null }) {
+  return produto.tamanho ? `${produto.nome} (${produto.tamanho})` : produto.nome;
+}
+
+export function nomeItemComTamanho(item: { produtoNome: string; produtoTamanho?: TamanhoProduto | null }) {
+  return item.produtoTamanho ? `${item.produtoNome} (${item.produtoTamanho})` : item.produtoNome;
+}
+
+export type EnquadramentoBanner = "topo" | "centro" | "base";
 
 export interface BannerCardapio {
   id: string;
   url: string;
   ordem: number;
+  enquadramento: EnquadramentoBanner;
 }
 
 export type EntregaStatus = "aguardando" | "em_rota" | "entregue" | "cancelada";
@@ -64,11 +76,14 @@ export interface VendaFinanceira {
   tipo: PedidoTipo;
   mesaNumero?: number;
   clienteNome?: string;
+  formaPagamento?: FormaPagamento;
+  tipoCartao?: TipoCartao;
+  trocoPara?: number;
   total: number;
   custoProdutos: number;
   lucroBruto: number;
   createdAt: string;
-  itens: { produtoNome: string; quantidade: number; precoUnitario: number; custoUnitario: number }[];
+  itens: { produtoNome: string; produtoTamanho?: TamanhoProduto | null; quantidade: number; precoUnitario: number; custoUnitario: number }[];
 }
 
 export interface Mesa {
@@ -90,6 +105,7 @@ export interface ItemPedido {
   id: string;
   produtoId: string;
   produtoNome: string;
+  produtoTamanho?: TamanhoProduto | null;
   quantidade: number;
   precoUnitario: number;
   observacoes?: string;
@@ -147,6 +163,7 @@ export interface Produto {
   categoriaId?: string | null;
   categoriaNome: string;
   nome: string;
+  tamanho?: TamanhoProduto | null;
   descricao?: string;
   imagemUrl?: string | null;
   modoPrecificacao: ModoPrecificacao;
@@ -200,7 +217,7 @@ export interface Entrega {
   tipoCartao?: TipoCartao;
   trocoPara?: number;
   pagamentoStatus?: PagamentoStatus;
-  itens?: { produtoNome: string; quantidade: number; precoUnitario: number }[];
+  itens?: { produtoNome: string; produtoTamanho?: TamanhoProduto | null; quantidade: number; precoUnitario: number }[];
   total: number;
   tempoEstimadoMin?: number;
 }

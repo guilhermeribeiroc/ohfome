@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState, type DragEvent } from "react";
-import { ArrowRight, Bell, BellOff, BellRing, Check, ChefHat, Clock3, MapPin, MessageSquareText, Minus, PackageCheck, PackageSearch, Plus, Printer, Search, ShoppingBag, Truck, X } from "lucide-react";
+import { ArrowRight, Bell, BellOff, BellRing, Check, ChefHat, Clock3, MapPin, MessageSquareText, Minus, PackageCheck, PackageSearch, Plus, Printer, Search, ShoppingBag, Trash2, Truck, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Mesa, Pedido, PedidoStatus, Produto } from "@/lib/types";
-import { MESA_STATUS_LABEL, PEDIDO_STATUS_LABEL } from "@/lib/types";
+import { MESA_STATUS_LABEL, PEDIDO_STATUS_LABEL, nomeProdutoComTamanho } from "@/lib/types";
 import { usePolling } from "@/lib/use-polling";
 import { imprimirPedido } from "@/lib/impressao";
+import { useTenant } from "@/lib/tenant-context";
 
 const TODAS_COLUNAS: PedidoStatus[] = ["novo", "em_preparo", "pronto", "saiu_para_entrega", "finalizado"];
 const PROXIMO_STATUS: Partial<Record<PedidoStatus, PedidoStatus>> = { novo: "em_preparo", em_preparo: "pronto", pronto: "saiu_para_entrega", saiu_para_entrega: "finalizado" };
@@ -55,6 +56,8 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Central
   const url = origem ? `/api/pedidos?origem=${origem}` : "/api/pedidos";
   const { dados, setDados, recarregar } = usePolling<Pedido[]>(url, 4000);
   const pedidos = dados ?? [];
+  const { usuarioAtual } = useTenant();
+  const souAdmin = usuarioAtual?.role === "admin";
   const [somAtivo, setSomAtivo] = useState(true);
   const [modalAberto, setModalAberto] = useState(false);
   const [pedidoArrastado, setPedidoArrastado] = useState<string | null>(null);
@@ -116,6 +119,14 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Central
     recarregar();
   }
 
+  async function excluirPedido(pedido: Pedido) {
+    if (!confirm(`Excluir o pedido #${pedido.codigo} definitivamente? Esta ação não pode ser desfeita.`)) return;
+    setPedidoDetalhe(null);
+    setDados((lista) => (lista ?? []).filter((item) => item.id !== pedido.id));
+    const resposta = await fetch(`/api/pedidos/${pedido.id}`, { method: "DELETE" });
+    if (!resposta.ok) { recarregar(); return; }
+  }
+
   return (
     <section className={origem ? "" : "of-page"}>
       <header className="of-page-header">
@@ -154,7 +165,7 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Central
       </div>
 
       {modalAberto && <NovoPedidoModal onFechar={() => setModalAberto(false)} onCriado={() => { setModalAberto(false); if (somAtivo) playBeep(); recarregar(); }} />}
-      {pedidoDetalhe && <PedidoDetalheModal pedido={pedidoDetalhe} onFechar={() => setPedidoDetalhe(null)} onNotificar={(pedido) => { setPedidoDetalhe(null); setPromptNotificar({ pedido, status: pedido.status }); }} permitirReimpressao={modoCozinha} />}
+      {pedidoDetalhe && <PedidoDetalheModal pedido={pedidoDetalhe} onFechar={() => setPedidoDetalhe(null)} onNotificar={(pedido) => { setPedidoDetalhe(null); setPromptNotificar({ pedido, status: pedido.status }); }} permitirReimpressao={modoCozinha} permitirExcluir={souAdmin} onExcluir={excluirPedido} />}
 
       {promptNotificar && (
         <div className="fixed inset-x-4 bottom-4 z-[60] mx-auto flex max-w-sm items-start gap-3 overflow-hidden rounded-2xl bg-ink-900 p-4 text-white shadow-2xl sm:right-4 sm:left-auto" style={{ animation: "onb-pop .3s cubic-bezier(.2,.8,.2,1) both" }}>
@@ -174,7 +185,7 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Central
   );
 }
 
-function PedidoDetalheModal({ pedido, onFechar, onNotificar, permitirReimpressao }: { pedido: Pedido; onFechar: () => void; onNotificar: (pedido: Pedido) => void; permitirReimpressao: boolean }) {
+function PedidoDetalheModal({ pedido, onFechar, onNotificar, permitirReimpressao, permitirExcluir, onExcluir }: { pedido: Pedido; onFechar: () => void; onNotificar: (pedido: Pedido) => void; permitirReimpressao: boolean; permitirExcluir: boolean; onExcluir: (pedido: Pedido) => void }) {
   const pagamento = descricaoPagamento(pedido);
   const [reimprimindo, setReimprimindo] = useState(false);
   const [mensagemImpressao, setMensagemImpressao] = useState("");
@@ -195,7 +206,7 @@ function PedidoDetalheModal({ pedido, onFechar, onNotificar, permitirReimpressao
     <section className="of-modal-panel flex max-h-[90dvh] max-w-lg flex-col overflow-hidden">
       <header className="flex items-start justify-between border-b border-cream-200 p-5"><div><p className="of-eyebrow">Pedido #{pedido.codigo}</p><h2 className="font-display text-xl font-bold tracking-tight text-ink-900">Detalhes do pedido</h2></div><button onClick={onFechar} className="of-icon-btn" aria-label="Fechar detalhes"><X size={17} /></button></header>
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5"><div className="rounded-2xl bg-cream-50 p-3.5 text-sm"><p className="font-semibold text-ink-900">{pedido.clienteNome || (pedido.mesaNumero ? `Mesa ${pedido.mesaNumero}` : "Pedido presencial")}</p>{pedido.clienteTelefone && <p className="mt-1 text-xs text-ink-500">WhatsApp: {pedido.clienteTelefone}</p>}{pedido.enderecoEntrega && <p className="mt-2 flex gap-1.5 text-xs leading-5 text-ink-600"><MapPin size={13} className="mt-0.5 shrink-0 text-coral-600" />{pedido.enderecoEntrega}</p>}{pagamento && <p className="mt-2 text-xs font-medium text-ink-700">Pagamento: {pagamento}</p>}{pedido.observacoes && <p className="mt-2 flex gap-1.5 text-xs leading-5 text-ink-600"><MessageSquareText size={13} className="mt-0.5 shrink-0 text-coral-600" />{pedido.observacoes}</p>}{pedido.clienteTelefone && <button onClick={() => onNotificar(pedido)} className="mt-3 flex min-h-9 items-center gap-1.5 rounded-lg bg-ink-900 px-3 text-xs font-semibold text-white transition active:scale-95"><Bell size={13} /> Notificar cliente</button>}</div><div><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-ink-400">Itens do pedido</p><ul className="divide-y divide-cream-100 rounded-2xl border border-cream-200 bg-surface px-3.5">{pedido.itens.map((item) => <li key={item.id} className="py-3"><div className="flex items-center justify-between gap-3 text-sm"><span><b className="mr-2 text-ink-900">{item.quantidade}×</b>{item.produtoNome}</span><b className="shrink-0 text-ink-900">R$ {(item.precoUnitario * item.quantidade).toFixed(2).replace(".", ",")}</b></div>{item.observacoes && <p className="mt-1 pl-6 text-xs text-ink-500">Obs.: {item.observacoes}</p>}</li>)}</ul></div></div>
-      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-cream-200 bg-surface p-5"><div className="flex flex-wrap gap-2"><button onClick={() => imprimirPedido(pedido, pedido.mesaNumero ? "Comanda da mesa" : "Via do pedido")} className="of-btn-secondary min-h-11 px-3"><Printer size={16} /> Imprimir</button>{permitirReimpressao && <button onClick={() => void reimprimirNaCozinha()} disabled={reimprimindo} className="of-btn-secondary min-h-11 px-3"><Printer size={16} /> {reimprimindo ? "Enviando..." : "Reimprimir cozinha"}</button>}{mensagemImpressao && <p className="basis-full text-xs text-ink-500">{mensagemImpressao}</p>}</div><div className="text-right"><span className="block text-xs text-ink-400">{pedido.formaRecebimento === "entrega" ? "Entrega" : pedido.formaRecebimento === "retirada" ? "Retirada" : TIPO_LABEL[pedido.tipo]}</span><strong className="font-display text-xl font-bold text-ink-900">R$ {pedido.total.toFixed(2).replace(".", ",")}</strong></div></footer>
+      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-cream-200 bg-surface p-5"><div className="flex flex-wrap gap-2"><button onClick={() => imprimirPedido(pedido, pedido.mesaNumero ? "Comanda da mesa" : "Via do pedido")} className="of-btn-secondary min-h-11 px-3"><Printer size={16} /> Imprimir</button>{permitirReimpressao && <button onClick={() => void reimprimirNaCozinha()} disabled={reimprimindo} className="of-btn-secondary min-h-11 px-3"><Printer size={16} /> {reimprimindo ? "Enviando..." : "Reimprimir cozinha"}</button>}{permitirExcluir && <button onClick={() => onExcluir(pedido)} className="of-icon-btn min-h-11 !w-11 text-danger-600 hover:!bg-danger-050" aria-label={`Excluir pedido ${pedido.codigo}`}><Trash2 size={16} /></button>}{mensagemImpressao && <p className="basis-full text-xs text-ink-500">{mensagemImpressao}</p>}</div><div className="text-right"><span className="block text-xs text-ink-400">{pedido.formaRecebimento === "entrega" ? "Entrega" : pedido.formaRecebimento === "retirada" ? "Retirada" : TIPO_LABEL[pedido.tipo]}</span><strong className="font-display text-xl font-bold text-ink-900">R$ {pedido.total.toFixed(2).replace(".", ",")}</strong></div></footer>
     </section>
   </div>;
 }
@@ -204,7 +215,9 @@ function NovoPedidoModal({ onFechar, onCriado }: { onFechar: () => void; onCriad
   const { dados: produtos } = usePolling<Produto[]>("/api/produtos", 60000);
   const { dados: mesas } = usePolling<Mesa[]>("/api/mesas", 60000);
   const [itens, setItens] = useState<Record<string, number>>({}); const [busca, setBusca] = useState(""); const [mesaId, setMesaId] = useState(""); const [enviando, setEnviando] = useState(false); const [erro, setErro] = useState("");
-  const filtrados = (produtos ?? []).filter((produto) => produto.nome.toLowerCase().includes(busca.toLowerCase()));
+  const filtrados = (produtos ?? [])
+    .map((produto) => ({ ...produto, nome: nomeProdutoComTamanho(produto) }))
+    .filter((produto) => produto.nome.toLowerCase().includes(busca.toLowerCase()));
   const total = useMemo(() => Object.entries(itens).reduce((soma, [id, qtd]) => soma + ((produtos ?? []).find((produto) => produto.id === id)?.precoVenda ?? 0) * qtd, 0), [itens, produtos]);
 
   function ajustar(id: string, delta: number) { setItens((atual) => { const qtd = (atual[id] ?? 0) + delta; if (qtd <= 0) return Object.fromEntries(Object.entries(atual).filter(([chave]) => chave !== id)); return { ...atual, [id]: qtd }; }); }

@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
          en.tempo_estimado_min as "tempoEstimadoMin",
          coalesce((
            select json_agg(json_build_object(
-             'produtoNome', pr.nome,
+             'produtoNome', pr.nome || case when ip.tamanho is not null then ' (' || ip.tamanho::text || ')' else '' end,
+             'produtoTamanho', ip.tamanho,
              'quantidade', ip.quantidade,
              'precoUnitario', ip.preco_unitario
            ) order by ip.created_at)
@@ -36,8 +37,9 @@ export async function GET(request: NextRequest) {
        from entregas en
        join pedidos p on p.id = en.pedido_id
        left join clientes c on c.id = p.cliente_id
-       where en.status not in ('entregue', 'cancelada')
-          or en.created_at > now() - interval '12 hours'
+       where p.status <> 'cancelado'
+         and (en.status not in ('entregue', 'cancelada')
+              or en.created_at > now() - interval '12 hours')
        order by en.created_at desc`
     );
     return rows;

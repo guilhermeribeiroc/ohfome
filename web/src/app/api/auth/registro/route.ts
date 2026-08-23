@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     { nome: admin.nome.trim(), usuario: admin.usuario!.trim().toLowerCase(), senha_hash: await bcrypt.hash(admin.senha!, 12), role: "admin" },
   ];
 
-  async function tentarRegistrar(tentativasRestantes: number): Promise<string> {
+  async function registrarEstabelecimento(): Promise<string> {
     try {
       const linhas = await queryPublico<{ fn_registrar_estabelecimento: string }>(
         "select fn_registrar_estabelecimento($1, $2, $3, $4, $5::jsonb, $6)",
@@ -54,8 +54,8 @@ export async function POST(request: NextRequest) {
       return linhas[0].fn_registrar_estabelecimento;
     } catch (erro) {
       const detalhes = erro as { code?: string; constraint?: string };
-      if (detalhes.code === "23505" && detalhes.constraint === "uq_estabelecimentos_slug" && tentativasRestantes > 0) {
-        return tentarRegistrar(tentativasRestantes - 1); // colisao improvavel de slug — tenta outro sufixo
+      if (detalhes.code === "23505" && detalhes.constraint === "estabelecimentos_slug_key") {
+        throw Object.assign(new Error("Já existe um restaurante cadastrado com este nome. Use um nome diferente."), { status: 409 });
       }
       throw erro;
     }
@@ -63,8 +63,11 @@ export async function POST(request: NextRequest) {
 
   let estabelecimentoId: string;
   try {
-    estabelecimentoId = await tentarRegistrar(1);
+    estabelecimentoId = await registrarEstabelecimento();
   } catch (erro) {
+    if ((erro as { status?: number }).status === 409) {
+      return NextResponse.json({ erro: (erro as Error).message }, { status: 409 });
+    }
     if ((erro as { code?: string }).code === "23505") {
       return NextResponse.json({ erro: "Este usuário já está em uso." }, { status: 409 });
     }
