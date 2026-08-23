@@ -2,6 +2,26 @@ import { NextResponse, type NextRequest } from "next/server";
 import { comEstabelecimento, queryPublico } from "@/lib/db";
 import { sincronizarCobrancaPixMercadoPago } from "@/lib/mercado-pago";
 
+// Esta rota é a fonte de verdade do acompanhamento do cliente. Ela nunca
+// pode ser reaproveitada pelo cache do Next, CDN ou navegador.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+const CABECALHOS_SEM_CACHE = {
+  "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
+  Pragma: "no-cache",
+  Expires: "0",
+};
+
+function respostaJson(corpo: unknown, init?: ResponseInit) {
+  const headers = new Headers(CABECALHOS_SEM_CACHE);
+  new Headers(init?.headers).forEach((valor, chave) => headers.set(chave, valor));
+  return NextResponse.json(corpo, {
+    ...init,
+    headers,
+  });
+}
+
 type PedidoStatusInterno = Record<string, unknown> & {
   estabelecimentoIdInterno?: string;
   pixOrderIdInterno?: string;
@@ -25,7 +45,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { slug, id } = await params;
   let pedido = await buscarPedido(slug, id);
   if (!pedido) {
-    return NextResponse.json({ erro: "Pedido não encontrado." }, { status: 404 });
+    return respostaJson({ erro: "Pedido não encontrado." }, { status: 404 });
   }
 
   const deveSincronizar = request.nextUrl.searchParams.get("sincronizarPix") === "1";
@@ -57,7 +77,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   if (!pedido) {
-    return NextResponse.json({ erro: "Pedido não encontrado." }, { status: 404 });
+    return respostaJson({ erro: "Pedido não encontrado." }, { status: 404 });
   }
 
   const pedidoPublico = Object.fromEntries(
@@ -66,5 +86,5 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     ),
   );
   if (pedidoPublico.pagamentoStatus !== "pendente") ultimaConsultaPix.delete(id);
-  return NextResponse.json(pedidoPublico);
+  return respostaJson(pedidoPublico);
 }

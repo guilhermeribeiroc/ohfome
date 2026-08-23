@@ -2537,10 +2537,39 @@ function PedidoSheet({
   onFechar: () => void;
 }) {
   const painelRef = usePainelAcessivel(onFechar);
-  const { dados } = usePolling<PedidoStatusPublico>(
+  const { dados, recarregar } = usePolling<PedidoStatusPublico>(
     `/api/publico/${slug}/pedidos/${pedidoId}`,
-    5000,
+    3000,
   );
+  const statusAnteriorRef = useRef<PedidoStatusPublico["status"] | null>(null);
+  const [avisoStatus, setAvisoStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!dados) return;
+    const statusAnterior = statusAnteriorRef.current;
+    statusAnteriorRef.current = dados.status;
+    if (!statusAnterior || statusAnterior === dados.status) return;
+    const etapa = ETAPAS_PEDIDO.find((item) => item.status === dados.status);
+    setAvisoStatus(`Seu pedido agora está: ${etapa?.label ?? dados.status}.`);
+  }, [dados?.status, dados]);
+
+  useEffect(() => {
+    const sincronizarAoVoltar = () => {
+      if (document.visibilityState === "visible") void recarregar();
+    };
+    window.addEventListener("focus", sincronizarAoVoltar);
+    document.addEventListener("visibilitychange", sincronizarAoVoltar);
+    return () => {
+      window.removeEventListener("focus", sincronizarAoVoltar);
+      document.removeEventListener("visibilitychange", sincronizarAoVoltar);
+    };
+  }, [recarregar]);
+
+  useEffect(() => {
+    if (!avisoStatus) return;
+    const id = window.setTimeout(() => setAvisoStatus(null), 6000);
+    return () => window.clearTimeout(id);
+  }, [avisoStatus]);
   const etapas =
     dados?.formaRecebimento === "retirada"
       ? ETAPAS_PEDIDO.filter((e) => e.status !== "saiu_para_entrega")
@@ -2587,6 +2616,12 @@ function PedidoSheet({
             </div>
           ) : (
             <>
+              {avisoStatus && (
+                <div role="status" aria-live="polite" className="mb-5 flex items-center gap-3 rounded-2xl border border-[#0e7775]/15 bg-[#0e7775]/10 p-4 text-sm font-medium text-[#0e7775]">
+                  <Sparkles size={17} className="shrink-0" />
+                  {avisoStatus}
+                </div>
+              )}
               {dados.notificadoMensagem && (
                 <div className="mb-6 flex items-start gap-3 rounded-2xl bg-[#0e7775] p-4 text-white shadow-lg shadow-[#0e7775]/20">
                   <MessageCircle size={17} className="mt-0.5 shrink-0" />
