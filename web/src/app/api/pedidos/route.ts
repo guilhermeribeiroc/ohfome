@@ -75,6 +75,7 @@ export async function POST(request: NextRequest) {
   const itensInput: ItemInput[] = Array.isArray(body?.itens) ? body.itens : [];
   const formaPagamento = body?.formaPagamento;
   const tipoCartao = body?.tipoCartao;
+  const trocoPara = Number(body?.trocoPara);
 
   if (tipo !== "mesa" && tipo !== "balcao" && tipo !== "delivery") {
     return NextResponse.json({ erro: "Tipo de pedido inválido." }, { status: 400 });
@@ -160,10 +161,15 @@ export async function POST(request: NextRequest) {
       }
 
       const { rows: pedidoRows } = await client.query(
-        `insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, comanda_id, cliente_id, usuario_id, taxa_entrega, forma_pagamento, tipo_cartao)
-         values ($1, $2, 'presencial', 'novo', true, now(), $3, $4, $5, $6, $7, $8)
+        `insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, comanda_id, cliente_id, usuario_id, taxa_entrega, forma_pagamento, tipo_cartao, troco_para)
+         values ($1, $2, 'presencial', 'novo', true, now(), $3, $4, $5, $6, $7, $8, $9)
          returning id`,
-        [sessao.estabelecimentoId, tipo, comandaId, clienteId, sessao.usuarioId, taxaEntrega, formaPagamento ?? null, formaPagamento === "cartao" ? tipoCartao : null]
+        [
+          sessao.estabelecimentoId, tipo, comandaId, clienteId, sessao.usuarioId, taxaEntrega,
+          formaPagamento ?? null,
+          formaPagamento === "cartao" ? tipoCartao : null,
+          formaPagamento === "dinheiro" && trocoPara > 0 ? trocoPara : null,
+        ]
       );
       const pedidoId = pedidoRows[0].id;
 

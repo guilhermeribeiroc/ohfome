@@ -46,6 +46,8 @@ export function MesasModule() {
   const [itensPorMesa, setItensPorMesa] = useState<Record<string, ItemLancado[]>>({});
   const [obsPorMesa, setObsPorMesa] = useState<Record<string, string>>({});
   const [pagamentoPorMesa, setPagamentoPorMesa] = useState<Record<string, number | null>>({});
+  const [precisaTrocoPorMesa, setPrecisaTrocoPorMesa] = useState<Record<string, boolean>>({});
+  const [trocoPorMesa, setTrocoPorMesa] = useState<Record<string, string>>({});
   const [enviando, setEnviando] = useState(false);
   const [enviados, setEnviados] = useState<Record<string, boolean>>({});
   const [gerenciarAberto, setGerenciarAberto] = useState(false);
@@ -56,6 +58,11 @@ export function MesasModule() {
   const itensAtuais = useMemo(() => mesaAbertaId ? itensPorMesa[mesaAbertaId] ?? [] : [], [itensPorMesa, mesaAbertaId]);
   const obsAtual = mesaAbertaId ? obsPorMesa[mesaAbertaId] ?? "" : "";
   const pagamentoAtualIndice = mesaAbertaId ? pagamentoPorMesa[mesaAbertaId] ?? null : null;
+  const pagamentoAtual = pagamentoAtualIndice !== null ? FORMAS_PAGAMENTO[pagamentoAtualIndice] : null;
+  const ehDinheiroAtual = pagamentoAtual?.formaPagamento === "dinheiro";
+  const precisaTrocoAtual = mesaAbertaId ? precisaTrocoPorMesa[mesaAbertaId] ?? false : false;
+  const trocoAtual = mesaAbertaId ? trocoPorMesa[mesaAbertaId] ?? "" : "";
+  const trocoAtualInvalido = ehDinheiroAtual && precisaTrocoAtual && numeroDaMoeda(trocoAtual) <= 0;
   const totalAtual = useMemo(
     () => itensAtuais.reduce((soma, item) => soma + item.precoUnitario * item.quantidade, 0),
     [itensAtuais]
@@ -97,7 +104,7 @@ export function MesasModule() {
   }
 
   async function lancarPedido() {
-    if (!mesaAbertaId || itensAtuais.length === 0) return;
+    if (!mesaAbertaId || itensAtuais.length === 0 || trocoAtualInvalido) return;
     setEnviando(true);
     const observacoes = obsPorMesa[mesaAbertaId]?.trim();
     const pagamento = pagamentoAtualIndice !== null ? FORMAS_PAGAMENTO[pagamentoAtualIndice] : null;
@@ -110,6 +117,7 @@ export function MesasModule() {
         itens: itensAtuais.map((i) => ({ produtoId: i.produtoId, quantidade: i.quantidade, observacoes: observacoes || undefined })),
         formaPagamento: pagamento?.formaPagamento,
         tipoCartao: pagamento?.tipoCartao,
+        trocoPara: ehDinheiroAtual && precisaTrocoAtual ? numeroDaMoeda(trocoAtual) : undefined,
       }),
     });
     setEnviando(false);
@@ -118,6 +126,8 @@ export function MesasModule() {
     setItensPorMesa((atual) => ({ ...atual, [mesaAbertaId]: [] }));
     setObsPorMesa((atual) => ({ ...atual, [mesaAbertaId]: "" }));
     setPagamentoPorMesa((atual) => ({ ...atual, [mesaAbertaId]: null }));
+    setPrecisaTrocoPorMesa((atual) => ({ ...atual, [mesaAbertaId]: false }));
+    setTrocoPorMesa((atual) => ({ ...atual, [mesaAbertaId]: "" }));
     setEnviados((atual) => ({ ...atual, [mesaAbertaId]: true }));
     recarregarMesas();
     setTimeout(() => setEnviados((atual) => ({ ...atual, [mesaAbertaId]: false })), 2500);
@@ -276,7 +286,12 @@ export function MesasModule() {
                       <button
                         key={opcao.label}
                         type="button"
-                        onClick={() => mesaAbertaId && setPagamentoPorMesa((atual) => ({ ...atual, [mesaAbertaId]: ativo ? null : indice }))}
+                        onClick={() => {
+                          if (!mesaAbertaId) return;
+                          setPagamentoPorMesa((atual) => ({ ...atual, [mesaAbertaId]: ativo ? null : indice }));
+                          setPrecisaTrocoPorMesa((atual) => ({ ...atual, [mesaAbertaId]: false }));
+                          setTrocoPorMesa((atual) => ({ ...atual, [mesaAbertaId]: "" }));
+                        }}
                         className={`flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-xl border-2 text-center transition-all active:scale-95 ${ativo ? "border-ink-900 bg-ink-900 text-white" : "border-cream-200 bg-cream-50 text-ink-500"}`}
                         aria-pressed={ativo}
                       >
@@ -288,13 +303,31 @@ export function MesasModule() {
                 </div>
               </div>
             )}
+            {ehDinheiroAtual && (
+              <div className="mb-3 rounded-2xl border border-cream-200 bg-cream-50 p-3.5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium text-ink-700">Precisa de troco?</span>
+                  <div className="flex rounded-xl bg-cream-100 p-1">
+                    <button type="button" onClick={() => { if (!mesaAbertaId) return; setPrecisaTrocoPorMesa((atual) => ({ ...atual, [mesaAbertaId]: false })); setTrocoPorMesa((atual) => ({ ...atual, [mesaAbertaId]: "" })); }} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${!precisaTrocoAtual ? "bg-white text-ink-900 shadow-sm" : "text-ink-400"}`}>Não</button>
+                    <button type="button" onClick={() => mesaAbertaId && setPrecisaTrocoPorMesa((atual) => ({ ...atual, [mesaAbertaId]: true }))} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${precisaTrocoAtual ? "bg-white text-ink-900 shadow-sm" : "text-ink-400"}`}>Sim</button>
+                  </div>
+                </div>
+                {precisaTrocoAtual && (
+                  <>
+                    <label className="mt-3 flex items-center overflow-hidden rounded-xl border border-cream-200 bg-white"><span className="px-3 text-sm font-semibold text-ink-400">R$</span><input inputMode="decimal" autoFocus value={trocoAtual} onChange={(e) => mesaAbertaId && setTrocoPorMesa((atual) => ({ ...atual, [mesaAbertaId]: mascararMoeda(e.target.value) }))} placeholder="0,00" className="min-w-0 flex-1 bg-transparent py-3 pr-3 text-sm outline-none" /></label>
+                    <p className="mt-1.5 text-xs text-ink-400">O cliente vai pagar com esse valor — a equipe leva o troco.</p>
+                  </>
+                )}
+              </div>
+            )}
             <div className="mb-3 flex items-center justify-between">
               <span className="text-sm text-ink-400">{itensAtuais.length} item(ns) nesta rodada · Total da mesa</span>
               <span className="font-display text-lg font-bold text-ink-900">
                 R$ {totalComanda.toFixed(2).replace(".", ",")}
               </span>
             </div>
-            <div className="flex gap-2"><button onClick={() => imprimirComanda()} className="of-btn-secondary min-h-12 shrink-0 px-4" aria-label="Imprimir comanda"><Printer size={17} /><span className="hidden sm:inline">Imprimir</span></button><button onClick={lancarPedido} disabled={itensAtuais.length === 0 || enviando} className="of-btn-primary flex-1">{enviando ? "Lançando..." : enviados[mesaAbertaId ?? ""] ? <><Check size={17} /> Pedido lançado</> : <>Lançar pedido <ArrowRight size={17} /></>}</button></div>
+            {trocoAtualInvalido && <p className="mb-2 text-xs font-medium text-coral-600">Informe o valor que o cliente vai pagar.</p>}
+            <div className="flex gap-2"><button onClick={() => imprimirComanda()} className="of-btn-secondary min-h-12 shrink-0 px-4" aria-label="Imprimir comanda"><Printer size={17} /><span className="hidden sm:inline">Imprimir</span></button><button onClick={lancarPedido} disabled={itensAtuais.length === 0 || enviando || trocoAtualInvalido} className="of-btn-primary flex-1">{enviando ? "Lançando..." : enviados[mesaAbertaId ?? ""] ? <><Check size={17} /> Pedido lançado</> : <>Lançar pedido <ArrowRight size={17} /></>}</button></div>
           </div>
         </div>
       )}

@@ -76,6 +76,9 @@ export interface VendaFinanceira {
   tipo: PedidoTipo;
   mesaNumero?: number;
   clienteNome?: string;
+  formaPagamento?: FormaPagamento;
+  tipoCartao?: TipoCartao;
+  trocoPara?: number;
   total: number;
   custoProdutos: number;
   lucroBruto: number;
