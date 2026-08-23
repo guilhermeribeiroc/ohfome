@@ -73,6 +73,8 @@ export async function POST(request: NextRequest) {
   const endereco = typeof body?.endereco === "string" ? body.endereco.trim() : undefined;
   const bairroId = typeof body?.bairroId === "string" ? body.bairroId : undefined;
   const itensInput: ItemInput[] = Array.isArray(body?.itens) ? body.itens : [];
+  const formaPagamento = body?.formaPagamento;
+  const tipoCartao = body?.tipoCartao;
 
   if (tipo !== "mesa" && tipo !== "balcao" && tipo !== "delivery") {
     return NextResponse.json({ erro: "Tipo de pedido inválido." }, { status: 400 });
@@ -82,6 +84,14 @@ export async function POST(request: NextRequest) {
   }
   if (tipo === "delivery" && (!clienteNome || !endereco)) {
     return NextResponse.json({ erro: "Informe cliente e endereço para delivery." }, { status: 400 });
+  }
+  if (formaPagamento !== undefined) {
+    if (!["dinheiro", "cartao", "pix"].includes(formaPagamento)) {
+      return NextResponse.json({ erro: "Forma de pagamento inválida." }, { status: 400 });
+    }
+    if (formaPagamento === "cartao" && tipoCartao !== "credito" && tipoCartao !== "debito") {
+      return NextResponse.json({ erro: "Informe crédito ou débito." }, { status: 400 });
+    }
   }
   const itensValidos = itensInput.filter(
     (i): i is Required<ItemInput> => typeof i.produtoId === "string" && Number.isInteger(i.quantidade) && (i.quantidade ?? 0) > 0
@@ -150,10 +160,10 @@ export async function POST(request: NextRequest) {
       }
 
       const { rows: pedidoRows } = await client.query(
-        `insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, comanda_id, cliente_id, usuario_id, taxa_entrega)
-         values ($1, $2, 'presencial', 'novo', true, now(), $3, $4, $5, $6)
+        `insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, comanda_id, cliente_id, usuario_id, taxa_entrega, forma_pagamento, tipo_cartao)
+         values ($1, $2, 'presencial', 'novo', true, now(), $3, $4, $5, $6, $7, $8)
          returning id`,
-        [sessao.estabelecimentoId, tipo, comandaId, clienteId, sessao.usuarioId, taxaEntrega]
+        [sessao.estabelecimentoId, tipo, comandaId, clienteId, sessao.usuarioId, taxaEntrega, formaPagamento ?? null, formaPagamento === "cartao" ? tipoCartao : null]
       );
       const pedidoId = pedidoRows[0].id;
 

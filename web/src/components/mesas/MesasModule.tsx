@@ -45,6 +45,7 @@ export function MesasModule() {
   const [mesaAbertaId, setMesaAbertaId] = useState<string | null>(null);
   const [itensPorMesa, setItensPorMesa] = useState<Record<string, ItemLancado[]>>({});
   const [obsPorMesa, setObsPorMesa] = useState<Record<string, string>>({});
+  const [pagamentoPorMesa, setPagamentoPorMesa] = useState<Record<string, number | null>>({});
   const [enviando, setEnviando] = useState(false);
   const [enviados, setEnviados] = useState<Record<string, boolean>>({});
   const [gerenciarAberto, setGerenciarAberto] = useState(false);
@@ -54,6 +55,7 @@ export function MesasModule() {
   const mesaAberta = (mesas ?? []).find((m) => m.id === mesaAbertaId) ?? null;
   const itensAtuais = useMemo(() => mesaAbertaId ? itensPorMesa[mesaAbertaId] ?? [] : [], [itensPorMesa, mesaAbertaId]);
   const obsAtual = mesaAbertaId ? obsPorMesa[mesaAbertaId] ?? "" : "";
+  const pagamentoAtualIndice = mesaAbertaId ? pagamentoPorMesa[mesaAbertaId] ?? null : null;
   const totalAtual = useMemo(
     () => itensAtuais.reduce((soma, item) => soma + item.precoUnitario * item.quantidade, 0),
     [itensAtuais]
@@ -98,6 +100,7 @@ export function MesasModule() {
     if (!mesaAbertaId || itensAtuais.length === 0) return;
     setEnviando(true);
     const observacoes = obsPorMesa[mesaAbertaId]?.trim();
+    const pagamento = pagamentoAtualIndice !== null ? FORMAS_PAGAMENTO[pagamentoAtualIndice] : null;
     const res = await fetch("/api/pedidos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -105,6 +108,8 @@ export function MesasModule() {
         tipo: "mesa",
         mesaId: mesaAbertaId,
         itens: itensAtuais.map((i) => ({ produtoId: i.produtoId, quantidade: i.quantidade, observacoes: observacoes || undefined })),
+        formaPagamento: pagamento?.formaPagamento,
+        tipoCartao: pagamento?.tipoCartao,
       }),
     });
     setEnviando(false);
@@ -112,6 +117,7 @@ export function MesasModule() {
 
     setItensPorMesa((atual) => ({ ...atual, [mesaAbertaId]: [] }));
     setObsPorMesa((atual) => ({ ...atual, [mesaAbertaId]: "" }));
+    setPagamentoPorMesa((atual) => ({ ...atual, [mesaAbertaId]: null }));
     setEnviados((atual) => ({ ...atual, [mesaAbertaId]: true }));
     recarregarMesas();
     setTimeout(() => setEnviados((atual) => ({ ...atual, [mesaAbertaId]: false })), 2500);
@@ -258,6 +264,29 @@ export function MesasModule() {
                   className="of-field resize-none text-sm"
                 />
               </label>
+            )}
+            {itensAtuais.length > 0 && (
+              <div className="mb-3">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[.1em] text-ink-400">Forma de pagamento (opcional)</span>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {FORMAS_PAGAMENTO.map((opcao, indice) => {
+                    const Icon = opcao.icon;
+                    const ativo = pagamentoAtualIndice === indice;
+                    return (
+                      <button
+                        key={opcao.label}
+                        type="button"
+                        onClick={() => mesaAbertaId && setPagamentoPorMesa((atual) => ({ ...atual, [mesaAbertaId]: ativo ? null : indice }))}
+                        className={`flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-xl border-2 text-center transition-all active:scale-95 ${ativo ? "border-ink-900 bg-ink-900 text-white" : "border-cream-200 bg-cream-50 text-ink-500"}`}
+                        aria-pressed={ativo}
+                      >
+                        <Icon size={16} />
+                        <span className="text-[10px] font-semibold leading-none">{opcao.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             )}
             <div className="mb-3 flex items-center justify-between">
               <span className="text-sm text-ink-400">{itensAtuais.length} item(ns) nesta rodada · Total da mesa</span>
