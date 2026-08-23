@@ -13,6 +13,18 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (!body) return NextResponse.json({ erro: "Corpo inválido." }, { status: 400 });
 
   if (body.status === "livre") {
+    const formaPagamento = body.formaPagamento;
+    const tipoCartao = body.tipoCartao;
+    const trocoPara = Number(body.trocoPara);
+    if (formaPagamento !== undefined) {
+      if (!["dinheiro", "cartao", "pix"].includes(formaPagamento)) {
+        return NextResponse.json({ erro: "Forma de pagamento inválida." }, { status: 400 });
+      }
+      if (formaPagamento === "cartao" && tipoCartao !== "credito" && tipoCartao !== "debito") {
+        return NextResponse.json({ erro: "Informe crédito ou débito." }, { status: 400 });
+      }
+    }
+
     const mesa = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
       const { rows: comandaRows } = await client.query(
         `select id from comandas where mesa_id = $1 and status = 'aberta'`,
@@ -20,13 +32,26 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       );
       const comandaId = comandaRows[0]?.id as string | undefined;
       if (comandaId) {
-        // Desocupar a mesa fecha a conta: qualquer pedido dessa comanda que
-        // ainda nao chegou em "finalizado" (preso no controle de pedidos) e
-        // forcado a finalizar, some do Kanban e passa a contar no financeiro.
-        await client.query(
-          `update pedidos set status = 'finalizado' where comanda_id = $1 and status not in ('finalizado', 'cancelado')`,
-          [comandaId]
-        );
+        if (formaPagamento) {
+          // Desocupar a mesa fecha a conta: qualquer pedido dessa comanda
+          // (de qualquer rodada) leva a forma de pagamento escolhida, e o
+          // que ainda nao tinha chegado em "finalizado" e forcado a
+          // finalizar — some do controle de pedidos e conta no financeiro.
+          await client.query(
+            `update pedidos set
+               status = case when status not in ('finalizado', 'cancelado') then 'finalizado' else status end,
+               forma_pagamento = $2,
+               tipo_cartao = $3,
+               troco_para = $4
+             where comanda_id = $1 and status <> 'cancelado'`,
+            [comandaId, formaPagamento, formaPagamento === "cartao" ? tipoCartao : null, formaPagamento === "dinheiro" && trocoPara > 0 ? trocoPara : null]
+          );
+        } else {
+          await client.query(
+            `update pedidos set status = 'finalizado' where comanda_id = $1 and status not in ('finalizado', 'cancelado')`,
+            [comandaId]
+          );
+        }
         await client.query(`update comandas set status = 'fechada', fechada_em = now() where id = $1`, [comandaId]);
       }
       const { rows } = await client.query(

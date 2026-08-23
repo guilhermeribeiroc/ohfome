@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowRight, Check, DoorOpen, Minus, Plus, Printer, Search, Settings2, Users, X } from "lucide-react";
+import { ArrowRight, Banknote, Check, CreditCard, DoorOpen, Minus, Plus, Printer, QrCode, Search, Settings2, Users, X } from "lucide-react";
 import type { Mesa, MesaStatus, Pedido, Produto } from "@/lib/types";
 import { MESA_STATUS_LABEL, nomeProdutoComTamanho } from "@/lib/types";
+import { mascararMoeda, numeroDaMoeda } from "@/lib/moeda";
 import { usePolling } from "@/lib/use-polling";
 
 const GRADIENTE_CORAL = "linear-gradient(120deg, var(--color-coral-600), var(--color-coral-500), var(--color-mango-500))";
@@ -21,6 +22,13 @@ const STATUS_DOT: Record<MesaStatus, string> = {
   aguardando_conta: "bg-mango-500",
   reservada: "bg-status-em_preparo",
 };
+
+const FORMAS_PAGAMENTO = [
+  { formaPagamento: "dinheiro" as const, tipoCartao: undefined, label: "Dinheiro", texto: "Dinheiro · sem troco", icon: Banknote },
+  { formaPagamento: "pix" as const, tipoCartao: undefined, label: "Pix", texto: "PIX", icon: QrCode },
+  { formaPagamento: "cartao" as const, tipoCartao: "debito" as const, label: "Débito", texto: "Cartão · Débito", icon: CreditCard },
+  { formaPagamento: "cartao" as const, tipoCartao: "credito" as const, label: "Crédito", texto: "Cartão · Crédito", icon: CreditCard },
+];
 
 interface ItemLancado {
   produtoId: string;
@@ -41,7 +49,7 @@ export function MesasModule() {
   const [enviados, setEnviados] = useState<Record<string, boolean>>({});
   const [gerenciarAberto, setGerenciarAberto] = useState(false);
   const [busca, setBusca] = useState("");
-  const [desocupando, setDesocupando] = useState(false);
+  const [fecharContaAberto, setFecharContaAberto] = useState(false);
 
   const mesaAberta = (mesas ?? []).find((m) => m.id === mesaAbertaId) ?? null;
   const itensAtuais = useMemo(() => mesaAbertaId ? itensPorMesa[mesaAbertaId] ?? [] : [], [itensPorMesa, mesaAbertaId]);
@@ -109,26 +117,28 @@ export function MesasModule() {
     setTimeout(() => setEnviados((atual) => ({ ...atual, [mesaAbertaId]: false })), 2500);
   }
 
-  async function desocuparMesa(mesa: Mesa) {
-    if (!confirm(`Desocupar a mesa ${mesa.numero}? Qualquer pedido dela ainda pendente no controle de pedidos será finalizado automaticamente.`)) return;
-    setDesocupando(true);
-    const resposta = await fetch(`/api/mesas/${mesa.id}`, {
+  async function confirmarFechamento(pagamento: { formaPagamento: "dinheiro" | "pix" | "cartao"; tipoCartao?: "credito" | "debito"; trocoPara?: number; texto: string }) {
+    if (!mesaAberta) return;
+    // Imprime primeiro (ainda dentro do clique do usuario, senao o navegador
+    // bloqueia o popup) e so depois libera a mesa no servidor.
+    imprimirComanda(pagamento.texto);
+    const resposta = await fetch(`/api/mesas/${mesaAberta.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "livre" }),
+      body: JSON.stringify({ status: "livre", formaPagamento: pagamento.formaPagamento, tipoCartao: pagamento.tipoCartao, trocoPara: pagamento.trocoPara }),
     });
-    setDesocupando(false);
     if (!resposta.ok) {
       const dados = await resposta.json().catch(() => null);
-      alert(dados?.erro ?? "Não foi possível desocupar a mesa.");
+      alert(dados?.erro ?? "Não foi possível fechar a conta.");
       return;
     }
     navigator.vibrate?.(12);
+    setFecharContaAberto(false);
     setMesaAbertaId(null);
     recarregarMesas();
   }
 
-  function imprimirComanda() {
+  function imprimirComanda(pagamentoTexto?: string) {
     if (!mesaAberta) return;
     const escapar = (valor: string) => valor.replace(/[&<>"']/g, (caractere) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[caractere] ?? caractere);
     const itens = [
@@ -137,7 +147,7 @@ export function MesasModule() {
     ];
     const janela = window.open("", "_blank", "width=420,height=700");
     if (!janela) return;
-    janela.document.write(`<!doctype html><html><head><title>Comanda mesa ${mesaAberta.numero}</title><style>body{font:14px Arial,sans-serif;color:#171717;padding:20px}h1{font-size:22px;margin:0 0 4px}p{margin:0 0 16px;color:#666}.item{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px dashed #bbb}.total{display:flex;justify-content:space-between;font-size:18px;font-weight:700;margin-top:18px;padding-top:12px;border-top:2px solid #171717}@media print{body{padding:0}}</style></head><body><h1>Comanda · Mesa ${mesaAberta.numero}</h1><p>${new Date().toLocaleString("pt-BR")}</p>${itens.length ? itens.map((item) => `<div class="item"><span>${item.quantidade}× ${escapar(item.nome)}</span><strong>R$ ${item.valor.toFixed(2).replace(".", ",")}</strong></div>`).join("") : "<p>Sem itens lançados.</p>"}<div class="total"><span>Total parcial</span><span>R$ ${totalComanda.toFixed(2).replace(".", ",")}</span></div><script>window.onload=()=>window.print()<\/script></body></html>`);
+    janela.document.write(`<!doctype html><html><head><title>Comanda mesa ${mesaAberta.numero}</title><style>body{font:14px Arial,sans-serif;color:#171717;padding:20px}h1{font-size:22px;margin:0 0 4px}p{margin:0 0 16px;color:#666}.pagamento{display:inline-block;background:#f3eee7;border-radius:99px;padding:5px 12px;font-size:12px;font-weight:700;color:#8d3c29;margin-bottom:14px}.item{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px dashed #bbb}.total{display:flex;justify-content:space-between;font-size:18px;font-weight:700;margin-top:18px;padding-top:12px;border-top:2px solid #171717}@media print{body{padding:0}}</style></head><body><h1>Comanda · Mesa ${mesaAberta.numero}</h1><p>${new Date().toLocaleString("pt-BR")}</p>${pagamentoTexto ? `<span class="pagamento">Pagamento: ${escapar(pagamentoTexto)}</span>` : ""}${itens.length ? itens.map((item) => `<div class="item"><span>${item.quantidade}× ${escapar(item.nome)}</span><strong>R$ ${item.valor.toFixed(2).replace(".", ",")}</strong></div>`).join("") : "<p>Sem itens lançados.</p>"}<div class="total"><span>Total${pagamentoTexto ? "" : " parcial"}</span><span>R$ ${totalComanda.toFixed(2).replace(".", ",")}</span></div><script>window.onload=()=>window.print()<\/script></body></html>`);
     janela.document.close();
   }
 
@@ -189,11 +199,10 @@ export function MesasModule() {
             <div className="flex shrink-0 items-center gap-2">
               {mesaAberta.status !== "livre" && (
                 <button
-                  onClick={() => void desocuparMesa(mesaAberta)}
-                  disabled={desocupando}
-                  className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-basil-050 px-3.5 text-xs font-semibold text-basil-700 transition active:scale-95 disabled:opacity-50"
+                  onClick={() => setFecharContaAberto(true)}
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-basil-050 px-3.5 text-xs font-semibold text-basil-700 transition active:scale-95"
                 >
-                  <DoorOpen size={16} /> {desocupando ? "Desocupando..." : "Desocupar"}
+                  <DoorOpen size={16} /> Desocupar
                 </button>
               )}
               <button onClick={() => setMesaAbertaId(null)} className="of-icon-btn shrink-0" aria-label="Fechar comanda"><X size={18} /></button>
@@ -256,9 +265,18 @@ export function MesasModule() {
                 R$ {totalComanda.toFixed(2).replace(".", ",")}
               </span>
             </div>
-            <div className="flex gap-2"><button onClick={imprimirComanda} className="of-btn-secondary min-h-12 shrink-0 px-4" aria-label="Imprimir comanda"><Printer size={17} /><span className="hidden sm:inline">Imprimir</span></button><button onClick={lancarPedido} disabled={itensAtuais.length === 0 || enviando} className="of-btn-primary flex-1">{enviando ? "Lançando..." : enviados[mesaAbertaId ?? ""] ? <><Check size={17} /> Pedido lançado</> : <>Lançar pedido <ArrowRight size={17} /></>}</button></div>
+            <div className="flex gap-2"><button onClick={() => imprimirComanda()} className="of-btn-secondary min-h-12 shrink-0 px-4" aria-label="Imprimir comanda"><Printer size={17} /><span className="hidden sm:inline">Imprimir</span></button><button onClick={lancarPedido} disabled={itensAtuais.length === 0 || enviando} className="of-btn-primary flex-1">{enviando ? "Lançando..." : enviados[mesaAbertaId ?? ""] ? <><Check size={17} /> Pedido lançado</> : <>Lançar pedido <ArrowRight size={17} /></>}</button></div>
           </div>
         </div>
+      )}
+
+      {fecharContaAberto && mesaAberta && (
+        <FecharContaModal
+          mesa={mesaAberta}
+          total={totalComanda}
+          onFechar={() => setFecharContaAberto(false)}
+          onConfirmar={confirmarFechamento}
+        />
       )}
 
       {gerenciarAberto && (
@@ -268,6 +286,113 @@ export function MesasModule() {
           onAlterou={recarregarMesas}
         />
       )}
+    </div>
+  );
+}
+
+function FecharContaModal({
+  mesa,
+  total,
+  onFechar,
+  onConfirmar,
+}: {
+  mesa: Mesa;
+  total: number;
+  onFechar: () => void;
+  onConfirmar: (pagamento: { formaPagamento: "dinheiro" | "pix" | "cartao"; tipoCartao?: "credito" | "debito"; trocoPara?: number; texto: string }) => Promise<void>;
+}) {
+  const [selecionado, setSelecionado] = useState<number | null>(null);
+  const [precisaTroco, setPrecisaTroco] = useState(false);
+  const [trocoPara, setTrocoPara] = useState("");
+  const [enviando, setEnviando] = useState(false);
+
+  const opcaoSelecionada = selecionado !== null ? FORMAS_PAGAMENTO[selecionado] : null;
+  const ehDinheiro = opcaoSelecionada?.formaPagamento === "dinheiro";
+  const trocoInvalido = ehDinheiro && precisaTroco && numeroDaMoeda(trocoPara) <= 0;
+
+  function selecionar(indice: number) {
+    navigator.vibrate?.(8);
+    setSelecionado(indice);
+    setPrecisaTroco(false);
+    setTrocoPara("");
+  }
+
+  async function confirmar() {
+    if (selecionado === null || trocoInvalido) return;
+    const opcao = FORMAS_PAGAMENTO[selecionado];
+    setEnviando(true);
+    await onConfirmar({
+      formaPagamento: opcao.formaPagamento,
+      tipoCartao: opcao.tipoCartao,
+      trocoPara: ehDinheiro && precisaTroco ? numeroDaMoeda(trocoPara) : undefined,
+      texto: ehDinheiro && precisaTroco && numeroDaMoeda(trocoPara) > 0
+        ? `Dinheiro · troco para R$ ${numeroDaMoeda(trocoPara).toFixed(2).replace(".", ",")}`
+        : opcao.texto,
+    });
+    setEnviando(false);
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-ink-900/45 backdrop-blur-sm sm:items-center" role="dialog" aria-modal="true" aria-label={`Fechar conta da mesa ${mesa.numero}`}>
+      <div className="flex w-full max-w-sm flex-col rounded-t-[2rem] bg-surface shadow-2xl sm:rounded-[2rem]">
+        <div className="flex items-start justify-between p-5 pb-4">
+          <div>
+            <p className="of-eyebrow">Mesa {mesa.numero}</p>
+            <p className="font-display text-lg font-bold leading-tight text-ink-900">Como foi pago?</p>
+          </div>
+          <button onClick={onFechar} className="of-icon-btn shrink-0" aria-label="Cancelar"><X size={17} /></button>
+        </div>
+
+        <div className="px-5">
+          <div className="rounded-2xl bg-cream-50 px-4 py-3.5 text-center">
+            <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-ink-400">Total da conta</p>
+            <p className="mt-0.5 font-display text-[1.7rem] font-bold leading-none tracking-tight text-ink-900">R$ {total.toFixed(2).replace(".", ",")}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2.5 p-5">
+          {FORMAS_PAGAMENTO.map((opcao, indice) => {
+            const Icon = opcao.icon;
+            const ativo = selecionado === indice;
+            return (
+              <button
+                key={opcao.label}
+                type="button"
+                onClick={() => selecionar(indice)}
+                className={`flex min-h-[76px] flex-col items-center justify-center gap-1.5 rounded-2xl border-2 transition-all active:scale-95 ${ativo ? "border-ink-900 bg-ink-900 text-white shadow-lg shadow-ink-900/20" : "border-cream-200 bg-cream-50 text-ink-600"}`}
+              >
+                <Icon size={21} />
+                <span className="text-xs font-semibold">{opcao.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {ehDinheiro && (
+          <div className="mx-5 mb-5 rounded-2xl border border-cream-200 bg-cream-50 p-3.5">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium text-ink-700">Precisa de troco?</span>
+              <div className="flex rounded-xl bg-cream-100 p-1">
+                <button type="button" onClick={() => { setPrecisaTroco(false); setTrocoPara(""); }} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${!precisaTroco ? "bg-white text-ink-900 shadow-sm" : "text-ink-400"}`}>Não</button>
+                <button type="button" onClick={() => setPrecisaTroco(true)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${precisaTroco ? "bg-white text-ink-900 shadow-sm" : "text-ink-400"}`}>Sim</button>
+              </div>
+            </div>
+            {precisaTroco && (
+              <>
+                <label className="mt-3 flex items-center overflow-hidden rounded-xl border border-cream-200 bg-white"><span className="px-3 text-sm font-semibold text-ink-400">R$</span><input inputMode="decimal" autoFocus value={trocoPara} onChange={(evento) => setTrocoPara(mascararMoeda(evento.target.value))} placeholder="0,00" className="min-w-0 flex-1 bg-transparent py-3 pr-3 text-sm outline-none" /></label>
+                <p className="mt-1.5 text-xs text-ink-400">O cliente vai pagar com esse valor — a equipe leva o troco.</p>
+              </>
+            )}
+          </div>
+        )}
+
+        <div className="p-5 pt-0 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+          {trocoInvalido && <p className="mb-2 text-xs font-medium text-coral-600">Informe o valor que o cliente vai pagar.</p>}
+          <button onClick={() => void confirmar()} disabled={selecionado === null || enviando || trocoInvalido} className="of-primary-btn min-h-12 w-full disabled:opacity-40">
+            {enviando ? "Liberando mesa..." : <><DoorOpen size={17} /> Confirmar e liberar mesa</>}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
