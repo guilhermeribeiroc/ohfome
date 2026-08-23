@@ -91,7 +91,10 @@ export async function GET(request: NextRequest) {
 
   const ultimaLinha = linhas[linhas.length - 1];
   const nextCursor = linhas.length === limit && ultimaLinha
-    ? codificarCursor(ultimaLinha.created_at, ultimaLinha.id)
+    // created_at chega do pg ja como Date (parser padrao pra timestamptz);
+    // precisa virar ISO antes de codificar, senao o cursor decodificado
+    // depois quebra o cast de volta pra timestamptz na proxima pagina.
+    ? codificarCursor(new Date(ultimaLinha.created_at).toISOString(), ultimaLinha.id)
     : null;
 
   return NextResponse.json({ data, nextCursor });
