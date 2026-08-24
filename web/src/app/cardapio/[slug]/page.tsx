@@ -9,7 +9,14 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     [slug]
   );
   const nome = linhas[0]?.fn_cardapio_publico?.nome;
-  return { title: nome ? `${nome} | Cardápio digital` : "Cardápio digital | OhFome" };
+  return {
+    title: nome ? `${nome} | Cardápio digital` : "Cardápio digital | OhFome",
+    icons: {
+      icon: [{ url: "/marca/ohfome-favicon.png?v=20260823", type: "image/png", sizes: "512x512" }],
+      shortcut: "/marca/ohfome-favicon.png?v=20260823",
+      apple: "/marca/ohfome-favicon.png?v=20260823",
+    },
+  };
 }
 
 export default async function CardapioPage({ params }: { params: Promise<{ slug: string }> }) {

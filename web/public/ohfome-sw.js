@@ -1,5 +1,5 @@
-const CACHE = "ohfome-operacao-v1";
-const ASSETS = ["/", "/login", "/marca/ohfome-icone-quadrado.png?v=20260821"];
+const CACHE = "ohfome-operacao-v2";
+const ASSETS = ["/", "/login", "/marca/ohfome-favicon.png?v=20260823"];
 self.addEventListener("install", (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())));
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 self.addEventListener("fetch", (event) => {

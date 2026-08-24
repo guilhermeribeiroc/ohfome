@@ -19,10 +19,10 @@ export const metadata: Metadata = {
   description: "OhFome — plataforma de gestão para redes de estabelecimentos de comida",
   icons: {
     icon: [
-      { url: "/marca/ohfome-icone-quadrado.png?v=20260821-2", type: "image/png", sizes: "512x512" },
+      { url: "/marca/ohfome-favicon.png?v=20260823", type: "image/png", sizes: "512x512" },
     ],
-    shortcut: "/marca/ohfome-icone-quadrado.png?v=20260821-2",
-    apple: "/marca/ohfome-icone-quadrado.png?v=20260821-2",
+    shortcut: "/marca/ohfome-favicon.png?v=20260823",
+    apple: "/marca/ohfome-favicon.png?v=20260823",
   },
 };
 

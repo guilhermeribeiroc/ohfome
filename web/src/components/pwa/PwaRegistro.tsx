@@ -16,7 +16,7 @@ export function PwaRegistro() {
   useEffect(() => {
     const manifest = document.createElement("link");
     manifest.rel = "manifest";
-    manifest.href = "/ohfome-admin.webmanifest?v=1";
+    manifest.href = "/ohfome-admin.webmanifest?v=2";
     document.head.appendChild(manifest);
     const guardarPrompt = (evento: Event) => {
       evento.preventDefault();
@@ -24,7 +24,7 @@ export function PwaRegistro() {
       window.dispatchEvent(new Event("ohfome-installable"));
     };
     window.addEventListener("beforeinstallprompt", guardarPrompt);
-    if ("serviceWorker" in navigator && window.isSecureContext) navigator.serviceWorker.register("/ohfome-sw.js?v=1").catch(() => undefined);
+    if ("serviceWorker" in navigator && window.isSecureContext) navigator.serviceWorker.register("/ohfome-sw.js?v=2").catch(() => undefined);
 
     // Celular/PWA instalado costuma suspender os timers de polling quando o
     // app fica em segundo plano por um tempo; ao voltar, a tela ficava
