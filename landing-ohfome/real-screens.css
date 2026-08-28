@@ -6,9 +6,12 @@
 .flow-screen-thumb{width:48px;height:48px;overflow:hidden;border-radius:12px;background:#191613;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}.flow-screen-thumb img{display:block;width:100%;height:100%;object-fit:cover;object-position:top}.flow-screen-shot{height:92px;margin-bottom:17px;overflow:hidden;border:1px solid #e8e0d6;border-radius:11px;background:#f5f1eb}.flow-screen-shot img{display:block;width:100%;height:100%;object-fit:cover;object-position:left top}.flow-kitchen .flow-screen-shot img{object-position:50% 18%}.flow-delivery .flow-screen-shot img{object-position:30% top}.flow-stage .flow-photo{display:none}
 
 .product-gallery{margin-top:112px;padding:76px 56px;border:1px solid rgba(107,91,74,.12);border-radius:34px;background:#f8f5ef;box-shadow:0 25px 55px -50px rgba(43,32,22,.5)}.gallery-heading{display:grid;grid-template-columns:minmax(0,.95fr) minmax(280px,.65fr);gap:20px 70px;align-items:end;max-width:1050px;margin-bottom:48px}.gallery-heading .eyebrow{grid-column:1/-1;margin-bottom:-5px}.gallery-heading h2{margin:0;font-family:var(--display);font-size:clamp(40px,4.5vw,62px);font-weight:650;letter-spacing:-.07em;line-height:.91}.gallery-heading h2 em{color:var(--coral-dark);font-style:normal}.gallery-heading>p:not(.eyebrow){max-width:430px;margin:0 0 4px;color:#6f665d;font-size:12px;line-height:1.8}.gallery-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}.gallery-card{position:relative;display:flex;min-height:408px;flex-direction:column;overflow:hidden;border:1px solid #e6ded5;border-radius:22px;background:#fffdf9;box-shadow:0 18px 30px -28px rgba(35,28,21,.52)}.gallery-copy{position:relative;z-index:2;padding:25px 26px 14px}.gallery-copy>span{color:var(--coral-dark);font-size:8px;font-weight:800;letter-spacing:.13em}.gallery-copy h3{max-width:370px;margin:9px 0 8px;font-family:var(--display);font-size:26px;letter-spacing:-.06em;line-height:1.02}.gallery-copy p{max-width:385px;margin:0;color:#756b60;font-size:10px;line-height:1.65}.gallery-visual{position:relative;flex:1;min-height:190px;overflow:hidden;margin:4px 18px 18px;border:1px solid #e4ddd4;border-radius:15px;background:#f2eee7;box-shadow:0 15px 25px -24px rgba(28,22,16,.55)}.gallery-visual>img:not(.gallery-overlay){display:block;width:100%;height:100%;object-fit:cover;object-position:left top}.gallery-finance{grid-column:span 2;min-height:505px}.gallery-finance .gallery-copy{max-width:470px}.gallery-finance-visual{min-height:300px;margin:0 26px 26px}.gallery-finance-visual>img:not(.gallery-overlay){object-position:left top}.gallery-overlay{position:absolute;right:16px;bottom:15px;width:50%;height:52%;border:5px solid #fffdf9;border-radius:13px;object-fit:cover;object-position:left top;box-shadow:0 22px 32px -19px rgba(30,24,17,.5)}.gallery-pix .gallery-visual>img,.gallery-printing .gallery-visual>img{object-position:left top}
-.gallery-printing{grid-column:span 2}
-.gallery-printing .gallery-copy h3,.gallery-printing .gallery-copy p{max-width:520px}
-@media(max-width:650px){.gallery-printing{grid-column:auto}}
+.gallery-printing{grid-column:span 2;min-height:0;flex-direction:row;align-items:center}
+.gallery-printing .gallery-copy{flex:1;padding:26px 8px 26px 30px}
+.gallery-printing .gallery-copy h3,.gallery-printing .gallery-copy p{max-width:340px}
+.gallery-printing .gallery-visual{flex:none;width:280px;height:170px;margin:20px 22px}
+@media(max-width:900px){.gallery-printing .gallery-visual{width:220px}}
+@media(max-width:650px){.gallery-printing{grid-column:auto;flex-direction:column;min-height:auto}.gallery-printing .gallery-copy{padding:23px 22px 4px}.gallery-printing .gallery-visual{width:auto;height:190px;margin:4px 14px 14px}}
 .motion-ready .reveal{transition:none}
 .gallery-waiter,.gallery-pix{height:460px}
 .gallery-waiter .gallery-visual,.gallery-pix .gallery-visual{flex:none;height:280px}
@@ -30,7 +33,7 @@
 .feature-shot{order:99;flex:none;position:relative;overflow:hidden;margin:22px -28px -28px;background:#f5f1ea;box-shadow:inset 0 1px 0 rgba(25,23,20,.06)}
 .feature-shot img{display:block;width:100%;height:100%;object-fit:cover}
 .feature-shot-central{height:280px}
-.feature-shot-central img{object-position:56% 12%}
+.feature-shot-central img{object-position:left top}
 .feature-shot-phone{height:320px;background:#171411}
 .feature-shot-waiter img{object-position:top}
 .feature-shot-menu img{object-position:top}
