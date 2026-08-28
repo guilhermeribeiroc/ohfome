@@ -63,7 +63,7 @@ export const MODULOS: ModuloInfo[] = [
     label: "Cardápio Digital",
     descricao: "Pedidos online por link, WhatsApp e controle de Delivery incluído.",
     papel: "site",
-    href: "/site",
+    href: "/cardapio-digital",
   },
 ];
 

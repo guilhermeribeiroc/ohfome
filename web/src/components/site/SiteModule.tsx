@@ -12,6 +12,10 @@ const ABAS = [
   { id: "produtos", label: "Produtos do cardápio" },
 ] as const;
 
+function normalizarDominioPublico(valor: string) {
+  return valor.trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+}
+
 export function SiteModule() {
   const { estabelecimento } = useTenant();
   const [aba, setAba] = useState<(typeof ABAS)[number]["id"]>("pedidos");
@@ -26,10 +30,13 @@ export function SiteModule() {
   const [salvandoWhatsapp, setSalvandoWhatsapp] = useState(false);
   const [erroWhatsapp, setErroWhatsapp] = useState("");
 
+  const dominioPublicoConfigurado = normalizarDominioPublico(process.env.NEXT_PUBLIC_CARDAPIO_DOMINIO ?? "");
   const link = estabelecimento
-    ? origem.includes("ohfome.app")
-      ? `${origem.replace("://", `://${estabelecimento.slug}.`)}`
-      : `${origem}/cardapio/${estabelecimento.slug}`
+    ? dominioPublicoConfigurado
+      ? `https://${estabelecimento.slug}.${dominioPublicoConfigurado}`
+      : origem.includes("ohfome.app")
+        ? `https://${estabelecimento.slug}.ohfome.app`
+        : `${origem}/cardapio/${estabelecimento.slug}`
     : "";
 
   useEffect(() => {

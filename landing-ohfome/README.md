@@ -1,16 +1,22 @@
 # Landing do OhFome
 
-Landing page estática e independente do sistema de gestão. Ela pode ser hospedada separadamente, por exemplo em `www.ohfome.app` ou `ohfome.app`, enquanto a aplicação fica em `gestao.ohfome.app` e os cardápios em subdomínios dos estabelecimentos.
+Landing estática publicada no mesmo domínio do sistema, em `ohfome.app/site`.
 
-## Publicação
+## Easypanel
 
-Envie todo o conteúdo desta pasta ao host estático. Não há banco de dados, login, API ou dependência do projeto principal.
+1. No serviço `landing-ohfome`, selecione **GitHub** como fonte.
+2. Escolha o repositório `guilhermeribeiroc/ohfome`, branch `master` e Build Path `/landing-ohfome`.
+3. Na seção **Build**, escolha **Dockerfile**. O arquivo já está nesta pasta.
+4. Em **Domains**, crie a rota com hostname `ohfome.app`, path `/site`, porta `80` e HTTPS ativado.
+5. No serviço do sistema, mantenha `ohfome.app` com path `/` e porta `3000`.
+6. Faça o deploy. A landing responderá em `/site`; login, gestão e APIs continuam no serviço do sistema.
 
-O scroll suave usa Lenis via CDN. Para funcionamento sem internet/CDN, baixe o pacote Lenis e altere a primeira linha de `app.js` para apontar ao arquivo local.
+## Cloudflare
 
-Os links de ação já apontam para:
+Mantenha o registro A de `ohfome.app` apontando para o IP do servidor Easypanel. Se o certificado HTTPS ainda não estiver emitido, deixe o proxy da Cloudflare desligado até a primeira emissão.
 
-- `https://gestao.ohfome.app/registro`
-- `https://gestao.ohfome.app/login`
+## Endereços
 
-Altere-os em `index.html` se o domínio de produção mudar.
+- Landing: `https://ohfome.app/site`
+- Sistema: `https://ohfome.app/login`
+- Cardápios públicos: `https://cliente.ohfome.app`
