@@ -1,0 +1,231 @@
+/* Full-bleed page system: sections own the whole viewport, never a page-sized card. */
+:root {
+  --page-gutter: max(28px, calc((100vw - 1240px) / 2));
+  --surface: #f8f6f2;
+  --surface-deep: #ece5db;
+}
+
+html,
+body { overflow-x: clip; background: var(--surface); }
+
+.section-shell { width: 100%; margin: 0; }
+
+.site-header {
+  top: 0;
+  left: 0;
+  width: 100%;
+  min-height: 78px;
+  padding: 16px var(--page-gutter);
+  border: 0;
+  border-radius: 0;
+  transform: none;
+}
+
+.site-header.is-scrolled {
+  top: 0;
+  border: 0;
+  border-bottom: 1px solid rgba(25, 23, 20, .08);
+  border-radius: 0;
+  box-shadow: 0 10px 28px rgba(25, 23, 20, .08);
+}
+
+.hero.section-shell {
+  width: 100%;
+  min-height: 100svh;
+  height: auto;
+  max-height: none;
+  padding: 128px var(--page-gutter) 74px;
+  border-radius: 0;
+}
+
+.hero-stage { min-width: 0; }
+.dashboard-window { border-radius: 18px 0 0 0; }
+.real-central-shot { object-fit: contain; object-position: center; background: #fff; }
+
+.operation,
+.features,
+.product-gallery,
+.process-flow {
+  width: 100%;
+  margin: 0;
+  padding: clamp(76px, 9vw, 132px) var(--page-gutter);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.operation { background: var(--surface); }
+.features { background: #f1ece4; }
+.product-gallery { background: var(--surface); }
+.process-flow { background: #f1ece4; }
+
+.menu-spotlight {
+  width: 100%;
+  margin: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.menu-spotlight-copy { padding-left: var(--page-gutter); }
+.menu-order-flow { padding-right: var(--page-gutter); }
+
+.control { width: 100%; margin: 0; padding: 0; }
+.control-card { width: 100%; border-radius: 0; }
+
+.pricing {
+  width: 100%;
+  margin: 0;
+  padding: clamp(78px, 9vw, 132px) var(--page-gutter);
+  border: 0;
+  background: var(--surface);
+}
+
+.final-cta { width: 100%; padding: 0; }
+.final-card { border-radius: 0; padding-right: var(--page-gutter); padding-left: var(--page-gutter); }
+.site-footer { width: 100%; padding: 42px var(--page-gutter); }
+
+/* Screenshots are evidence, so preserve their native framing instead of cropping them. */
+.feature-shot,
+.gallery-visual,
+.journey-phone,
+.journey-central-visual,
+.journey-desktop-shot,
+.flow-screen-shot,
+.menu-screen,
+.journey-receipt-shot {
+  display: grid;
+  place-items: center;
+}
+
+.feature-shot img,
+.gallery-visual > img:not(.gallery-overlay),
+.journey-phone img,
+.journey-central-visual > img:first-child,
+.journey-desktop-shot > img:first-child,
+.flow-screen-shot > img:not(.delivery-status-shot),
+.menu-screen img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain !important;
+  object-position: center !important;
+  background: #fff;
+}
+
+.gallery-overlay,
+.journey-delivery-card,
+.flow-screen-shot .delivery-status-shot {
+  object-fit: contain !important;
+  object-position: center !important;
+  background: #fff;
+}
+
+.feature-shot-central { height: auto; aspect-ratio: 2.43 / 1; }
+.feature-shot-finance { height: auto; aspect-ratio: 2.43 / 1; }
+.feature-shot-receipt { height: auto; aspect-ratio: 1.14 / 1; }
+.gallery-finance-visual { aspect-ratio: 2.43 / 1; min-height: 0; }
+.gallery-visual { background: #f7f4ef; }
+
+@media (max-width: 900px) {
+  :root { --page-gutter: 28px; }
+
+  .hero.section-shell { min-height: 0; padding-top: 122px; }
+  .operation,
+  .features,
+  .product-gallery,
+  .process-flow,
+  .pricing { padding-top: 74px; padding-bottom: 74px; }
+
+  .menu-spotlight-copy { padding-right: var(--page-gutter); padding-left: var(--page-gutter); }
+  .menu-order-flow { padding-right: 0; }
+}
+
+@media (max-width: 650px) {
+  :root { --page-gutter: 20px; }
+
+  .site-header { min-height: 66px; padding-top: 12px; padding-bottom: 12px; }
+  .site-header .button-small { min-height: 38px; padding-right: 13px; padding-left: 13px; }
+  .brand { font-size: 20px; }
+
+  .hero.section-shell {
+    display: block;
+    min-height: 0;
+    padding-top: 105px;
+    padding-bottom: 42px;
+  }
+
+  .hero h1 { font-size: clamp(48px, 14vw, 64px); }
+  .hero-description { max-width: 34rem; font-size: 13px; }
+  .hero-stage {
+    height: 270px;
+    margin: 30px 0 0;
+  }
+
+  .hero-stage .dashboard-window {
+    inset: 28px 0 auto;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 2.43 / 1;
+    border-radius: 13px;
+    transform: none;
+  }
+
+  .hero-stage .floating-revenue {
+    top: 0;
+    right: 8px;
+    width: 143px;
+    padding: 11px;
+    transform: rotate(2deg);
+  }
+
+  .hero-stage .floating-order {
+    right: 8px;
+    bottom: 0;
+    width: 151px;
+    padding: 10px;
+    transform: rotate(-2deg);
+  }
+
+  .operation,
+  .features,
+  .product-gallery,
+  .process-flow,
+  .pricing { padding-top: 64px; padding-bottom: 64px; }
+
+  .operation-map { padding-bottom: 0; }
+  .feature-grid { gap: 14px; }
+  .feature { min-height: 0; }
+  .feature-shot { margin-right: -22px; margin-bottom: -22px; margin-left: -22px; }
+  .feature-shot-central,
+  .feature-shot-finance { aspect-ratio: 1.85 / 1; }
+  .feature-shot-phone { height: 315px; }
+  .feature-shot-receipt { aspect-ratio: 1.1 / 1; }
+
+  .menu-spotlight { min-height: 0; }
+  .menu-spotlight-copy { padding-top: 64px; padding-bottom: 22px; }
+  .menu-order-flow { min-height: 520px; }
+  .menu-screen-main { right: 9%; width: min(68vw, 255px); height: 455px; }
+  .menu-screen-product { display: none; }
+  .menu-screen-cart { right: 0; width: 128px; height: 228px; }
+  .menu-screen-checkout { right: 36%; width: 118px; height: 210px; }
+
+  .journey-source,
+  .journey-outcome { min-height: 0; }
+  .journey-phone { height: 276px; }
+  .journey-central-visual,
+  .journey-desktop-shot { height: auto; aspect-ratio: 1.68 / 1; }
+  .journey-receipt-shot { width: min(100%, 300px); }
+
+  .gallery-card,
+  .gallery-finance { min-height: 0; }
+  .gallery-visual { min-height: 220px; }
+  .gallery-finance-visual { min-height: 0; aspect-ratio: 1.65 / 1; }
+  .gallery-waiter .gallery-visual,
+  .gallery-pix .gallery-visual { height: 250px; }
+  .gallery-overlay { width: 48%; height: 48%; }
+
+  .control-card { min-height: 0; }
+  .control-text { padding: 62px var(--page-gutter) 36px; }
+  .control-visual { min-height: 250px; }
+  .final-card { padding-top: 68px; padding-bottom: 68px; }
+  .site-footer { padding-top: 38px; padding-bottom: 38px; }
+}
