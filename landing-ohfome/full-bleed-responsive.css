@@ -229,3 +229,48 @@ body { overflow-x: clip; background: var(--surface); }
   .final-card { padding-top: 68px; padding-bottom: 68px; }
   .site-footer { padding-top: 38px; padding-bottom: 38px; }
 }
+
+/* Each product capture keeps its own native canvas.  A single "contain"
+   treatment made wide dashboards and vertical mobile screens look boxed in. */
+.feature-shot-central { aspect-ratio: 2.59 / 1; }
+.feature-shot-finance { aspect-ratio: 1.83 / 1; }
+.feature-shot-receipt { aspect-ratio: 1.24 / 1; }
+
+.feature-shot-phone,
+.journey-phone,
+.gallery-waiter-visual { background: #1b1815; }
+
+.journey-phone {
+  height: auto;
+  aspect-ratio: .55 / 1;
+}
+
+.journey-central-visual { aspect-ratio: 2.59 / 1; }
+.journey-outcome .journey-desktop-shot { height: auto; aspect-ratio: 2.59 / 1; }
+.journey-delivery .journey-desktop-shot { aspect-ratio: 1.52 / 1; }
+
+.gallery-finance-visual { aspect-ratio: 1.83 / 1; }
+.gallery-printing .gallery-visual {
+  width: min(30vw, 340px);
+  height: auto;
+  aspect-ratio: 1.24 / 1;
+  background: #fff;
+}
+
+@media (max-width: 650px) {
+  .feature-shot-central { aspect-ratio: 2.59 / 1; }
+  .feature-shot-finance { aspect-ratio: 1.83 / 1; }
+  .feature-shot-receipt { aspect-ratio: 1.24 / 1; }
+
+  .journey-phone { height: auto; aspect-ratio: .55 / 1; }
+  .journey-central-visual { aspect-ratio: 2.59 / 1; }
+  .journey-outcome .journey-desktop-shot { height: auto; aspect-ratio: 2.59 / 1; }
+  .journey-delivery .journey-desktop-shot { aspect-ratio: 1.52 / 1; }
+
+  .gallery-finance-visual { aspect-ratio: 1.83 / 1; }
+  .gallery-printing .gallery-visual {
+    width: calc(100% - 28px);
+    height: auto;
+    aspect-ratio: 1.24 / 1;
+  }
+}
