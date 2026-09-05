@@ -2809,8 +2809,31 @@ function PedidoSheet({
     void recarregar();
   }
 
-  const linkWhatsappAdicional = numeroWhatsapp && dados
-    ? `https://wa.me/${numeroWhatsapp}?text=${encodeURIComponent(`Olá! Preciso adicionar algo ao meu pedido #${dados.codigo}.`)}`
+function montarMensagemAcompanhamento(pedido: PedidoStatusPublico) {
+    const etapaAtual = ETAPAS_PEDIDO.find((etapa) => etapa.status === pedido.status)?.label ?? pedido.status;
+    const linhas = [
+      `Olá! Estou acompanhando meu pedido *#${pedido.codigo}*.`,
+      "",
+      `*Status atual:* ${etapaAtual}`,
+      pedido.formaRecebimento === "entrega"
+        ? "*Recebimento:* Entrega"
+        : pedido.formaRecebimento === "retirada"
+          ? "*Recebimento:* Retirada no estabelecimento"
+          : "",
+      "",
+      "*Itens:*",
+      ...pedido.itens.map((item) => `${item.quantidade}× ${item.produtoNome}`),
+      ...(pedido.adicionais ?? []).flatMap((adicional) => [
+        "",
+        `*Adicional #${adicional.codigo}* (${ETAPAS_PEDIDO.find((etapa) => etapa.status === adicional.status)?.label ?? adicional.status}):`,
+        ...adicional.itens.map((item) => `${item.quantidade}× ${item.produtoNome}`),
+      ]),
+    ];
+    return linhas.filter((linha) => linha !== "").join("\n");
+  }
+
+  const linkWhatsappPedido = numeroWhatsapp && dados
+    ? `https://wa.me/${numeroWhatsapp}?text=${encodeURIComponent(montarMensagemAcompanhamento(dados))}`
     : null;
 
   useEffect(() => {
@@ -2859,13 +2882,26 @@ function PedidoSheet({
               {dados ? `Pedido #${dados.codigo}` : "Acompanhando..."}
             </h2>
           </div>
-          <button
-            onClick={onFechar}
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-white/70"
-            aria-label="Fechar"
-          >
-            <X size={18} />
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {linkWhatsappPedido && (
+              <a
+                href={linkWhatsappPedido}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Falar com o estabelecimento sobre este pedido"
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-[#22c15e] text-white transition active:scale-90"
+              >
+                <MessageCircle size={18} />
+              </a>
+            )}
+            <button
+              onClick={onFechar}
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-white/70"
+              aria-label="Fechar"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </header>
 
         <div data-lenis-prevent className="flex-1 overflow-y-auto p-5">
@@ -3048,8 +3084,8 @@ function PedidoSheet({
                       : dados.formaRecebimento === "retirada"
                         ? "Seu pedido já está pronto para retirada — não é mais possível adicionar itens."
                         : "Não é mais possível adicionar itens a este pedido."}
-                    {linkWhatsappAdicional && (
-                      <a href={linkWhatsappAdicional} target="_blank" rel="noopener noreferrer" className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-[#0e7775]">
+                    {linkWhatsappPedido && (
+                      <a href={linkWhatsappPedido} target="_blank" rel="noopener noreferrer" className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-[#0e7775]">
                         <MessageCircle size={13} /> Falar com o estabelecimento
                       </a>
                     )}
