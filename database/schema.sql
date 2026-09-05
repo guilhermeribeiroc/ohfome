@@ -259,6 +259,7 @@ create table produtos (
   nome text not null,
   descricao text,
   imagem_url text,
+  tamanho tamanho_produto,
   -- --- precificacao inteligente ---
   -- modo 'margem': preco_custo + margem_percentual definem preco_venda
   -- modo 'preco_manual': preco_venda e definido a mao e a margem e recalculada
@@ -424,6 +425,7 @@ create table clientes (
   endereco text,
   ponto_referencia text,
   cpf text,
+  email text,
   notificar_pedido boolean not null default false,
   created_at timestamptz not null default now(),
   unique (estabelecimento_id, telefone)
@@ -959,6 +961,76 @@ $$;
 revoke all on function fn_registrar_estabelecimento(text, tipo_estabelecimento, text, modulo_sistema[], jsonb, text) from public;
 
 -- ============================================================================
+-- PIX / MERCADO PAGO
+-- ============================================================================
+-- Estas 4 tabelas ja existem em producao (o Pix funciona hoje), mas nunca
+-- tinham sido capturadas neste arquivo nem em nenhuma migration — schema.sql
+-- rodado do zero falhava aqui. Definicoes reconstruidas a partir do uso real
+-- em web/src/lib/mercado-pago.ts e nas rotas de web/src/app/api/pagamentos.
+
+-- Configuracao de Pix por estabelecimento: manual (chave fixa) ou automatico
+-- via Mercado Pago.
+create table configuracoes_pix (
+  estabelecimento_id uuid primary key references estabelecimentos(id) on delete cascade,
+  ativo boolean not null default false,
+  modo text not null default 'manual' check (modo in ('manual', 'mercado_pago')),
+  chave_manual text,
+  instrucao_manual text,
+  expiracao_minutos integer not null default 30 check (expiracao_minutos > 0),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create trigger trg_configuracoes_pix_updated_at before update on configuracoes_pix
+  for each row execute function set_updated_at();
+
+-- Conexao OAuth do estabelecimento com uma conta Mercado Pago (tokens
+-- cifrados em aplicacao — ver cifrarSegredo/decifrarSegredo).
+create table mercado_pago_conexoes (
+  estabelecimento_id uuid primary key references estabelecimentos(id) on delete cascade,
+  collector_id text not null,
+  access_token_cifrado text not null,
+  refresh_token_cifrado text not null,
+  token_expira_em timestamptz not null,
+  scope text,
+  conectado_em timestamptz not null default now()
+);
+
+-- Estado temporario do fluxo OAuth (PKCE) entre "conectar" e "callback".
+create table mercado_pago_oauth_states (
+  state text primary key,
+  estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade,
+  usuario_id uuid not null references usuarios(id) on delete cascade,
+  code_verifier text not null,
+  expira_em timestamptz not null,
+  created_at timestamptz not null default now()
+);
+
+-- Uma cobranca Pix por pedido (manual ou via Mercado Pago). order_id é o id
+-- da ordem no Mercado Pago, usado pelo webhook e pela consulta de
+-- contingencia (fn_pedido_publico_status / sincronizarCobrancaPixMercadoPago).
+create table pagamentos_pix (
+  id uuid primary key default gen_random_uuid(),
+  estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade,
+  pedido_id uuid not null unique references pedidos(id) on delete cascade,
+  provedor text not null default 'mercado_pago' check (provedor in ('mercado_pago', 'manual')),
+  idempotency_key uuid not null,
+  valor numeric(10, 2) not null check (valor > 0),
+  status text not null default 'pendente' check (status in ('pendente', 'pago', 'expirado', 'falhou', 'estornado')),
+  order_id text unique,
+  payment_id text,
+  copia_cola text,
+  qr_code_base64 text,
+  ticket_url text,
+  detalhe_erro text,
+  expira_em timestamptz not null,
+  confirmado_em timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index idx_pagamentos_pix_estabelecimento on pagamentos_pix(estabelecimento_id);
+
+-- ============================================================================
 -- CARDAPIO PUBLICO (cardapio digital, sem autenticacao)
 -- ============================================================================
 -- Fluxo: cliente final acessa ohfome.app/cardapio/<slug> sem login. Essas
@@ -1454,7 +1526,8 @@ grant select, insert, update, delete on
   insumos, movimentacoes_estoque, clientes, pedidos, itens_pedido,
   historico_status_pedido, entregadores, entregas, whatsapp_mensagens,
   movimentacoes_financeiras, custos_fixos, estado_aplicacao,
-  estabelecimento_modulos, impressao_jobs, bairros_entrega
+  estabelecimento_modulos, impressao_jobs, bairros_entrega,
+  configuracoes_pix, mercado_pago_conexoes, mercado_pago_oauth_states, pagamentos_pix
 to ohfome_app;
 
 -- estabelecimentos: sem insert/delete direto (so via fn_registrar_estabelecimento);

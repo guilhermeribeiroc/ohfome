@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
          p.forma_pagamento as "formaPagamento",
          p.tipo_cartao as "tipoCartao",
          p.troco_para as "trocoPara",
+         p.pagamento_dividido as "pagamentoDividido",
          p.pagamento_status as "pagamentoStatus",
          p.total,
          en.tempo_estimado_min as "tempoEstimadoMin",

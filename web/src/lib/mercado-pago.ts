@@ -234,7 +234,7 @@ export async function sincronizarCobrancaPixMercadoPago(
       `update pedidos
           set pagamento_status = 'pago', enviado_cozinha = true,
               enviado_cozinha_em = coalesce(enviado_cozinha_em, now())
-        where id = $1 and enviado_cozinha = false and forma_pagamento = 'pix'
+        where id = $1 and enviado_cozinha = false and forma_pagamento in ('pix', 'misto')
         returning id`,
       [local.pedidoId],
     );
