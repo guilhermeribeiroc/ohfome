@@ -1056,21 +1056,67 @@ export function CardapioPublico({ slug }: { slug: string }) {
         />
       )}
       {!overlay && linkWhatsappFlutuante && (
-        <a
-          href={linkWhatsappFlutuante}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Falar no WhatsApp com o estabelecimento"
-          className="fixed bottom-[6rem] right-4 z-30 flex h-14 w-14 items-center justify-center gap-2 overflow-visible rounded-full bg-[#22c15e] text-white shadow-[0_18px_36px_-16px_rgba(34,193,94,.8)] transition-transform duration-200 active:scale-90 lg:bottom-8 lg:right-8 lg:h-auto lg:w-auto lg:py-3.5 lg:pl-3.5 lg:pr-5"
-        >
-          <span aria-hidden className="absolute inset-0 -z-10 rounded-full bg-[#22c15e] opacity-60 motion-safe:animate-ping motion-reduce:hidden" style={{ animationDuration: "2.6s" }} />
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden className="relative shrink-0">
-            <path d="M12.04 2c-5.5 0-9.96 4.46-9.96 9.96 0 1.76.46 3.45 1.32 4.95L2 22l5.24-1.37a9.9 9.9 0 0 0 4.8 1.23h.01c5.5 0 9.96-4.46 9.96-9.96S17.55 2 12.04 2Zm5.83 14.24c-.25.7-1.24 1.28-2.02 1.44-.54.11-1.24.2-3.6-.77-3.02-1.25-4.97-4.3-5.12-4.5-.15-.2-1.22-1.62-1.22-3.1 0-1.47.77-2.19 1.05-2.49.27-.3.6-.37.8-.37.2 0 .4 0 .58.01.19.01.44-.07.68.53.25.6.85 2.08.92 2.23.07.15.12.33.02.53-.09.2-.14.32-.28.5-.14.17-.29.38-.42.51-.14.14-.28.29-.12.57.16.27.71 1.19 1.53 1.93 1.05.95 1.94 1.25 2.21 1.39.27.14.43.12.6-.07.16-.19.68-.8.86-1.07.18-.27.36-.23.6-.14.25.09 1.58.75 1.85.89.27.14.45.2.51.32.07.12.07.68-.18 1.38Z" />
-          </svg>
-          <span className="hidden text-sm font-semibold lg:inline">Fale com a gente</span>
-        </a>
+        <BotaoWhatsapp href={linkWhatsappFlutuante} />
       )}
     </div>
+  );
+}
+
+function BotaoWhatsapp({ href }: { href: string }) {
+  const [notificacaoVisivel, setNotificacaoVisivel] = useState(false);
+
+  useEffect(() => {
+    try {
+      setNotificacaoVisivel(window.localStorage.getItem("ohfome_whatsapp_visto") !== "1");
+    } catch {
+      setNotificacaoVisivel(true);
+    }
+  }, []);
+
+  function aoClicar() {
+    try {
+      window.localStorage.setItem("ohfome_whatsapp_visto", "1");
+    } catch {
+      /* localStorage indisponível — segue sem lembrar */
+    }
+    setNotificacaoVisivel(false);
+  }
+
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={aoClicar}
+      aria-label="Falar no WhatsApp com o estabelecimento"
+      className="group fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] right-4 z-30 flex items-center lg:bottom-[calc(1.5rem+env(safe-area-inset-bottom))] lg:right-6"
+    >
+      <span
+        aria-hidden
+        className="pointer-events-none absolute right-full mr-3 hidden whitespace-nowrap rounded-full bg-[#181714] px-3.5 py-2 text-xs font-semibold text-white opacity-0 shadow-[0_10px_24px_-8px_rgba(0,0,0,.45)] transition-all duration-200 group-hover:opacity-100 lg:block"
+      >
+        Fale conosco
+        <span aria-hidden className="absolute left-full top-1/2 -ml-[3px] h-2 w-2 -translate-y-1/2 rotate-45 bg-[#181714]" />
+      </span>
+      <span
+        className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-white shadow-[0_12px_28px_-8px_rgba(13,138,73,.65),0_3px_10px_rgba(0,0,0,.18)] transition-transform duration-200 group-hover:scale-105 group-active:scale-90"
+        style={{ background: "radial-gradient(circle at 30% 22%, #52e08f 0%, transparent 55%), linear-gradient(155deg, #27d366 0%, #109e56 55%, #0a7a45 100%)" }}
+      >
+        <span
+          aria-hidden
+          className="absolute inset-0 -z-10 rounded-full opacity-45 motion-safe:animate-ping motion-reduce:hidden"
+          style={{ background: "#1fbf5c", animationDuration: "2.4s" }}
+        />
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden>
+          <path d="M12.04 2c-5.5 0-9.96 4.46-9.96 9.96 0 1.76.46 3.45 1.32 4.95L2 22l5.24-1.37a9.9 9.9 0 0 0 4.8 1.23h.01c5.5 0 9.96-4.46 9.96-9.96S17.55 2 12.04 2Zm5.83 14.24c-.25.7-1.24 1.28-2.02 1.44-.54.11-1.24.2-3.6-.77-3.02-1.25-4.97-4.3-5.12-4.5-.15-.2-1.22-1.62-1.22-3.1 0-1.47.77-2.19 1.05-2.49.27-.3.6-.37.8-.37.2 0 .4 0 .58.01.19.01.44-.07.68.53.25.6.85 2.08.92 2.23.07.15.12.33.02.53-.09.2-.14.32-.28.5-.14.17-.29.38-.42.51-.14.14-.28.29-.12.57.16.27.71 1.19 1.53 1.93 1.05.95 1.94 1.25 2.21 1.39.27.14.43.12.6-.07.16-.19.68-.8.86-1.07.18-.27.36-.23.6-.14.25.09 1.58.75 1.85.89.27.14.45.2.51.32.07.12.07.68-.18 1.38Z" />
+        </svg>
+        {notificacaoVisivel && (
+          <i aria-hidden className="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-[#eee8df] bg-[#e0333f] text-[10px] font-bold not-italic leading-none text-white">
+            1
+          </i>
+        )}
+      </span>
+    </a>
   );
 }
 
