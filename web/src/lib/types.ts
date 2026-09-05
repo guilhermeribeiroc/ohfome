@@ -146,6 +146,7 @@ export interface Pedido {
   total: number;
   createdAt: string;
   notificadoEm?: string;
+  pedidoPaiCodigo?: number;
 }
 
 export type ImpressaoJobStatus = "pendente" | "imprimindo" | "impresso" | "falhou";

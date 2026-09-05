@@ -10,6 +10,7 @@ const PEDIDOS_ATIVOS_QUERY = `
     c.telefone as "clienteTelefone",
     e.endereco as "enderecoEntrega",
     u.nome as "usuarioNome",
+    pai.codigo as "pedidoPaiCodigo",
     coalesce(
       (
         select json_agg(json_build_object(
@@ -34,6 +35,7 @@ const PEDIDOS_ATIVOS_QUERY = `
   left join clientes c on c.id = p.cliente_id
   left join entregas e on e.pedido_id = p.id
   left join usuarios u on u.id = p.usuario_id
+  left join pedidos pai on pai.id = p.pedido_pai_id
 `;
 
 export async function GET(request: NextRequest) {
