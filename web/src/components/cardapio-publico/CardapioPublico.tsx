@@ -556,6 +556,11 @@ export function CardapioPublico({ slug }: { slug: string }) {
   if (erroCarregar) return <EstadoErro />;
   if (!dados) return <CardapioSkeleton />;
 
+  const numeroWhatsapp = (dados.whatsappAtendimento ?? "").replace(/\D/g, "");
+  const linkWhatsappFlutuante = numeroWhatsapp
+    ? `https://wa.me/${numeroWhatsapp}?text=${encodeURIComponent(`Olá! Estou vendo o cardápio digital da ${dados.nome} e queria falar com vocês.`)}`
+    : null;
+
   return (
     <div
       className="cardapio-theme min-h-dvh bg-[#eee8df] pb-28 text-[#181714] lg:pb-24"
@@ -1047,6 +1052,21 @@ export function CardapioPublico({ slug }: { slug: string }) {
           pedidoId={pedidoAtivo.id}
           onFechar={fecharOverlay}
         />
+      )}
+      {!overlay && linkWhatsappFlutuante && (
+        <a
+          href={linkWhatsappFlutuante}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Falar no WhatsApp com o estabelecimento"
+          className="fixed bottom-[6rem] right-4 z-30 flex h-14 w-14 items-center justify-center gap-2 overflow-visible rounded-full bg-[#22c15e] text-white shadow-[0_18px_36px_-16px_rgba(34,193,94,.8)] transition-transform duration-200 active:scale-90 lg:bottom-8 lg:right-8 lg:h-auto lg:w-auto lg:py-3.5 lg:pl-3.5 lg:pr-5"
+        >
+          <span aria-hidden className="absolute inset-0 -z-10 rounded-full bg-[#22c15e] opacity-60 motion-safe:animate-ping motion-reduce:hidden" style={{ animationDuration: "2.6s" }} />
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden className="relative shrink-0">
+            <path d="M12.04 2c-5.5 0-9.96 4.46-9.96 9.96 0 1.76.46 3.45 1.32 4.95L2 22l5.24-1.37a9.9 9.9 0 0 0 4.8 1.23h.01c5.5 0 9.96-4.46 9.96-9.96S17.55 2 12.04 2Zm5.83 14.24c-.25.7-1.24 1.28-2.02 1.44-.54.11-1.24.2-3.6-.77-3.02-1.25-4.97-4.3-5.12-4.5-.15-.2-1.22-1.62-1.22-3.1 0-1.47.77-2.19 1.05-2.49.27-.3.6-.37.8-.37.2 0 .4 0 .58.01.19.01.44-.07.68.53.25.6.85 2.08.92 2.23.07.15.12.33.02.53-.09.2-.14.32-.28.5-.14.17-.29.38-.42.51-.14.14-.28.29-.12.57.16.27.71 1.19 1.53 1.93 1.05.95 1.94 1.25 2.21 1.39.27.14.43.12.6-.07.16-.19.68-.8.86-1.07.18-.27.36-.23.6-.14.25.09 1.58.75 1.85.89.27.14.45.2.51.32.07.12.07.68-.18 1.38Z" />
+          </svg>
+          <span className="hidden text-sm font-semibold lg:inline">Fale com a gente</span>
+        </a>
       )}
     </div>
   );
