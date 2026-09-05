@@ -133,7 +133,7 @@ export async function GET(request: NextRequest) {
       client.query(`select
           p.id, p.codigo, p.tipo, p.total, p.created_at as "createdAt",
           m.numero as "mesaNumero", c.nome as "clienteNome",
-          p.forma_pagamento as "formaPagamento", p.tipo_cartao as "tipoCartao", p.troco_para as "trocoPara",
+          p.forma_pagamento as "formaPagamento", p.tipo_cartao as "tipoCartao", p.troco_para as "trocoPara", p.pagamento_dividido as "pagamentoDividido",
           coalesce(sum(ip.quantidade * coalesce(pr.preco_custo, 0)), 0) as "custoProdutos",
           coalesce(json_agg(json_build_object(
             'produtoNome', pr.nome || case when ip.tamanho is not null then ' (' || ip.tamanho::text || ')' else '' end,
@@ -150,7 +150,7 @@ export async function GET(request: NextRequest) {
         left join produtos pr on pr.id = ip.produto_id
         where p.status = 'finalizado'
           and (p.created_at at time zone 'America/Fortaleza')::date between $1::date and $2::date
-        group by p.id, p.codigo, p.tipo, p.total, p.created_at, m.numero, c.nome, p.forma_pagamento, p.tipo_cartao, p.troco_para
+        group by p.id, p.codigo, p.tipo, p.total, p.created_at, m.numero, c.nome, p.forma_pagamento, p.tipo_cartao, p.troco_para, p.pagamento_dividido
         order by p.created_at desc
         limit 80`, [periodo.inicio, periodo.fim]),
     ]);

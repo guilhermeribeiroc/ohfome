@@ -6,7 +6,7 @@ import type { LucideIcon } from "lucide-react";
 import type { Mesa, Pedido, PedidoStatus, Produto } from "@/lib/types";
 import { MESA_STATUS_LABEL, PEDIDO_STATUS_LABEL, nomeProdutoComTamanho } from "@/lib/types";
 import { usePolling } from "@/lib/use-polling";
-import { imprimirPedido } from "@/lib/impressao";
+import { imprimirPedido, textoPagamento } from "@/lib/impressao";
 import { useTenant } from "@/lib/tenant-context";
 
 const TODAS_COLUNAS: PedidoStatus[] = ["novo", "em_preparo", "pronto", "saiu_para_entrega", "finalizado"];
@@ -26,13 +26,6 @@ function tempoDecorrido(iso: string) {
   if (minutos < 1) return "agora";
   if (minutos < 60) return `${minutos} min`;
   return `${Math.floor(minutos / 60)}h ${minutos % 60}min`;
-}
-
-function descricaoPagamento(pedido: Pedido) {
-  if (!pedido.formaPagamento) return null;
-  if (pedido.formaPagamento === "cartao") return `Cartão · ${pedido.tipoCartao === "credito" ? "Crédito" : "Débito"}`;
-  if (pedido.formaPagamento === "dinheiro") return pedido.trocoPara ? `Dinheiro · troco para R$ ${Number(pedido.trocoPara).toFixed(2).replace(".", ",")}` : "Dinheiro · sem troco";
-  return "PIX";
 }
 
 function linkWhatsapp(telefone: string, mensagem: string) {
@@ -186,7 +179,7 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Central
 }
 
 function PedidoDetalheModal({ pedido, onFechar, onNotificar, permitirReimpressao, permitirExcluir, onExcluir }: { pedido: Pedido; onFechar: () => void; onNotificar: (pedido: Pedido) => void; permitirReimpressao: boolean; permitirExcluir: boolean; onExcluir: (pedido: Pedido) => void }) {
-  const pagamento = descricaoPagamento(pedido);
+  const pagamento = textoPagamento(pedido);
   const [reimprimindo, setReimprimindo] = useState(false);
   const [mensagemImpressao, setMensagemImpressao] = useState("");
 

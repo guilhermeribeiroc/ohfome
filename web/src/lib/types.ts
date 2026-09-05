@@ -4,8 +4,17 @@ export type MesaStatus = "livre" | "ocupada" | "aguardando_conta" | "reservada";
 
 export type PedidoTipo = "mesa" | "balcao" | "delivery";
 export type PedidoOrigem = "presencial" | "whatsapp" | "telefone" | "app";
-export type FormaPagamento = "cartao" | "dinheiro" | "pix";
+export type FormaPagamento = "cartao" | "dinheiro" | "pix" | "misto";
 export type TipoCartao = "credito" | "debito";
+
+// Uma parte de um pagamento dividido (forma_pagamento = "misto"). "forma"
+// nunca é "misto" aqui — cada parte é uma forma simples com seu valor.
+export interface PagamentoParte {
+  forma: Exclude<FormaPagamento, "misto">;
+  valor: number;
+  tipoCartao?: TipoCartao;
+  trocoPara?: number;
+}
 export type PagamentoStatus = "pendente" | "pago" | "falhou" | "estornado";
 export type PedidoStatus =
   | "novo"
@@ -79,6 +88,7 @@ export interface VendaFinanceira {
   formaPagamento?: FormaPagamento;
   tipoCartao?: TipoCartao;
   trocoPara?: number;
+  pagamentoDividido?: [PagamentoParte, PagamentoParte];
   total: number;
   custoProdutos: number;
   lucroBruto: number;
@@ -128,6 +138,7 @@ export interface Pedido {
   formaPagamento?: FormaPagamento;
   tipoCartao?: TipoCartao;
   trocoPara?: number;
+  pagamentoDividido?: [PagamentoParte, PagamentoParte];
   pagamentoStatus?: PagamentoStatus;
   enderecoEntrega?: string;
   taxaEntrega?: number;
@@ -216,6 +227,7 @@ export interface Entrega {
   formaPagamento?: FormaPagamento;
   tipoCartao?: TipoCartao;
   trocoPara?: number;
+  pagamentoDividido?: [PagamentoParte, PagamentoParte];
   pagamentoStatus?: PagamentoStatus;
   itens?: { produtoNome: string; produtoTamanho?: TamanhoProduto | null; quantidade: number; precoUnitario: number }[];
   total: number;

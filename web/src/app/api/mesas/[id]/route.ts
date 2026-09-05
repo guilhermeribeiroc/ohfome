@@ -16,12 +16,28 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const formaPagamento = body.formaPagamento;
     const tipoCartao = body.tipoCartao;
     const trocoPara = Number(body.trocoPara);
-    if (formaPagamento !== undefined) {
+    const pagamentoDivididoBruto = Array.isArray(body.pagamentoDividido) ? body.pagamentoDividido : null;
+    const pagamentoDividido: { forma: string; valor: number; tipoCartao?: string; trocoPara?: number } [] | null = pagamentoDivididoBruto?.map((parte: Record<string, unknown>) => ({
+      forma: String(parte?.forma ?? ""),
+      valor: Number(parte?.valor),
+      tipoCartao: parte?.tipoCartao ? String(parte.tipoCartao) : undefined,
+      trocoPara: parte?.trocoPara === null || parte?.trocoPara === undefined || parte?.trocoPara === "" ? undefined : Number(parte.trocoPara),
+    })) ?? null;
+    if (formaPagamento !== undefined && formaPagamento !== "misto") {
       if (!["dinheiro", "cartao", "pix"].includes(formaPagamento)) {
         return NextResponse.json({ erro: "Forma de pagamento inválida." }, { status: 400 });
       }
       if (formaPagamento === "cartao" && tipoCartao !== "credito" && tipoCartao !== "debito") {
         return NextResponse.json({ erro: "Informe crédito ou débito." }, { status: 400 });
+      }
+    }
+    if (formaPagamento === "misto") {
+      if (!pagamentoDividido || pagamentoDividido.length !== 2) return NextResponse.json({ erro: "Informe as duas formas de pagamento." }, { status: 400 });
+      if (pagamentoDividido.some((parte) => !["dinheiro", "cartao", "pix"].includes(parte.forma))) return NextResponse.json({ erro: "Forma de pagamento inválida." }, { status: 400 });
+      if (pagamentoDividido[0].forma === pagamentoDividido[1].forma) return NextResponse.json({ erro: "As duas partes precisam ser formas diferentes." }, { status: 400 });
+      if (pagamentoDividido.some((parte) => !Number.isFinite(parte.valor) || parte.valor <= 0)) return NextResponse.json({ erro: "Informe um valor válido para cada parte." }, { status: 400 });
+      if (pagamentoDividido.some((parte) => parte.forma === "cartao" && parte.tipoCartao !== "credito" && parte.tipoCartao !== "debito")) {
+        return NextResponse.json({ erro: "Informe crédito ou débito na parte no cartão." }, { status: 400 });
       }
     }
 
@@ -32,7 +48,18 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       );
       const comandaId = comandaRows[0]?.id as string | undefined;
       if (comandaId) {
-        if (formaPagamento) {
+        if (formaPagamento === "misto") {
+          await client.query(
+            `update pedidos set
+               status = case when status not in ('finalizado', 'cancelado') then 'finalizado' else status end,
+               forma_pagamento = 'misto',
+               tipo_cartao = null,
+               troco_para = null,
+               pagamento_dividido = $2::jsonb
+             where comanda_id = $1 and status <> 'cancelado'`,
+            [comandaId, JSON.stringify(pagamentoDividido)]
+          );
+        } else if (formaPagamento) {
           // Desocupar a mesa fecha a conta: qualquer pedido dessa comanda
           // (de qualquer rodada) leva a forma de pagamento escolhida, e o
           // que ainda nao tinha chegado em "finalizado" e forcado a
@@ -42,7 +69,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
                status = case when status not in ('finalizado', 'cancelado') then 'finalizado' else status end,
                forma_pagamento = $2,
                tipo_cartao = $3,
-               troco_para = $4
+               troco_para = $4,
+               pagamento_dividido = null
              where comanda_id = $1 and status <> 'cancelado'`,
             [comandaId, formaPagamento, formaPagamento === "cartao" ? tipoCartao : null, formaPagamento === "dinheiro" && trocoPara > 0 ? trocoPara : null]
           );

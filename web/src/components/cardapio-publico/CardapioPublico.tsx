@@ -1523,6 +1523,12 @@ function CarrinhoSheet({
   const [tipoCartao, setTipoCartao] = useState<"credito" | "debito">("credito");
   const [precisaTroco, setPrecisaTroco] = useState(false);
   const [trocoPara, setTrocoPara] = useState("");
+  const [dividirPagamento, setDividirPagamento] = useState(false);
+  const [valorParte1, setValorParte1] = useState("");
+  const [forma2, setForma2] = useState<"cartao" | "dinheiro" | "pix">("dinheiro");
+  const [tipoCartao2, setTipoCartao2] = useState<"credito" | "debito">("credito");
+  const [precisaTroco2, setPrecisaTroco2] = useState(false);
+  const [trocoPara2, setTrocoPara2] = useState("");
   const [observacoes, setObservacoes] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
@@ -1545,6 +1551,14 @@ function CarrinhoSheet({
   const bairroSelecionado = (bairros ?? []).find((b) => b.id === bairroId);
   const taxaEntrega = entregaSelecionada ? (bairroSelecionado?.taxa ?? 0) : 0;
   const totalComTaxa = totalValor + taxaEntrega;
+  const valorParte1Numero = numeroDaMoeda(valorParte1);
+  const valorParte2Numero = Math.max(0, Math.round((totalComTaxa - valorParte1Numero) * 100) / 100);
+  const usaPixMercadoPagoNaDivisao = dividirPagamento && dados.pix?.modo === "mercado_pago" && (formaPagamento === "pix" || forma2 === "pix");
+  useEffect(() => {
+    if (dividirPagamento && forma2 === formaPagamento) {
+      setForma2((["cartao", "dinheiro", "pix"] as const).find((f) => f !== formaPagamento && (f !== "pix" || dados.pix)) ?? "dinheiro");
+    }
+  }, [dividirPagamento, formaPagamento, forma2, dados.pix]);
   const enderecoFormatado = [
     rua.trim() && `${rua.trim()}, ${numeroEndereco.trim()}`,
     complementoEndereco.trim(),
@@ -1578,21 +1592,41 @@ function CarrinhoSheet({
     }
     if (!validarDados()) return;
     const emailPagador = email.trim();
+    const usaPixMpNaParte1 = formaPagamento === "pix" && dados.pix?.modo === "mercado_pago";
+    const usaPixMpNaParte2 = dividirPagamento && forma2 === "pix" && dados.pix?.modo === "mercado_pago";
     if (
-      formaPagamento === "pix" &&
-      dados.pix?.modo === "mercado_pago" &&
+      (usaPixMpNaParte1 || usaPixMpNaParte2) &&
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailPagador)
     ) {
       setErro("Informe um e-mail válido para gerar o Pix.");
       return;
     }
     if (
+      !dividirPagamento &&
       formaPagamento === "dinheiro" &&
       precisaTroco &&
       numeroDaMoeda(trocoPara) <= 0
     ) {
       setErro("Informe o valor para o qual precisa de troco.");
       return;
+    }
+    if (dividirPagamento) {
+      if (formaPagamento === forma2) {
+        setErro("As duas formas de pagamento precisam ser diferentes.");
+        return;
+      }
+      if (valorParte1Numero <= 0 || valorParte2Numero <= 0) {
+        setErro("Informe o valor de cada parte do pagamento.");
+        return;
+      }
+      if (precisaTroco && numeroDaMoeda(trocoPara) <= 0) {
+        setErro("Informe o valor para o qual precisa de troco na 1ª parte.");
+        return;
+      }
+      if (precisaTroco2 && numeroDaMoeda(trocoPara2) <= 0) {
+        setErro("Informe o valor para o qual precisa de troco na 2ª parte.");
+        return;
+      }
     }
     setEnviando(true);
     setErro("");
@@ -1611,12 +1645,28 @@ function CarrinhoSheet({
         numero: numeroEndereco.trim(),
         complemento: complementoEndereco.trim() || undefined,
         bairroId: entregaSelecionada ? bairroId : undefined,
-        formaPagamento,
-        tipoCartao: formaPagamento === "cartao" ? tipoCartao : null,
+        formaPagamento: dividirPagamento ? "misto" : formaPagamento,
+        tipoCartao: !dividirPagamento && formaPagamento === "cartao" ? tipoCartao : null,
         trocoPara:
-          formaPagamento === "dinheiro" && precisaTroco
+          !dividirPagamento && formaPagamento === "dinheiro" && precisaTroco
             ? numeroDaMoeda(trocoPara)
             : null,
+        pagamentoDividido: dividirPagamento
+          ? [
+              {
+                forma: formaPagamento,
+                valor: valorParte1Numero,
+                tipoCartao: formaPagamento === "cartao" ? tipoCartao : undefined,
+                trocoPara: formaPagamento === "dinheiro" && precisaTroco ? numeroDaMoeda(trocoPara) : undefined,
+              },
+              {
+                forma: forma2,
+                valor: valorParte2Numero,
+                tipoCartao: forma2 === "cartao" ? tipoCartao2 : undefined,
+                trocoPara: forma2 === "dinheiro" && precisaTroco2 ? numeroDaMoeda(trocoPara2) : undefined,
+              },
+            ]
+          : undefined,
         observacoes,
         itens: itens.map((item) => ({
           produtoId: item.produto.id,
@@ -1657,8 +1707,14 @@ function CarrinhoSheet({
       });
       return;
     }
-    const pagamento =
-      formaPagamento === "cartao"
+    function textoForma(forma: "cartao" | "dinheiro" | "pix", tipo: "credito" | "debito", troco: boolean, valorTroco: string) {
+      if (forma === "cartao") return `Cartão · ${tipo === "credito" ? "Crédito" : "Débito"}`;
+      if (forma === "pix") return "Pix na entrega";
+      return troco ? `Dinheiro · troco para ${moeda(numeroDaMoeda(valorTroco))}` : "Dinheiro";
+    }
+    const pagamento = dividirPagamento
+      ? `${textoForma(formaPagamento, tipoCartao, precisaTroco, trocoPara)} (${moeda(valorParte1Numero)}) + ${textoForma(forma2, tipoCartao2, precisaTroco2, trocoPara2)} (${moeda(valorParte2Numero)})`
+      : formaPagamento === "cartao"
         ? `Cartão · ${tipoCartao === "credito" ? "Crédito" : "Débito"}`
         : formaPagamento === "pix"
           ? "Pix na entrega"
@@ -1670,7 +1726,7 @@ function CarrinhoSheet({
       `*WhatsApp:* ${telefone.trim()}`,
       `*Recebimento:* ${formaRecebimento === "entrega" ? "Entrega" : "Retirada no estabelecimento"}`,
       `*Pagamento:* ${pagamento}`,
-      formaPagamento === "dinheiro" && precisaTroco
+      !dividirPagamento && formaPagamento === "dinheiro" && precisaTroco
         ? `*Troco para:* ${moeda(numeroDaMoeda(trocoPara))}`
         : "",
       entregaSelecionada ? `*Bairro:* ${bairroSelecionado?.nome ?? ""}` : "",
@@ -2030,30 +2086,102 @@ function CarrinhoSheet({
                       </button>
                     </div>
                   </Campo>
-                  {formaPagamento === "pix" && dados.pix?.modo === "mercado_pago" && (
+                  <button
+                    type="button"
+                    onClick={() => setDividirPagamento((v) => !v)}
+                    className="text-left text-xs font-semibold text-[#0e7775] underline underline-offset-2"
+                  >
+                    {dividirPagamento ? "Pagar com uma forma só" : "Quero pagar em duas formas"}
+                  </button>
+                  {!dividirPagamento && formaPagamento === "pix" && dados.pix?.modo === "mercado_pago" && (
                     <Campo label="Seu e-mail para o Pix">
                       <input type="email" autoComplete="email" value={email} onChange={(evento) => setEmail(evento.target.value)} placeholder="voce@exemplo.com" className="menu-field" />
                       <small className="mt-1 block text-xs text-black/45">Usamos esse e-mail apenas para criar a cobrança no Mercado Pago.</small>
                     </Campo>
                   )}
-                  {formaPagamento === "pix" && (
+                  {!dividirPagamento && formaPagamento === "pix" && (
                     <div className="rounded-2xl border border-coral-100 bg-coral-050 p-3 text-sm leading-5 text-black/65">
                       {dados.pix?.modo === "mercado_pago" ? "Você receberá um QR Code Pix válido por 30 minutos. A cozinha só receberá a comanda após a confirmação do pagamento." : "O Pix será pago na entrega. A equipe receberá seu pedido agora e confirmará o pagamento depois."}
                     </div>
                   )}
-                  {formaPagamento === "cartao" ? (
+                  {!dividirPagamento && formaPagamento === "cartao" ? (
                     <Campo label="Tipo de cartão">
                       <div className="grid grid-cols-2 gap-2">
                         <button type="button" onClick={() => setTipoCartao("credito")} className={`rounded-xl border px-3 py-3 text-sm font-semibold ${tipoCartao === "credito" ? "border-coral-500 bg-coral-050 text-coral-600" : "border-black/[.1] bg-white/55 text-black/65"}`}>Crédito</button>
                         <button type="button" onClick={() => setTipoCartao("debito")} className={`rounded-xl border px-3 py-3 text-sm font-semibold ${tipoCartao === "debito" ? "border-coral-500 bg-coral-050 text-coral-600" : "border-black/[.1] bg-white/55 text-black/65"}`}>Débito</button>
                       </div>
                     </Campo>
-                  ) : formaPagamento === "dinheiro" ? (
+                  ) : !dividirPagamento && formaPagamento === "dinheiro" ? (
                     <div className="rounded-2xl border border-black/[.09] bg-white/55 p-3">
                       <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium text-black/75">Precisa de troco?</span><div className="flex rounded-xl bg-black/[.05] p-1"><button type="button" onClick={() => setPrecisaTroco(false)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${!precisaTroco ? "bg-white text-[#0e7775] shadow-sm" : "text-black/50"}`}>Não</button><button type="button" onClick={() => setPrecisaTroco(true)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${precisaTroco ? "bg-white text-[#0e7775] shadow-sm" : "text-black/50"}`}>Sim</button></div></div>
                       {precisaTroco && <label className="mt-3 flex items-center overflow-hidden rounded-xl border border-black/[.1] bg-white"><span className="px-3 text-sm font-semibold text-black/45">R$</span><input inputMode="decimal" value={trocoPara} onChange={(evento) => setTrocoPara(mascararMoeda(evento.target.value))} placeholder="0,00" className="min-w-0 flex-1 bg-transparent py-3 pr-3 text-sm outline-none" /></label>}
                     </div>
                   ) : null}
+                  {dividirPagamento && (
+                    <div className="space-y-3 rounded-2xl border border-black/[.09] bg-white/55 p-3.5">
+                      <div>
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                          <b className="text-xs font-semibold uppercase tracking-wide text-black/45">1ª forma · {formaPagamento === "cartao" ? "Cartão" : formaPagamento === "pix" ? "Pix" : "Dinheiro"}</b>
+                        </div>
+                        <label className="flex items-center overflow-hidden rounded-xl border border-black/[.1] bg-white">
+                          <span className="px-3 text-sm font-semibold text-black/45">R$</span>
+                          <input inputMode="decimal" value={valorParte1} onChange={(evento) => setValorParte1(mascararMoeda(evento.target.value))} placeholder="0,00" className="min-w-0 flex-1 bg-transparent py-3 pr-3 text-sm outline-none" />
+                        </label>
+                        {formaPagamento === "cartao" && (
+                          <div className="mt-2 grid grid-cols-2 gap-2">
+                            <button type="button" onClick={() => setTipoCartao("credito")} className={`rounded-xl border px-3 py-2.5 text-sm font-semibold ${tipoCartao === "credito" ? "border-coral-500 bg-coral-050 text-coral-600" : "border-black/[.1] bg-white/55 text-black/65"}`}>Crédito</button>
+                            <button type="button" onClick={() => setTipoCartao("debito")} className={`rounded-xl border px-3 py-2.5 text-sm font-semibold ${tipoCartao === "debito" ? "border-coral-500 bg-coral-050 text-coral-600" : "border-black/[.1] bg-white/55 text-black/65"}`}>Débito</button>
+                          </div>
+                        )}
+                        {formaPagamento === "dinheiro" && (
+                          <div className="mt-2 flex items-center justify-between gap-3">
+                            <span className="text-xs font-medium text-black/60">Precisa de troco?</span>
+                            <div className="flex rounded-xl bg-black/[.05] p-1"><button type="button" onClick={() => setPrecisaTroco(false)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${!precisaTroco ? "bg-white text-[#0e7775] shadow-sm" : "text-black/50"}`}>Não</button><button type="button" onClick={() => setPrecisaTroco(true)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${precisaTroco ? "bg-white text-[#0e7775] shadow-sm" : "text-black/50"}`}>Sim</button></div>
+                          </div>
+                        )}
+                        {formaPagamento === "dinheiro" && precisaTroco && (
+                          <label className="mt-2 flex items-center overflow-hidden rounded-xl border border-black/[.1] bg-white"><span className="px-3 text-sm font-semibold text-black/45">Troco p/ R$</span><input inputMode="decimal" value={trocoPara} onChange={(evento) => setTrocoPara(mascararMoeda(evento.target.value))} placeholder="0,00" className="min-w-0 flex-1 bg-transparent py-3 pr-3 text-sm outline-none" /></label>
+                        )}
+                      </div>
+                      <div className="border-t border-black/[.08] pt-3">
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                          <b className="text-xs font-semibold uppercase tracking-wide text-black/45">2ª forma</b>
+                          <div className="flex gap-1.5">
+                            {(["cartao", "dinheiro", "pix"] as const).filter((f) => f !== formaPagamento && (f !== "pix" || dados.pix)).map((f) => (
+                              <button key={f} type="button" onClick={() => setForma2(f)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${forma2 === f ? "bg-[#0e7775] text-white" : "bg-black/[.05] text-black/55"}`}>{f === "cartao" ? "Cartão" : f === "pix" ? "Pix" : "Dinheiro"}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex items-center overflow-hidden rounded-xl border border-black/[.1] bg-black/[.03]">
+                          <span className="px-3 text-sm font-semibold text-black/45">R$</span>
+                          <span className="min-w-0 flex-1 py-3 pr-3 text-sm text-black/65">{moeda(valorParte2Numero)}</span>
+                        </div>
+                        {forma2 === "cartao" && (
+                          <div className="mt-2 grid grid-cols-2 gap-2">
+                            <button type="button" onClick={() => setTipoCartao2("credito")} className={`rounded-xl border px-3 py-2.5 text-sm font-semibold ${tipoCartao2 === "credito" ? "border-coral-500 bg-coral-050 text-coral-600" : "border-black/[.1] bg-white/55 text-black/65"}`}>Crédito</button>
+                            <button type="button" onClick={() => setTipoCartao2("debito")} className={`rounded-xl border px-3 py-2.5 text-sm font-semibold ${tipoCartao2 === "debito" ? "border-coral-500 bg-coral-050 text-coral-600" : "border-black/[.1] bg-white/55 text-black/65"}`}>Débito</button>
+                          </div>
+                        )}
+                        {forma2 === "dinheiro" && (
+                          <div className="mt-2 flex items-center justify-between gap-3">
+                            <span className="text-xs font-medium text-black/60">Precisa de troco?</span>
+                            <div className="flex rounded-xl bg-black/[.05] p-1"><button type="button" onClick={() => setPrecisaTroco2(false)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${!precisaTroco2 ? "bg-white text-[#0e7775] shadow-sm" : "text-black/50"}`}>Não</button><button type="button" onClick={() => setPrecisaTroco2(true)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${precisaTroco2 ? "bg-white text-[#0e7775] shadow-sm" : "text-black/50"}`}>Sim</button></div>
+                          </div>
+                        )}
+                        {forma2 === "dinheiro" && precisaTroco2 && (
+                          <label className="mt-2 flex items-center overflow-hidden rounded-xl border border-black/[.1] bg-white"><span className="px-3 text-sm font-semibold text-black/45">Troco p/ R$</span><input inputMode="decimal" value={trocoPara2} onChange={(evento) => setTrocoPara2(mascararMoeda(evento.target.value))} placeholder="0,00" className="min-w-0 flex-1 bg-transparent py-3 pr-3 text-sm outline-none" /></label>
+                        )}
+                        {forma2 === "pix" && dados.pix?.modo === "mercado_pago" && (
+                          <p className="mt-2 text-xs leading-4 text-black/45">Você receberá um QR Code Pix só desse valor.</p>
+                        )}
+                      </div>
+                      {(usaPixMercadoPagoNaDivisao) && (
+                        <Campo label="Seu e-mail para o Pix">
+                          <input type="email" autoComplete="email" value={email} onChange={(evento) => setEmail(evento.target.value)} placeholder="voce@exemplo.com" className="menu-field" />
+                        </Campo>
+                      )}
+                    </div>
+                  )}
                   <Campo label="Observações do pedido (opcional)">
                     <textarea value={observacoes} onChange={(evento) => setObservacoes(evento.target.value)} placeholder="Ex.: sem cebola ou ponto da carne" rows={3} maxLength={1000} className="menu-field resize-none" />
                   </Campo>

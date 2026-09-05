@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Banknote, Check, CreditCard, DoorOpen, Minus, Plus, Printer, QrCode, Search, Settings2, Users, X } from "lucide-react";
-import type { Mesa, MesaStatus, Pedido, Produto } from "@/lib/types";
+import type { Mesa, MesaStatus, PagamentoParte, Pedido, Produto } from "@/lib/types";
 import { MESA_STATUS_LABEL, nomeProdutoComTamanho } from "@/lib/types";
 import { mascararMoeda, numeroDaMoeda } from "@/lib/moeda";
 import { usePolling } from "@/lib/use-polling";
@@ -133,7 +133,7 @@ export function MesasModule() {
     setTimeout(() => setEnviados((atual) => ({ ...atual, [mesaAbertaId]: false })), 2500);
   }
 
-  async function confirmarFechamento(pagamento: { formaPagamento: "dinheiro" | "pix" | "cartao"; tipoCartao?: "credito" | "debito"; trocoPara?: number; texto: string }) {
+  async function confirmarFechamento(pagamento: { formaPagamento: "dinheiro" | "pix" | "cartao" | "misto"; tipoCartao?: "credito" | "debito"; trocoPara?: number; texto: string; pagamentoDividido?: [PagamentoParte, PagamentoParte] }) {
     if (!mesaAberta) return;
     // Imprime primeiro (ainda dentro do clique do usuario, senao o navegador
     // bloqueia o popup) e so depois libera a mesa no servidor.
@@ -141,7 +141,7 @@ export function MesasModule() {
     const resposta = await fetch(`/api/mesas/${mesaAberta.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "livre", formaPagamento: pagamento.formaPagamento, tipoCartao: pagamento.tipoCartao, trocoPara: pagamento.trocoPara }),
+      body: JSON.stringify({ status: "livre", formaPagamento: pagamento.formaPagamento, tipoCartao: pagamento.tipoCartao, trocoPara: pagamento.trocoPara, pagamentoDividido: pagamento.pagamentoDividido }),
     });
     if (!resposta.ok) {
       const dados = await resposta.json().catch(() => null);
@@ -361,16 +361,34 @@ function FecharContaModal({
   mesa: Mesa;
   total: number;
   onFechar: () => void;
-  onConfirmar: (pagamento: { formaPagamento: "dinheiro" | "pix" | "cartao"; tipoCartao?: "credito" | "debito"; trocoPara?: number; texto: string }) => Promise<void>;
+  onConfirmar: (pagamento: { formaPagamento: "dinheiro" | "pix" | "cartao" | "misto"; tipoCartao?: "credito" | "debito"; trocoPara?: number; texto: string; pagamentoDividido?: [PagamentoParte, PagamentoParte] }) => Promise<void>;
 }) {
   const [selecionado, setSelecionado] = useState<number | null>(null);
   const [precisaTroco, setPrecisaTroco] = useState(false);
   const [trocoPara, setTrocoPara] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [dividir, setDividir] = useState(false);
+  const [forma1, setForma1] = useState<"dinheiro" | "pix" | "cartao">("dinheiro");
+  const [tipoCartao1, setTipoCartao1] = useState<"credito" | "debito">("credito");
+  const [precisaTroco1, setPrecisaTroco1] = useState(false);
+  const [trocoValor1, setTrocoValor1] = useState("");
+  const [valor1, setValor1] = useState("");
+  const [forma2, setForma2] = useState<"dinheiro" | "pix" | "cartao">("cartao");
+  const [tipoCartao2, setTipoCartao2] = useState<"credito" | "debito">("credito");
+  const [precisaTroco2, setPrecisaTroco2] = useState(false);
+  const [trocoValor2, setTrocoValor2] = useState("");
 
   const opcaoSelecionada = selecionado !== null ? FORMAS_PAGAMENTO[selecionado] : null;
   const ehDinheiro = opcaoSelecionada?.formaPagamento === "dinheiro";
   const trocoInvalido = ehDinheiro && precisaTroco && numeroDaMoeda(trocoPara) <= 0;
+  const valor1Numero = numeroDaMoeda(valor1);
+  const valor2Numero = Math.max(0, Math.round((total - valor1Numero) * 100) / 100);
+  const divisaoInvalida = dividir && (
+    forma1 === forma2 ||
+    valor1Numero <= 0 || valor2Numero <= 0 ||
+    (forma1 === "dinheiro" && precisaTroco1 && numeroDaMoeda(trocoValor1) <= 0) ||
+    (forma2 === "dinheiro" && precisaTroco2 && numeroDaMoeda(trocoValor2) <= 0)
+  );
 
   function selecionar(indice: number) {
     navigator.vibrate?.(8);
@@ -379,7 +397,33 @@ function FecharContaModal({
     setTrocoPara("");
   }
 
+  useEffect(() => {
+    if (dividir && forma2 === forma1) {
+      setForma2((["dinheiro", "pix", "cartao"] as const).find((f) => f !== forma1) ?? "cartao");
+    }
+  }, [dividir, forma1, forma2]);
+
+  function textoParte(forma: "dinheiro" | "pix" | "cartao", tipoCartao: "credito" | "debito", troco: boolean, valorTroco: string, valor: number) {
+    const rotulo = forma === "cartao" ? `Cartão · ${tipoCartao === "credito" ? "Crédito" : "Débito"}` : forma === "pix" ? "PIX" : troco && numeroDaMoeda(valorTroco) > 0 ? `Dinheiro · troco para R$ ${numeroDaMoeda(valorTroco).toFixed(2).replace(".", ",")}` : "Dinheiro";
+    return `${rotulo} · R$ ${valor.toFixed(2).replace(".", ",")}`;
+  }
+
   async function confirmar() {
+    if (dividir) {
+      if (divisaoInvalida) return;
+      setEnviando(true);
+      const partes: [PagamentoParte, PagamentoParte] = [
+        { forma: forma1, valor: valor1Numero, tipoCartao: forma1 === "cartao" ? tipoCartao1 : undefined, trocoPara: forma1 === "dinheiro" && precisaTroco1 ? numeroDaMoeda(trocoValor1) : undefined },
+        { forma: forma2, valor: valor2Numero, tipoCartao: forma2 === "cartao" ? tipoCartao2 : undefined, trocoPara: forma2 === "dinheiro" && precisaTroco2 ? numeroDaMoeda(trocoValor2) : undefined },
+      ];
+      await onConfirmar({
+        formaPagamento: "misto",
+        pagamentoDividido: partes,
+        texto: `${textoParte(forma1, tipoCartao1, precisaTroco1, trocoValor1, valor1Numero)} + ${textoParte(forma2, tipoCartao2, precisaTroco2, trocoValor2, valor2Numero)}`,
+      });
+      setEnviando(false);
+      return;
+    }
     if (selecionado === null || trocoInvalido) return;
     const opcao = FORMAS_PAGAMENTO[selecionado];
     setEnviando(true);
@@ -412,25 +456,33 @@ function FecharContaModal({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2.5 p-5">
-          {FORMAS_PAGAMENTO.map((opcao, indice) => {
-            const Icon = opcao.icon;
-            const ativo = selecionado === indice;
-            return (
-              <button
-                key={opcao.label}
-                type="button"
-                onClick={() => selecionar(indice)}
-                className={`flex min-h-[76px] flex-col items-center justify-center gap-1.5 rounded-2xl border-2 transition-all active:scale-95 ${ativo ? "border-ink-900 bg-ink-900 text-white shadow-lg shadow-ink-900/20" : "border-cream-200 bg-cream-50 text-ink-600"}`}
-              >
-                <Icon size={21} />
-                <span className="text-xs font-semibold">{opcao.label}</span>
-              </button>
-            );
-          })}
+        {!dividir && (
+          <div className="grid grid-cols-2 gap-2.5 p-5 pb-3">
+            {FORMAS_PAGAMENTO.map((opcao, indice) => {
+              const Icon = opcao.icon;
+              const ativo = selecionado === indice;
+              return (
+                <button
+                  key={opcao.label}
+                  type="button"
+                  onClick={() => selecionar(indice)}
+                  className={`flex min-h-[76px] flex-col items-center justify-center gap-1.5 rounded-2xl border-2 transition-all active:scale-95 ${ativo ? "border-ink-900 bg-ink-900 text-white shadow-lg shadow-ink-900/20" : "border-cream-200 bg-cream-50 text-ink-600"}`}
+                >
+                  <Icon size={21} />
+                  <span className="text-xs font-semibold">{opcao.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="px-5 pb-3">
+          <button type="button" onClick={() => setDividir((v) => !v)} className="text-xs font-semibold text-coral-600 underline underline-offset-2">
+            {dividir ? "Pagar com uma forma só" : "Dividir pagamento em 2"}
+          </button>
         </div>
 
-        {ehDinheiro && (
+        {ehDinheiro && !dividir && (
           <div className="mx-5 mb-5 rounded-2xl border border-cream-200 bg-cream-50 p-3.5">
             <div className="flex items-center justify-between gap-3">
               <span className="text-sm font-medium text-ink-700">Precisa de troco?</span>
@@ -448,9 +500,67 @@ function FecharContaModal({
           </div>
         )}
 
+        {dividir && (
+          <div className="mx-5 mb-5 space-y-3 rounded-2xl border border-cream-200 bg-cream-50 p-3.5">
+            <div>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <b className="text-[10px] font-semibold uppercase tracking-[.12em] text-ink-400">1ª forma</b>
+                <div className="flex gap-1.5">
+                  {(["dinheiro", "pix", "cartao"] as const).map((f) => (
+                    <button key={f} type="button" onClick={() => setForma1(f)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${forma1 === f ? "bg-ink-900 text-white" : "bg-cream-100 text-ink-500"}`}>{f === "cartao" ? "Cartão" : f === "pix" ? "Pix" : "Dinheiro"}</button>
+                  ))}
+                </div>
+              </div>
+              <label className="flex items-center overflow-hidden rounded-xl border border-cream-200 bg-white"><span className="px-3 text-sm font-semibold text-ink-400">R$</span><input inputMode="decimal" value={valor1} onChange={(evento) => setValor1(mascararMoeda(evento.target.value))} placeholder="0,00" className="min-w-0 flex-1 bg-transparent py-3 pr-3 text-sm outline-none" /></label>
+              {forma1 === "cartao" && (
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setTipoCartao1("credito")} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${tipoCartao1 === "credito" ? "border-ink-900 bg-ink-900 text-white" : "border-cream-200 bg-white text-ink-500"}`}>Crédito</button>
+                  <button type="button" onClick={() => setTipoCartao1("debito")} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${tipoCartao1 === "debito" ? "border-ink-900 bg-ink-900 text-white" : "border-cream-200 bg-white text-ink-500"}`}>Débito</button>
+                </div>
+              )}
+              {forma1 === "dinheiro" && (
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <span className="text-xs font-medium text-ink-600">Precisa de troco?</span>
+                  <div className="flex rounded-lg bg-cream-100 p-1"><button type="button" onClick={() => setPrecisaTroco1(false)} className={`rounded-md px-2 py-1 text-xs font-semibold ${!precisaTroco1 ? "bg-white text-ink-900" : "text-ink-400"}`}>Não</button><button type="button" onClick={() => setPrecisaTroco1(true)} className={`rounded-md px-2 py-1 text-xs font-semibold ${precisaTroco1 ? "bg-white text-ink-900" : "text-ink-400"}`}>Sim</button></div>
+                </div>
+              )}
+              {forma1 === "dinheiro" && precisaTroco1 && (
+                <label className="mt-2 flex items-center overflow-hidden rounded-xl border border-cream-200 bg-white"><span className="px-3 text-sm font-semibold text-ink-400">Troco p/ R$</span><input inputMode="decimal" value={trocoValor1} onChange={(evento) => setTrocoValor1(mascararMoeda(evento.target.value))} placeholder="0,00" className="min-w-0 flex-1 bg-transparent py-3 pr-3 text-sm outline-none" /></label>
+              )}
+            </div>
+            <div className="border-t border-cream-200 pt-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <b className="text-[10px] font-semibold uppercase tracking-[.12em] text-ink-400">2ª forma</b>
+                <div className="flex gap-1.5">
+                  {(["dinheiro", "pix", "cartao"] as const).filter((f) => f !== forma1).map((f) => (
+                    <button key={f} type="button" onClick={() => setForma2(f)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${forma2 === f ? "bg-ink-900 text-white" : "bg-cream-100 text-ink-500"}`}>{f === "cartao" ? "Cartão" : f === "pix" ? "Pix" : "Dinheiro"}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center overflow-hidden rounded-xl border border-cream-200 bg-cream-100"><span className="px-3 text-sm font-semibold text-ink-400">R$</span><span className="min-w-0 flex-1 py-3 pr-3 text-sm text-ink-600">{valor2Numero.toFixed(2).replace(".", ",")}</span></div>
+              {forma2 === "cartao" && (
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setTipoCartao2("credito")} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${tipoCartao2 === "credito" ? "border-ink-900 bg-ink-900 text-white" : "border-cream-200 bg-white text-ink-500"}`}>Crédito</button>
+                  <button type="button" onClick={() => setTipoCartao2("debito")} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${tipoCartao2 === "debito" ? "border-ink-900 bg-ink-900 text-white" : "border-cream-200 bg-white text-ink-500"}`}>Débito</button>
+                </div>
+              )}
+              {forma2 === "dinheiro" && (
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <span className="text-xs font-medium text-ink-600">Precisa de troco?</span>
+                  <div className="flex rounded-lg bg-cream-100 p-1"><button type="button" onClick={() => setPrecisaTroco2(false)} className={`rounded-md px-2 py-1 text-xs font-semibold ${!precisaTroco2 ? "bg-white text-ink-900" : "text-ink-400"}`}>Não</button><button type="button" onClick={() => setPrecisaTroco2(true)} className={`rounded-md px-2 py-1 text-xs font-semibold ${precisaTroco2 ? "bg-white text-ink-900" : "text-ink-400"}`}>Sim</button></div>
+                </div>
+              )}
+              {forma2 === "dinheiro" && precisaTroco2 && (
+                <label className="mt-2 flex items-center overflow-hidden rounded-xl border border-cream-200 bg-white"><span className="px-3 text-sm font-semibold text-ink-400">Troco p/ R$</span><input inputMode="decimal" value={trocoValor2} onChange={(evento) => setTrocoValor2(mascararMoeda(evento.target.value))} placeholder="0,00" className="min-w-0 flex-1 bg-transparent py-3 pr-3 text-sm outline-none" /></label>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="p-5 pt-0 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-          {trocoInvalido && <p className="mb-2 text-xs font-medium text-coral-600">Informe o valor que o cliente vai pagar.</p>}
-          <button onClick={() => void confirmar()} disabled={selecionado === null || enviando || trocoInvalido} className="of-primary-btn min-h-12 w-full disabled:opacity-40">
+          {!dividir && trocoInvalido && <p className="mb-2 text-xs font-medium text-coral-600">Informe o valor que o cliente vai pagar.</p>}
+          {dividir && divisaoInvalida && <p className="mb-2 text-xs font-medium text-coral-600">Confira as formas, valores e troco de cada parte.</p>}
+          <button onClick={() => void confirmar()} disabled={enviando || (dividir ? divisaoInvalida : selecionado === null || trocoInvalido)} className="of-primary-btn min-h-12 w-full disabled:opacity-40">
             {enviando ? "Liberando mesa..." : <><DoorOpen size={17} /> Confirmar e liberar mesa</>}
           </button>
         </div>

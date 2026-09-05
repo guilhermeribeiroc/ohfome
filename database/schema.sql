@@ -450,9 +450,16 @@ create table pedidos (
   usuario_id uuid references usuarios(id), -- quem lancou o pedido (garcom/balcao)
   observacoes text,
   forma_recebimento text check (forma_recebimento is null or forma_recebimento in ('entrega', 'retirada')),
-  forma_pagamento text check (forma_pagamento is null or forma_pagamento in ('cartao', 'dinheiro', 'pix')),
+  forma_pagamento text check (forma_pagamento is null or forma_pagamento in ('cartao', 'dinheiro', 'pix', 'misto')),
   tipo_cartao text check (tipo_cartao is null or tipo_cartao in ('credito', 'debito')),
   troco_para numeric(10, 2) check (troco_para is null or troco_para > 0),
+  -- Preenchido só quando forma_pagamento = 'misto': array com exatamente 2
+  -- partes [{forma, valor, tipoCartao?, trocoPara?}]. Ver migration 029.
+  pagamento_dividido jsonb,
+  constraint chk_pedido_pagamento_dividido check (
+    (forma_pagamento = 'misto' and jsonb_array_length(pagamento_dividido) = 2)
+    or (forma_pagamento is distinct from 'misto' and pagamento_dividido is null)
+  ),
   pagamento_status text not null default 'pendente' check (pagamento_status in ('pendente', 'pago', 'falhou', 'estornado')),
   notificado_em timestamptz,
   notificado_mensagem text,
@@ -1001,6 +1008,8 @@ revoke all on function fn_cardapio_publico(text) from public;
 
 -- Cria pedido de entrega ou retirada origem='app' a partir do cardapio publico.
 -- Preco sempre lido do banco (nunca confia no jsonb de itens do cliente).
+-- Suporta Pix (com ou sem Mercado Pago) e pagamento dividido em 2 formas
+-- (forma_pagamento = 'misto'); ver migrations 020 e 029.
 create function fn_criar_pedido_publico(
   p_slug text,
   p_cliente_nome text,
@@ -1012,9 +1021,11 @@ create function fn_criar_pedido_publico(
   p_tipo_cartao text,
   p_troco_para numeric,
   p_itens jsonb,
-  p_cpf text default null,
-  p_notificar_pedido boolean default false,
-  p_bairro_id uuid default null
+  p_cpf text,
+  p_notificar_pedido boolean,
+  p_bairro_id uuid,
+  p_email text,
+  p_pagamento_dividido jsonb default null
 )
 returns jsonb
 language plpgsql
@@ -1034,9 +1045,19 @@ declare
   v_endereco text := nullif(btrim(coalesce(p_endereco, '')), '');
   v_observacoes text := nullif(btrim(coalesce(p_observacoes, '')), '');
   v_cpf text := nullif(btrim(coalesce(p_cpf, '')), '');
+  v_email text := nullif(lower(btrim(coalesce(p_email, ''))), '');
   v_troco_para numeric(10,2) := case when p_troco_para > 0 then p_troco_para else null end;
   v_bairro_nome text;
   v_taxa_entrega numeric(10,2) := 0;
+  v_pix_modo text;
+  v_enviar_cozinha boolean := true;
+  v_total numeric(10,2);
+  v_misto boolean := p_forma_pagamento = 'misto';
+  v_parte jsonb;
+  v_parte_forma text;
+  v_parte_valor numeric(10,2);
+  v_soma_partes numeric(10,2) := 0;
+  v_valor_pix numeric(10,2);
 begin
   select id into v_estabelecimento_id from estabelecimentos where slug = p_slug and ativo;
   if v_estabelecimento_id is null then
@@ -1046,17 +1067,40 @@ begin
   if p_forma_recebimento not in ('entrega', 'retirada') then
     raise exception 'Forma de recebimento inválida' using errcode = '22023';
   end if;
-
-  if p_forma_pagamento not in ('cartao', 'dinheiro') then
+  if p_forma_pagamento not in ('cartao', 'dinheiro', 'pix', 'misto') then
     raise exception 'Forma de pagamento inválida' using errcode = '22023';
   end if;
-
   if p_forma_pagamento = 'cartao' and p_tipo_cartao not in ('credito', 'debito') then
     raise exception 'Informe crédito ou débito' using errcode = '22023';
   end if;
-
   if p_forma_pagamento = 'cartao' then
     v_troco_para := null;
+  end if;
+
+  if v_misto then
+    if p_pagamento_dividido is null or jsonb_array_length(p_pagamento_dividido) <> 2 then
+      raise exception 'Pagamento dividido precisa de exatamente 2 partes' using errcode = '22023';
+    end if;
+    if (p_pagamento_dividido -> 0 ->> 'forma') = (p_pagamento_dividido -> 1 ->> 'forma') then
+      raise exception 'As duas partes do pagamento dividido precisam ser formas diferentes' using errcode = '22023';
+    end if;
+    for v_parte in select jsonb_array_elements(p_pagamento_dividido) loop
+      v_parte_forma := v_parte ->> 'forma';
+      v_parte_valor := (v_parte ->> 'valor')::numeric;
+      if v_parte_forma not in ('cartao', 'dinheiro', 'pix') then
+        raise exception 'Forma inválida no pagamento dividido' using errcode = '22023';
+      end if;
+      if v_parte_valor is null or v_parte_valor <= 0 then
+        raise exception 'Valor inválido no pagamento dividido' using errcode = '22023';
+      end if;
+      if v_parte_forma = 'cartao' and (v_parte ->> 'tipoCartao') not in ('credito', 'debito') then
+        raise exception 'Informe crédito ou débito na parte em cartão' using errcode = '22023';
+      end if;
+      v_soma_partes := v_soma_partes + v_parte_valor;
+      if v_parte_forma = 'pix' then
+        v_valor_pix := v_parte_valor;
+      end if;
+    end loop;
   end if;
 
   if p_forma_recebimento = 'entrega' and length(coalesce(v_endereco, '')) < 10 then
@@ -1079,17 +1123,41 @@ begin
     raise exception 'Pedido sem itens' using errcode = '22023';
   end if;
 
-  insert into clientes (estabelecimento_id, nome, telefone, endereco, cpf, notificar_pedido)
-  values (v_estabelecimento_id, p_cliente_nome, p_telefone, case when p_forma_recebimento = 'entrega' then v_endereco else null end, v_cpf, p_notificar_pedido)
+  if p_forma_pagamento = 'pix' or v_valor_pix is not null then
+    select modo into v_pix_modo from configuracoes_pix
+    where estabelecimento_id = v_estabelecimento_id and ativo;
+    if v_pix_modo is null then
+      raise exception 'Pix não está disponível neste cardápio' using errcode = '22023';
+    end if;
+    if v_pix_modo = 'mercado_pago' then
+      if v_email is null or position('@' in v_email) < 2 or position('.' in split_part(v_email, '@', 2)) < 2 then
+        raise exception 'Informe um e-mail válido para pagar com Pix' using errcode = '22023';
+      end if;
+      v_enviar_cozinha := false;
+    end if;
+  end if;
+
+  insert into clientes (estabelecimento_id, nome, telefone, endereco, cpf, email, notificar_pedido)
+  values (v_estabelecimento_id, p_cliente_nome, p_telefone, case when p_forma_recebimento = 'entrega' then v_endereco else null end, v_cpf, v_email, p_notificar_pedido)
   on conflict (estabelecimento_id, telefone) do update
     set nome = excluded.nome,
         endereco = coalesce(excluded.endereco, clientes.endereco),
         cpf = coalesce(excluded.cpf, clientes.cpf),
+        email = coalesce(excluded.email, clientes.email),
         notificar_pedido = excluded.notificar_pedido
   returning id into v_cliente_id;
 
-  insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, cliente_id, observacoes, forma_recebimento, forma_pagamento, tipo_cartao, troco_para, taxa_entrega)
-  values (v_estabelecimento_id, case when p_forma_recebimento = 'entrega' then 'delivery'::pedido_tipo else 'balcao'::pedido_tipo end, 'app', 'novo', true, now(), v_cliente_id, v_observacoes, p_forma_recebimento, p_forma_pagamento, case when p_forma_pagamento = 'cartao' then p_tipo_cartao else null end, v_troco_para, v_taxa_entrega)
+  insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, cliente_id, observacoes, forma_recebimento, forma_pagamento, tipo_cartao, troco_para, pagamento_dividido, taxa_entrega, pagamento_status)
+  values (
+    v_estabelecimento_id,
+    case when p_forma_recebimento = 'entrega' then 'delivery'::pedido_tipo else 'balcao'::pedido_tipo end,
+    'app', 'novo', v_enviar_cozinha, case when v_enviar_cozinha then now() else null end,
+    v_cliente_id, v_observacoes, p_forma_recebimento, p_forma_pagamento,
+    case when p_forma_pagamento = 'cartao' then p_tipo_cartao else null end,
+    v_troco_para,
+    case when v_misto then p_pagamento_dividido else null end,
+    v_taxa_entrega, 'pendente'
+  )
   returning id, codigo into v_pedido_id, v_codigo;
 
   for v_item in select jsonb_array_elements(p_itens) loop
@@ -1120,11 +1188,26 @@ begin
     insert into entregas (pedido_id, endereco, bairro) values (v_pedido_id, v_endereco, v_bairro_nome);
   end if;
 
-  return jsonb_build_object('id', v_pedido_id, 'codigo', v_codigo, 'notificar', p_notificar_pedido, 'taxaEntrega', v_taxa_entrega);
+  select total into v_total from pedidos where id = v_pedido_id;
+  if v_misto and abs(v_soma_partes - v_total) > 0.01 then
+    raise exception 'A soma do pagamento dividido não bate com o total do pedido' using errcode = '22023';
+  end if;
+
+  return jsonb_build_object(
+    'id', v_pedido_id,
+    'codigo', v_codigo,
+    'estabelecimentoId', v_estabelecimento_id,
+    'notificar', p_notificar_pedido,
+    'taxaEntrega', v_taxa_entrega,
+    'total', v_total,
+    'pixModo', case when p_forma_pagamento = 'pix' or v_valor_pix is not null then v_pix_modo else null end,
+    'valorPix', v_valor_pix,
+    'aguardandoPagamento', not v_enviar_cozinha
+  );
 end;
 $$;
 
-revoke all on function fn_criar_pedido_publico(text, text, text, text, text, text, text, text, numeric, jsonb, text, boolean, uuid) from public;
+revoke all on function fn_criar_pedido_publico(text, text, text, text, text, text, text, text, numeric, jsonb, text, boolean, uuid, text, jsonb) from public;
 
 -- Lista publica dos bairros ativos (e a taxa de cada um) pro cardapio digital.
 create function fn_bairros_publico(p_slug text)
@@ -1252,7 +1335,7 @@ grant execute on function fn_autenticar(text) to ohfome_app;
 grant execute on function fn_registrar_estabelecimento(text, tipo_estabelecimento, text, modulo_sistema[], jsonb, text) to ohfome_app;
 grant execute on function fn_cardapio_publico(text) to ohfome_app;
 grant execute on function fn_pedido_publico_status(text, uuid) to ohfome_app;
-grant execute on function fn_criar_pedido_publico(text, text, text, text, text, text, text, text, numeric, jsonb, text, boolean, uuid) to ohfome_app;
+grant execute on function fn_criar_pedido_publico(text, text, text, text, text, text, text, text, numeric, jsonb, text, boolean, uuid, text, jsonb) to ohfome_app;
 grant execute on function fn_bairros_publico(text) to ohfome_app;
 grant execute on function fn_integracao_gestao_clientes(integer, timestamptz, uuid) to ohfome_app;
 

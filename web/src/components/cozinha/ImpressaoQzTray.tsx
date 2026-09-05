@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, ChevronDown, LoaderCircle, Printer, Radio, Settings2, TriangleAlert, WifiOff, X } from "lucide-react";
 import type qz from "qz-tray";
-import type { ImpressaoJob, Pedido } from "@/lib/types";
+import type { ImpressaoJob, PagamentoParte, Pedido } from "@/lib/types";
 import { usePolling } from "@/lib/use-polling";
 
 type QzApi = typeof qz;
@@ -66,6 +66,12 @@ function linhaComValor(descricao: string, valor: string, largura = LARGURA_TICKE
   return [...linhas.map((linha) => `${linha}\n`), `${ultima}${" ".repeat(Math.max(1, largura - ultima.length - valor.length))}${valor}\n`];
 }
 
+function descricaoParte(parte: PagamentoParte) {
+  if (parte.forma === "cartao") return `CARTAO ${parte.tipoCartao === "credito" ? "CREDITO" : "DEBITO"}`;
+  if (parte.forma === "dinheiro") return parte.trocoPara ? `DINHEIRO (TROCO ${moedaTermica(parte.trocoPara)})` : "DINHEIRO";
+  return "PIX";
+}
+
 function descricaoPagamento(pedido: Pedido) {
   if (pedido.formaPagamento === "cartao") return `CARTAO - ${pedido.tipoCartao === "credito" ? "CREDITO" : "DEBITO"}`;
   if (pedido.formaPagamento === "dinheiro") return pedido.trocoPara ? `DINHEIRO | TROCO P/ ${moedaTermica(pedido.trocoPara)}` : "DINHEIRO | SEM TROCO";
@@ -115,7 +121,16 @@ export function dadosEscPosPedido(pedido: Pedido, largura = LARGURA_TICKET) {
     linhas.push(`${"-".repeat(largura)}\n`, ...quebrarLinha("ENDERECO:", largura).map((linha) => `${linha}\n`), ...quebrarLinha(pedido.enderecoEntrega, largura).map((linha) => `${linha}\n`));
   }
 
-  linhas.push(...quebrarLinha(`PAGAMENTO: ${descricaoPagamento(pedido)}`, largura).map((linha) => `${linha}\n`));
+  if (pedido.formaPagamento === "misto" && pedido.pagamentoDividido) {
+    // Mesmo alinhamento em coluna usado pelos itens (linhaComValor), pra não
+    // virar uma frase corrida e se misturar com o resto da comanda.
+    linhas.push(...quebrarLinha("PAGAMENTO DIVIDIDO", largura).map((linha) => `${linha}\n`));
+    for (const parte of pedido.pagamentoDividido) {
+      linhas.push(...linhaComValor(descricaoParte(parte), moedaTermica(parte.valor), largura));
+    }
+  } else {
+    linhas.push(...quebrarLinha(`PAGAMENTO: ${descricaoPagamento(pedido)}`, largura).map((linha) => `${linha}\n`));
+  }
 
   if (pedido.observacoes) {
     linhas.push(`${"-".repeat(largura)}\n`, ...quebrarLinha(`OBS: ${pedido.observacoes}`, largura).map((linha) => `${linha}\n`));
@@ -202,6 +217,15 @@ export function ImpressaoQzTray({ compacta = false }: ImpressaoQzTrayProps) {
   const [ultimoContato, setUltimoContato] = useState<number | null>(null);
   const [painelAberto, setPainelAberto] = useState(!compacta);
   const [mensagem, setMensagem] = useState("Conecte o QZ Tray nesta estação para imprimir.");
+  const [dispositivoTatil, setDispositivoTatil] = useState(false);
+
+  useEffect(() => {
+    const consulta = window.matchMedia("(pointer: coarse)");
+    setDispositivoTatil(consulta.matches);
+    const aoMudar = (evento: MediaQueryListEvent) => setDispositivoTatil(evento.matches);
+    consulta.addEventListener("change", aoMudar);
+    return () => consulta.removeEventListener("change", aoMudar);
+  }, []);
 
   useEffect(() => {
     const sincronizarPreferencias = window.setTimeout(() => {
@@ -317,11 +341,11 @@ export function ImpressaoQzTray({ compacta = false }: ImpressaoQzTrayProps) {
   }, [imprimir]);
 
   useEffect(() => {
-    if (!estaAbaLider || !automatico || !impressora || conectado || ocupado) return;
+    if (dispositivoTatil || !estaAbaLider || !automatico || !impressora || conectado || ocupado) return;
     const espera = Math.min(30_000, 1_500 * 2 ** Math.min(tentativaReconexao, 5));
     const id = window.setTimeout(() => void conectar(), espera);
     return () => window.clearTimeout(id);
-  }, [estaAbaLider, automatico, conectado, impressora, ocupado, tentativaReconexao, conectar]);
+  }, [dispositivoTatil, estaAbaLider, automatico, conectado, impressora, ocupado, tentativaReconexao, conectar]);
 
   useEffect(() => {
     if (!conectado) return;
@@ -449,6 +473,23 @@ export function ImpressaoQzTray({ compacta = false }: ImpressaoQzTrayProps) {
   </section>;
 
   if (!compacta) return painel;
+
+  // No celular/tablet não existe QZ Tray para conectar (é um app de computador, ligado
+  // à impressora física). Mostrar "desconectado" aqui só assustaria o dono da loja à toa:
+  // os pedidos feitos por este aparelho já entram na fila e imprimem normalmente na
+  // estação. Trocamos o pill de status por um aviso neutro, sem tentativa de conexão.
+  if (dispositivoTatil) return <>
+    <button onClick={() => setPainelAberto((atual) => !atual)} className="fixed right-3 top-3 z-40 flex items-center gap-2 rounded-full bg-ink-900 px-3.5 py-2.5 text-xs font-semibold text-white shadow-xl transition sm:right-5 sm:top-5" title="Sobre a impressão dos pedidos"><Printer size={16} />Impressão pela estação{pendentes > 0 && <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px]">{pendentes}</span>}<ChevronDown size={15} className={painelAberto ? "rotate-180 transition-transform" : "transition-transform"} /></button>
+    {painelAberto && <div className="fixed inset-x-3 top-16 z-40 mx-auto w-auto max-w-sm sm:left-auto sm:right-5 sm:top-20">
+      <section className="of-panel overflow-hidden p-4">
+        <p className="text-sm font-semibold text-ink-900">A impressão roda no computador da loja</p>
+        <p className="mt-1.5 text-xs leading-5 text-ink-500">Celular e tablet não conectam direto na impressora. Configure o QZ Tray uma vez no computador ligado à impressora — os pedidos feitos por aqui entram na fila e saem impressos lá normalmente.{pendentes > 0 && ` Agora mesmo há ${pendentes} ${pendentes === 1 ? "pedido" : "pedidos"} na fila.`}</p>
+        <a href="/configuracoes/impressao" className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-coral-600 hover:text-coral-700"><Settings2 size={14} /> Ver como configurar a estação</a>
+      </section>
+      <button onClick={() => setPainelAberto(false)} className="of-icon-btn absolute right-2 top-2 !h-8 !min-h-8 !w-8" aria-label="Fechar aviso de impressão"><X size={15} /></button>
+    </div>}
+  </>;
+
   return <>
     <button onClick={() => setPainelAberto((atual) => !atual)} className={`fixed right-3 top-3 z-40 flex items-center gap-2 rounded-full px-3.5 py-2.5 text-xs font-semibold shadow-xl transition sm:right-5 sm:top-5 ${conectado ? "bg-ink-900 text-white" : "bg-coral-600 text-white"}`} title="Abrir estação de impressão"><IconeStatus size={16} />{conectado ? "Impressora conectada" : "Impressora desconectada"}{pendentes > 0 && <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px]">{pendentes}</span>}<ChevronDown size={15} className={painelAberto ? "rotate-180 transition-transform" : "transition-transform"} /></button>
     {painelAberto && <div className="fixed inset-x-3 top-16 z-40 mx-auto w-auto max-w-2xl sm:left-auto sm:right-5 sm:top-20 sm:w-[min(42rem,calc(100vw-2.5rem))]">{painel}<div className="flex items-center justify-between border-t border-cream-200 bg-white px-4 py-3"><a href="/configuracoes/impressao" className="inline-flex items-center gap-1.5 text-xs font-semibold text-coral-600 hover:text-coral-700"><Settings2 size={14} /> Configuração guiada</a><span className="text-[10px] text-ink-400">{ultimoPedidoImpresso ? `Último: #${ultimoPedidoImpresso}` : ultimoContato ? "Estação monitorada" : "Aguardando estação"}</span></div><button onClick={() => setPainelAberto(false)} className="of-icon-btn absolute right-3 top-3 !h-8 !min-h-8 !w-8" aria-label="Fechar configuração da impressão"><X size={15} /></button></div>}

@@ -5,7 +5,7 @@ import { Check, MapPin, MapPinned, Plus, Printer, Send, Trash2, UserRoundPlus, X
 import type { BairroEntrega, Entrega, Entregador, EntregaStatus, Produto } from "@/lib/types";
 import { ENTREGA_STATUS_LABEL, nomeProdutoComTamanho } from "@/lib/types";
 import { usePolling } from "@/lib/use-polling";
-import { imprimirEntrega } from "@/lib/impressao";
+import { imprimirEntrega, textoPagamento } from "@/lib/impressao";
 import { useTenant } from "@/lib/tenant-context";
 
 const COLUNAS: EntregaStatus[] = ["aguardando", "em_rota", "entregue"];
@@ -335,7 +335,7 @@ function BairrosModal({ onFechar }: { onFechar: () => void }) {
 }
 
 function EntregaDetalheModal({ entrega, entregadorNome, onFechar }: { entrega: Entrega; entregadorNome?: string; onFechar: () => void }) {
-  const pagamento = entrega.formaPagamento === "cartao" ? `Cartão · ${entrega.tipoCartao === "credito" ? "Crédito" : "Débito"}` : entrega.formaPagamento === "dinheiro" ? entrega.trocoPara ? `Dinheiro · troco para R$ ${Number(entrega.trocoPara).toFixed(2).replace(".", ",")}` : "Dinheiro · sem troco" : null;
+  const pagamento = textoPagamento(entrega);
   return <div className="of-modal-backdrop z-50" role="dialog" aria-modal="true" aria-label={`Detalhes da entrega ${entrega.pedidoCodigo}`}>
     <section className="of-modal-panel flex max-h-[90dvh] max-w-lg flex-col overflow-hidden">
       <header className="flex items-start justify-between border-b border-cream-200 p-5"><div><p className="of-eyebrow">Entrega · Pedido #{entrega.pedidoCodigo}</p><h2 className="font-display text-xl font-bold tracking-tight text-ink-900">Ficha do entregador</h2></div><button onClick={onFechar} className="of-icon-btn" aria-label="Fechar detalhes"><X size={17} /></button></header>

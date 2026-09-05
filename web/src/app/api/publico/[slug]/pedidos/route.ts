@@ -27,9 +27,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .join(" · ")
     : enderecoInformado;
   const formaRecebimento = body?.formaRecebimento === "retirada" ? "retirada" : body?.formaRecebimento === "entrega" ? "entrega" : "";
-  const formaPagamento = body?.formaPagamento === "cartao" ? "cartao" : body?.formaPagamento === "dinheiro" ? "dinheiro" : body?.formaPagamento === "pix" ? "pix" : "";
+  const formaPagamento = body?.formaPagamento === "cartao" ? "cartao" : body?.formaPagamento === "dinheiro" ? "dinheiro" : body?.formaPagamento === "pix" ? "pix" : body?.formaPagamento === "misto" ? "misto" : "";
   const tipoCartao = body?.tipoCartao === "credito" ? "credito" : body?.tipoCartao === "debito" ? "debito" : "";
   const trocoPara = body?.trocoPara === null || body?.trocoPara === undefined || body?.trocoPara === "" ? null : Number(body.trocoPara);
+  const pagamentoDivididoBruto = Array.isArray(body?.pagamentoDividido) ? body.pagamentoDividido : null;
+  const pagamentoDividido: { forma: string; valor: number; tipoCartao: string | null; trocoPara: number | null } [] | null = pagamentoDivididoBruto?.map((parte: Record<string, unknown>) => ({
+    forma: parte?.forma === "cartao" ? "cartao" : parte?.forma === "dinheiro" ? "dinheiro" : parte?.forma === "pix" ? "pix" : "",
+    valor: Number(parte?.valor),
+    tipoCartao: parte?.tipoCartao === "credito" ? "credito" : parte?.tipoCartao === "debito" ? "debito" : null,
+    trocoPara: parte?.trocoPara === null || parte?.trocoPara === undefined || parte?.trocoPara === "" ? null : Number(parte.trocoPara),
+  })) ?? null;
   const observacoes = typeof body?.observacoes === "string" ? body.observacoes.trim() : "";
   const cpf = typeof body?.cpf === "string" ? body.cpf.replace(/\D/g, "") : "";
   const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
@@ -43,6 +50,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!formaPagamento) return NextResponse.json({ erro: "Escolha a forma de pagamento." }, { status: 400 });
   if (formaPagamento === "cartao" && !tipoCartao) return NextResponse.json({ erro: "Escolha crédito ou débito." }, { status: 400 });
   if (trocoPara !== null && (!Number.isFinite(trocoPara) || trocoPara <= 0)) return NextResponse.json({ erro: "Informe um valor de troco válido." }, { status: 400 });
+  if (formaPagamento === "misto") {
+    if (!pagamentoDividido || pagamentoDividido.length !== 2) return NextResponse.json({ erro: "Informe as duas formas de pagamento." }, { status: 400 });
+    if (pagamentoDividido.some((parte) => !parte.forma)) return NextResponse.json({ erro: "Escolha a forma de pagamento de cada parte." }, { status: 400 });
+    if (pagamentoDividido[0].forma === pagamentoDividido[1].forma) return NextResponse.json({ erro: "As duas partes precisam ser formas diferentes." }, { status: 400 });
+    if (pagamentoDividido.some((parte) => !Number.isFinite(parte.valor) || parte.valor <= 0)) return NextResponse.json({ erro: "Informe um valor válido para cada parte." }, { status: 400 });
+    if (pagamentoDividido.some((parte) => parte.forma === "cartao" && !parte.tipoCartao)) return NextResponse.json({ erro: "Escolha crédito ou débito na parte no cartão." }, { status: 400 });
+    if (pagamentoDividido.some((parte) => parte.forma === "dinheiro" && parte.trocoPara !== null && (!Number.isFinite(parte.trocoPara) || parte.trocoPara <= 0))) {
+      return NextResponse.json({ erro: "Informe um valor de troco válido." }, { status: 400 });
+    }
+  }
   if (formaRecebimento === "entrega" && (rua || numeroEndereco || complementoEndereco)) {
     if (!rua) return NextResponse.json({ erro: "Informe a rua ou avenida para entrega." }, { status: 400 });
     if (!numeroEndereco) return NextResponse.json({ erro: "Informe o número do endereço." }, { status: 400 });
@@ -66,11 +83,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if ((erro as { code?: string }).code !== "42883") throw erro;
     }
 
-    const linhas = await queryPublico<{ fn_criar_pedido_publico: { id: string; codigo: number; estabelecimentoId: string; notificar: boolean; taxaEntrega: number; total: number; pixModo?: "manual" | "mercado_pago" | null; aguardandoPagamento?: boolean } }>(
-      "select fn_criar_pedido_publico($1, $2, $3, $4, $5, $6, $7, $8, $9::numeric, $10::jsonb, $11, $12, $13::uuid, $14)",
-      [slug, clienteNome, telefone, formaRecebimento, endereco, observacoes, formaPagamento, tipoCartao || null, trocoPara, JSON.stringify(itens), cpf || null, notificar, bairroId, email || null]
+    const linhas = await queryPublico<{ fn_criar_pedido_publico: { id: string; codigo: number; estabelecimentoId: string; notificar: boolean; taxaEntrega: number; total: number; valorPix?: number; pixModo?: "manual" | "mercado_pago" | null; aguardandoPagamento?: boolean } }>(
+      "select fn_criar_pedido_publico($1, $2, $3, $4, $5, $6, $7, $8, $9::numeric, $10::jsonb, $11, $12, $13::uuid, $14, $15::jsonb)",
+      [slug, clienteNome, telefone, formaRecebimento, endereco, observacoes, formaPagamento, tipoCartao || null, trocoPara, JSON.stringify(itens), cpf || null, notificar, bairroId, email || null, pagamentoDividido ? JSON.stringify(pagamentoDividido) : null]
     );
     const pedido = linhas[0].fn_criar_pedido_publico;
+    const valorCobrancaPix = pedido.valorPix ?? pedido.total;
 
     if (pedido.pixModo !== "mercado_pago") return NextResponse.json(pedido, { status: 201 });
 
@@ -91,10 +109,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         const idempotencyKey = randomUUID();
         const expiraEm = new Date(Date.now() + configuracao.expiracaoMinutos * 60_000);
         await client.query(`insert into pagamentos_pix (estabelecimento_id, pedido_id, provedor, idempotency_key, valor, expira_em)
-          values ($1, $2, 'mercado_pago', $3::uuid, $4, $5)`, [pedido.estabelecimentoId, pedido.id, idempotencyKey, pedido.total, expiraEm]);
+          values ($1, $2, 'mercado_pago', $3::uuid, $4, $5)`, [pedido.estabelecimentoId, pedido.id, idempotencyKey, valorCobrancaPix, expiraEm]);
         const resultado = await criarCobrancaPixMercadoPago(await accessTokenDoEstabelecimento(client, pedido.estabelecimentoId), {
           pedidoId: pedido.id,
-          valor: pedido.total,
+          valor: valorCobrancaPix,
           email: emailPagador,
           expiraEm,
           idempotencyKey,
