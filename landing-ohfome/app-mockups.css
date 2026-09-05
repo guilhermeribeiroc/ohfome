@@ -1,0 +1,99 @@
+/* Faithful code recreations of the real OhFome screens (Central de Pedidos and
+   Garçom/Mesa), built from direct observation of the live product, for places
+   where we cannot ship a photographic screenshot. Built with the app's own
+   real copy, real status colors and real layout, not a generic dashboard. */
+
+/* The wrapping card (feature-shot, dashboard-window, journey-*-visual, journey-phone)
+   becomes a size query container, so the fixed-layout mockup inside scales fluidly
+   to whatever box it lands in instead of overflowing small cards or floating tiny
+   in large ones. */
+.feature-shot, .dashboard-window, .journey-central-visual, .journey-desktop-shot, .journey-phone { container-type: inline-size; }
+
+.app-mock { position: relative; width: 100%; height: 100%; overflow: hidden; background: #faf9f7; font-family: var(--body); color: #191714; }
+.app-mock * { box-sizing: border-box; }
+
+/* ---------- Central de pedidos (desktop kanban) ---------- */
+.app-mock-central { display: flex; font-size: 0.89cqw; }
+
+.amc-sidebar { display: flex; flex-direction: column; width: 21em; flex: none; padding: 1.6em 1.1em; border-right: 1px solid #eee9e2; background: #fff; gap: 1.4em; }
+.amc-brand { display: flex; align-items: center; gap: 0.5em; }
+.amc-brand img { width: 1.9em; height: 1.9em; }
+.amc-brand b { font-family: var(--display); font-size: 1.55em; font-weight: 750; letter-spacing: -0.04em; line-height: 1; }
+.amc-brand small { display: block; margin-top: 0.15em; color: #a29a91; font-size: 0.58em; font-weight: 700; letter-spacing: 0.1em; }
+.amc-tenant { display: flex; align-items: center; gap: 0.6em; padding: 0.8em; border: 1px solid #eee9e2; border-radius: 0.9em; background: #faf9f7; }
+.amc-tenant i { display: grid; width: 1.9em; height: 1.9em; flex: none; place-items: center; border-radius: 0.6em; background: #fff0eb; font-size: 1em; }
+.amc-tenant b { display: block; font-size: 1em; font-weight: 700; }
+.amc-tenant small { display: block; margin-top: 0.1em; color: #a29a91; font-size: 0.85em; }
+.amc-nav-label { margin: 0.2em 0 0.2em; color: #b8afa6; font-size: 0.68em; font-weight: 700; letter-spacing: 0.1em; }
+.amc-nav { display: flex; flex-direction: column; gap: 0.35em; }
+.amc-nav span { padding: 0.75em 0.85em; border-radius: 0.7em; color: #746d65; font-size: 0.98em; font-weight: 600; }
+.amc-nav span.active { background: #191714; color: #fff; }
+
+.amc-main { flex: 1; min-width: 0; padding: 1.8em 2em; }
+.amc-eyebrow { margin: 0 0 0.3em; color: var(--coral-dark); font-size: 0.85em; font-weight: 800; letter-spacing: 0.14em; }
+.amc-title-row { display: flex; align-items: center; justify-content: space-between; gap: 1em; }
+.amc-title { margin: 0; font-family: var(--display); font-size: 2.5em; font-weight: 700; letter-spacing: -0.045em; }
+.amc-actions { display: flex; gap: 0.6em; }
+.amc-btn { display: inline-flex; align-items: center; gap: 0.35em; padding: 0.7em 0.9em; border-radius: 0.7em; border: 1px solid #eee9e2; background: #fff; font-size: 0.95em; font-weight: 700; white-space: nowrap; }
+.amc-btn.dark { border: 0; background: #191714; color: #fff; }
+.amc-sub { margin: 0.5em 0 1.6em; color: #918a82; font-size: 1em; }
+
+.amc-board { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.9em; }
+.amc-board.compact { grid-template-columns: repeat(2, minmax(0, 18em)); }
+.amc-col { min-width: 0; }
+.amc-col-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.7em; }
+.amc-col-head span { display: inline-flex; align-items: center; gap: 0.35em; padding: 0.35em 0.6em; border-radius: 99px; font-size: 0.92em; font-weight: 700; }
+.amc-col-head span.novo { background: #fff4dc; color: #bd7610; }
+.amc-col-head span.preparo { background: #fff0e9; color: #c85c31; }
+.amc-col-head span.pronto { background: #eaf8f0; color: #177a4e; }
+.amc-col-head b { color: #a29a91; font-size: 0.92em; }
+.amc-empty { display: grid; height: 5.5em; place-items: center; border: 1px dashed #e6e0d8; border-radius: 0.9em; color: #c7bfb5; font-size: 0.85em; }
+.amc-card { padding: 0.9em; border: 1px solid #eee9e2; border-radius: 0.9em; background: #fff; box-shadow: 0 0.3em 0.9em rgba(25, 23, 20, .05); }
+.amc-card header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 0.55em; }
+.amc-card header b { color: var(--coral-dark); font-size: 1.05em; font-weight: 800; }
+.amc-card header small { color: #a29a91; font-size: 0.8em; }
+.amc-card ul { display: grid; gap: 0.25em; margin: 0 0 0.6em; padding: 0; list-style: none; font-size: 0.92em; color: #403b35; }
+.amc-card strong { display: block; margin-bottom: 0.5em; font-size: 1.05em; }
+.amc-card button { width: 100%; padding: 0.55em; border: 0; border-radius: 0.6em; background: #191714; color: #fff; font-size: 0.9em; font-weight: 700; }
+
+/* Below ~480px of actual card width, cqw-linear scaling would shrink the 5-column
+   board into illegible text. Drop the sidebar and go to a 3-column board with a
+   proportionally larger font instead of just shrinking everything further. */
+@container (max-width: 480px) {
+  .app-mock-central { font-size: 2.1cqw; }
+  .amc-sidebar { display: none; }
+  .amc-main { display: flex; flex-direction: column; padding: 1.4em; }
+  .amc-eyebrow { display: none; }
+  .amc-title { font-size: 1.5em; }
+  .amc-actions { display: none; }
+  .amc-sub { display: none; }
+  .amc-board { flex: 1; min-height: 0; grid-template-columns: repeat(3, 1fr); }
+  .amc-col:nth-child(4), .amc-col:nth-child(5) { display: none; }
+  .amc-empty { height: 100%; }
+}
+@container (max-width: 260px) {
+  .app-mock-central { font-size: 3.6cqw; }
+  .amc-board { grid-template-columns: repeat(2, 1fr); }
+  .amc-col:nth-child(3) { display: none; }
+}
+
+/* ---------- Garçom / mesa (mobile comanda) ---------- */
+.app-mock-mesa { font-size: 3.08cqw; background: #fff; }
+.amm-head { display: flex; align-items: flex-start; justify-content: space-between; padding: 1.4em 1.3em 1em; border-bottom: 1px solid #f0ebe5; }
+.amm-head b { display: block; font-family: var(--display); font-size: 2em; font-weight: 700; letter-spacing: -0.04em; }
+.amm-head small { display: block; margin-top: 0.2em; color: #918a82; font-size: 1.05em; }
+.amm-close { display: grid; width: 2.2em; height: 2.2em; place-items: center; border: 1px solid #eee9e2; border-radius: 50%; color: #a29a91; }
+.amm-section { padding: 1.1em 1.3em 0; color: #b8afa6; font-size: 0.85em; font-weight: 700; letter-spacing: 0.1em; }
+.amm-search { margin: 0.6em 1.3em 1em; padding: 0.85em 1em; border: 1px solid #eee9e2; border-radius: 0.9em; color: #c7bfb5; font-size: 1em; background: #faf9f7; }
+.amm-item { display: flex; align-items: center; justify-content: space-between; gap: 0.8em; margin: 0 1.3em 0.7em; padding: 0.9em 1em; border-radius: 0.9em; }
+.amm-item.active { border: 1px solid #f4c8b8; background: #fff1ec; }
+.amm-item:not(.active) { border: 1px solid #f0ebe5; }
+.amm-item b { display: block; font-size: 1.05em; }
+.amm-item small { display: block; margin-top: 0.15em; color: #918a82; font-size: 0.95em; }
+.amm-stepper { display: flex; align-items: center; gap: 0.6em; flex: none; }
+.amm-stepper i { display: grid; width: 1.9em; height: 1.9em; place-items: center; border-radius: 50%; border: 1px solid #eee9e2; background: #fff; font-style: normal; }
+.amm-stepper i.plus { border: 0; background: #191714; color: #fff; }
+.amm-stepper span { min-width: 1em; text-align: center; font-weight: 700; }
+.amm-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 1em; padding: 1em 1.3em; border-top: 1px solid #f0ebe5; }
+.amm-foot small { color: #918a82; font-size: 0.95em; }
+.amm-foot b { font-size: 1.15em; }
