@@ -85,8 +85,10 @@ create table estabelecimentos (
   onboarding_concluido boolean not null default false,
   -- proximo numero de ticket (pedidos.codigo) deste estabelecimento — cada
   -- um tem sua propria contagem, comecando do 1, em vez de um numero global
-  -- compartilhado entre todos os clientes do OhFome.
+  -- compartilhado entre todos os clientes do OhFome. Reinicia a cada dia
+  -- (ver codigo_pedido_data e fn_atribuir_codigo_pedido).
   proximo_codigo_pedido integer not null default 1,
+  codigo_pedido_data date,
   ativo boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -479,9 +481,13 @@ create table pedidos (
   ),
   constraint chk_pedido_delivery_cliente check (
     (tipo = 'delivery' and cliente_id is not null) or (tipo <> 'delivery')
-  ),
-  constraint uq_pedidos_estabelecimento_codigo unique (estabelecimento_id, codigo)
+  )
 );
+
+-- codigo reinicia por dia (fuso America/Fortaleza), entao a unicidade vale
+-- por dia, nao pra sempre — ver fn_atribuir_codigo_pedido.
+create unique index uq_pedidos_estabelecimento_dia_codigo
+  on pedidos (estabelecimento_id, ((created_at at time zone 'America/Fortaleza')::date), codigo);
 
 alter table movimentacoes_estoque
   add constraint fk_movimentacoes_pedido foreign key (pedido_id) references pedidos(id);
@@ -500,12 +506,17 @@ create trigger trg_pedidos_updated_at
   for each row execute function set_updated_at();
 
 -- Atribui o proximo ticket daquele estabelecimento (nunca um numero global
--- compartilhado entre todos os clientes do OhFome). Usa update+returning
--- pra travar a linha de estabelecimentos e serializar inserts concorrentes.
+-- compartilhado entre todos os clientes do OhFome), reiniciando em 1 a cada
+-- dia (fuso America/Fortaleza). Usa update+returning pra travar a linha de
+-- estabelecimentos e serializar inserts concorrentes.
 create function fn_atribuir_codigo_pedido() returns trigger as $$
+declare
+  v_hoje date := (now() at time zone 'America/Fortaleza')::date;
 begin
   if new.codigo is null then
-    update estabelecimentos set proximo_codigo_pedido = proximo_codigo_pedido + 1
+    update estabelecimentos
+    set proximo_codigo_pedido = case when codigo_pedido_data is distinct from v_hoje then 2 else proximo_codigo_pedido + 1 end,
+        codigo_pedido_data = v_hoje
     where id = new.estabelecimento_id
     returning proximo_codigo_pedido - 1 into new.codigo;
   end if;
