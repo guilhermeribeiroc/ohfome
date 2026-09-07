@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { Calculator, CircleDollarSign, Image as ImageIcon, Link2, PackageSearch, Percent, Plus, Tag, Trash2, TrendingUp, Upload, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Calculator, Camera, Check, CircleDollarSign, Image as ImageIcon, Link2, Loader2, PackageSearch, Percent, Plus, ScanLine, Sparkles, Tag, Trash2, TrendingUp, Upload, X } from "lucide-react";
 import { nomeProdutoComTamanho, type Categoria, type ModoPrecificacao, type Produto, type TamanhoProduto } from "@/lib/types";
 import { usePolling } from "@/lib/use-polling";
 import { mascararMoeda, moedaComCentavos, numeroDaMoeda } from "@/lib/moeda";
@@ -41,6 +41,7 @@ export function PrecificacaoCalculadora() {
   const salvarTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
+  const [modalImportarAberto, setModalImportarAberto] = useState(false);
   const [enviandoImagem, setEnviandoImagem] = useState(false);
 
   const selecionadoId = lista.some((p) => p.id === selecionadoIdManual) ? selecionadoIdManual : (lista[0]?.id ?? "");
@@ -117,7 +118,13 @@ export function PrecificacaoCalculadora() {
 
   return (
     <div>
-      <div className="mb-4 flex justify-end">
+      <div className="mb-4 flex flex-wrap justify-end gap-2">
+        <button
+          onClick={() => setModalImportarAberto(true)}
+          className="of-btn-secondary"
+        >
+          <Camera size={16} /> Importar do cardápio
+        </button>
         <button
           onClick={() => setModalAberto(true)}
           className="of-btn-primary"
@@ -250,6 +257,249 @@ export function PrecificacaoCalculadora() {
           }}
         />
       )}
+
+      {modalImportarAberto && (
+        <ImportarCardapioModal
+          onFechar={() => setModalImportarAberto(false)}
+          onCriados={(ids) => {
+            setModalImportarAberto(false);
+            if (ids[0]) setSelecionadoIdManual(ids[0]);
+            recarregar();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+type EtapaImportacao = "selecionar" | "analisando" | "revisar" | "salvando";
+
+interface ItemRevisao {
+  chave: string;
+  incluir: boolean;
+  nome: string;
+  tamanho: "P" | "M" | "G" | null;
+  descricao: string;
+  precoVenda: string;
+  categoriaNome: string;
+}
+
+function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; onCriados: (ids: string[]) => void }) {
+  const { dados: categorias } = usePolling<Categoria[]>("/api/categorias", 60000);
+  const [etapa, setEtapa] = useState<EtapaImportacao>("selecionar");
+  const [arquivos, setArquivos] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
+  const [itens, setItens] = useState<ItemRevisao[]>([]);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    const urls = arquivos.map((arquivo) => URL.createObjectURL(arquivo));
+    setPreviews(urls);
+    return () => urls.forEach((url) => URL.revokeObjectURL(url));
+  }, [arquivos]);
+
+  function adicionarArquivos(lista: FileList | null) {
+    if (!lista) return;
+    setErro("");
+    setArquivos((atual) => [...atual, ...Array.from(lista)].slice(0, 6));
+  }
+
+  function removerArquivo(indice: number) {
+    setArquivos((atual) => atual.filter((_, i) => i !== indice));
+  }
+
+  async function analisar() {
+    if (arquivos.length === 0) return;
+    setErro("");
+    setEtapa("analisando");
+    const formData = new FormData();
+    arquivos.forEach((arquivo) => formData.append("arquivo", arquivo));
+    const resposta = await fetch("/api/produtos/importar-cardapio", { method: "POST", body: formData });
+    const corpo = await resposta.json().catch(() => null);
+    if (!resposta.ok) {
+      setErro(corpo?.erro ?? "Não foi possível ler o cardápio.");
+      setEtapa("selecionar");
+      return;
+    }
+    const extraidos: { nome: string; tamanho: "P" | "M" | "G" | null; descricao: string; precoVenda: number; categoriaSugerida: string }[] = corpo.itens ?? [];
+    setItens(
+      extraidos.map((item, indice) => ({
+        chave: `${indice}-${item.nome}`,
+        incluir: true,
+        nome: item.nome,
+        tamanho: item.tamanho,
+        descricao: item.descricao,
+        precoVenda: item.precoVenda.toFixed(2).replace(".", ","),
+        categoriaNome: item.categoriaSugerida,
+      })),
+    );
+    setEtapa("revisar");
+  }
+
+  function atualizarItem(chave: string, campo: keyof ItemRevisao, valor: string | boolean | null) {
+    setItens((atual) => atual.map((item) => (item.chave === chave ? { ...item, [campo]: valor } : item)));
+  }
+
+  function removerItem(chave: string) {
+    setItens((atual) => atual.filter((item) => item.chave !== chave));
+  }
+
+  const selecionados = itens.filter((item) => item.incluir);
+
+  async function salvar() {
+    if (selecionados.length === 0) return;
+    setErro("");
+    setEtapa("salvando");
+    const resposta = await fetch("/api/produtos/lote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        itens: selecionados.map((item) => ({
+          nome: item.nome,
+          tamanho: item.tamanho,
+          descricao: item.descricao,
+          precoVenda: numeroDaMoeda(item.precoVenda),
+          categoriaNome: item.categoriaNome,
+        })),
+      }),
+    });
+    const corpo = await resposta.json().catch(() => null);
+    if (!resposta.ok) {
+      setErro(corpo?.erro ?? "Não foi possível criar os produtos.");
+      setEtapa("revisar");
+      return;
+    }
+    onCriados((corpo.produtos as { id: string }[]).map((produto) => produto.id));
+  }
+
+  return (
+    <div className="of-modal-backdrop">
+      <div className="of-modal-panel flex max-w-lg flex-col">
+        <div className="of-panel-header bg-surface">
+          <div>
+            <p className="of-eyebrow">Cardápio</p>
+            <p className="font-display text-lg font-bold text-ink-900">Importar do cardápio</p>
+          </div>
+          <button onClick={onFechar} className="of-icon-btn" aria-label="Fechar"><X size={17} /></button>
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+          {etapa === "selecionar" && (
+            <>
+              <div className="flex items-start gap-3 rounded-2xl border border-coral-200/60 bg-coral-050 p-3.5 text-xs leading-5 text-coral-700">
+                <Sparkles size={16} className="mt-0.5 shrink-0" />
+                <p>Tire uma foto (ou várias, se o cardápio tiver mais de uma página) e a IA identifica os pratos, ingredientes e preços automaticamente. Você confere e ajusta tudo antes de criar.</p>
+              </div>
+
+              <label className="flex min-h-[130px] cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-coral-300 bg-cream-50/70 text-center transition hover:bg-coral-050">
+                <Upload size={22} className="text-coral-600" />
+                <span className="text-sm font-semibold text-coral-700">Escolher fotos do cardápio</span>
+                <span className="text-[11px] text-ink-400">JPG, PNG ou WebP · até 6 fotos</span>
+                <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(e) => adicionarArquivos(e.target.files)} className="sr-only" />
+              </label>
+
+              {previews.length > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {previews.map((url, indice) => (
+                    <div key={url} className="group relative aspect-square overflow-hidden rounded-xl border border-cream-200 bg-cream-100">
+                      <img src={url} alt={`Página ${indice + 1} do cardápio`} className="h-full w-full object-cover" />
+                      <button
+                        onClick={() => removerArquivo(indice)}
+                        aria-label={`Remover foto ${indice + 1}`}
+                        className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-ink-900/70 text-white opacity-0 transition group-hover:opacity-100"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {erro && <p className="rounded-xl bg-danger-050 px-3 py-2 text-xs font-medium text-danger-600">{erro}</p>}
+            </>
+          )}
+
+          {etapa === "analisando" && (
+            <div className="flex min-h-[280px] flex-col items-center justify-center gap-4 text-center">
+              <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl bg-ink-900 text-white">
+                <ScanLine size={28} className="animate-pulse" />
+                <span className="pointer-events-none absolute inset-x-2 top-1/2 h-[2px] rounded-full bg-coral-400 shadow-[0_0_14px_2px_rgba(217,102,73,.7)] animate-[scan_1.8s_ease-in-out_infinite]" />
+              </div>
+              <div>
+                <p className="font-display text-base font-bold text-ink-900">Lendo o cardápio...</p>
+                <p className="mt-1 text-xs text-ink-400">Identificando pratos, ingredientes e preços.</p>
+              </div>
+              <style>{"@keyframes scan{0%,100%{transform:translateY(-18px)}50%{transform:translateY(18px)}}"}</style>
+            </div>
+          )}
+
+          {(etapa === "revisar" || etapa === "salvando") && (
+            <>
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-ink-600">{itens.length} item(ns) encontrado(s) · {selecionados.length} selecionado(s)</p>
+              </div>
+              <div className="space-y-3">
+                {itens.map((item) => (
+                  <div key={item.chave} className={`rounded-2xl border p-3.5 transition ${item.incluir ? "border-coral-200/70 bg-surface" : "border-cream-200 bg-cream-50/60 opacity-60"}`}>
+                    <div className="flex items-start gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => atualizarItem(item.chave, "incluir", !item.incluir)}
+                        aria-pressed={item.incluir}
+                        aria-label={item.incluir ? "Não incluir este item" : "Incluir este item"}
+                        className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border-2 transition ${item.incluir ? "border-coral-500 bg-coral-500 text-white" : "border-cream-300 bg-surface text-transparent"}`}
+                      >
+                        <Check size={14} />
+                      </button>
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="flex gap-2">
+                          <input value={item.nome} onChange={(e) => atualizarItem(item.chave, "nome", e.target.value)} placeholder="Nome do produto" className={`${CAMPO_CLASSE} !py-2 flex-1 font-semibold`} />
+                          <select value={item.tamanho ?? ""} onChange={(e) => atualizarItem(item.chave, "tamanho", e.target.value || null)} className={`${CAMPO_CLASSE} !py-2 !w-20 !px-2 text-center`}>
+                            <option value="">—</option>
+                            <option value="P">P</option>
+                            <option value="M">M</option>
+                            <option value="G">G</option>
+                          </select>
+                        </div>
+                        <input value={item.descricao} onChange={(e) => atualizarItem(item.chave, "descricao", e.target.value)} placeholder="Ingredientes / descrição" className={`${CAMPO_CLASSE} !py-2 text-xs`} />
+                        <div className="flex gap-2">
+                          <div className="flex min-h-[38px] flex-1 items-center rounded-xl border border-cream-200 bg-cream-50 px-2.5">
+                            <span className="mr-1.5 text-xs font-bold text-ink-400">R$</span>
+                            <input inputMode="decimal" value={item.precoVenda} onChange={(e) => atualizarItem(item.chave, "precoVenda", mascararMoeda(e.target.value))} className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-ink-900 outline-none" />
+                          </div>
+                          <input value={item.categoriaNome} onChange={(e) => atualizarItem(item.chave, "categoriaNome", e.target.value)} placeholder="Categoria" list="categorias-existentes" className={`${CAMPO_CLASSE} !py-2 flex-1 text-xs`} />
+                        </div>
+                      </div>
+                      <button onClick={() => removerItem(item.chave)} aria-label="Remover item" className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-ink-400 transition hover:bg-danger-050 hover:text-danger-600">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <datalist id="categorias-existentes">
+                {(categorias ?? []).map((categoria) => <option key={categoria.id} value={categoria.nome} />)}
+              </datalist>
+              {erro && <p className="rounded-xl bg-danger-050 px-3 py-2 text-xs font-medium text-danger-600">{erro}</p>}
+            </>
+          )}
+        </div>
+
+        <footer className="border-t border-cream-200 bg-surface p-4">
+          <div className="mx-auto max-w-sm">
+            {etapa === "selecionar" && (
+              <button onClick={analisar} disabled={arquivos.length === 0} className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold text-white shadow-lg shadow-coral-500/25 transition hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-40" style={{ background: GRADIENTE_CORAL }}>
+                <Sparkles size={16} /> Analisar {arquivos.length > 0 ? `${arquivos.length} foto(s)` : "cardápio"}
+              </button>
+            )}
+            {(etapa === "revisar" || etapa === "salvando") && (
+              <button onClick={salvar} disabled={selecionados.length === 0 || etapa === "salvando"} className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold text-white shadow-lg shadow-coral-500/25 transition hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-40" style={{ background: GRADIENTE_CORAL }}>
+                {etapa === "salvando" ? <><Loader2 size={16} className="animate-spin" /> Criando produtos...</> : `Adicionar ${selecionados.length} produto(s)`}
+              </button>
+            )}
+          </div>
+        </footer>
+      </div>
     </div>
   );
 }

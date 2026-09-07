@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.124.0",
     "@studio-freight/lenis": "^1.0.42",
     "bcryptjs": "^3.0.3",
     "lucide-react": "^1.32.0",

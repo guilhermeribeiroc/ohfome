@@ -1,0 +1,38 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { autenticarRequisicao, respostaNaoAutenticado } from "@/lib/api-auth";
+import { extrairItensCardapio, mediaTypeAceito } from "@/lib/importar-cardapio";
+
+export const runtime = "nodejs";
+
+const LIMITE_IMAGEM_BYTES = 8 * 1024 * 1024;
+const MAXIMO_IMAGENS = 6;
+
+export async function POST(request: NextRequest) {
+  if (!autenticarRequisicao(request)) return respostaNaoAutenticado();
+
+  const dados = await request.formData().catch(() => null);
+  if (!dados) return NextResponse.json({ erro: "Envie ao menos uma foto do cardápio." }, { status: 400 });
+
+  const arquivos = dados.getAll("arquivo").filter((item): item is File => item instanceof File);
+  if (arquivos.length === 0) return NextResponse.json({ erro: "Envie ao menos uma foto do cardápio." }, { status: 400 });
+  if (arquivos.length > MAXIMO_IMAGENS) return NextResponse.json({ erro: `Envie no máximo ${MAXIMO_IMAGENS} fotos por vez.` }, { status: 400 });
+
+  const imagens: { base64: string; mediaType: "image/jpeg" | "image/png" | "image/webp" }[] = [];
+  for (const arquivo of arquivos) {
+    const mediaType = mediaTypeAceito(arquivo.type);
+    if (!mediaType) return NextResponse.json({ erro: "Envie fotos em JPG, PNG ou WebP." }, { status: 400 });
+    if (arquivo.size > LIMITE_IMAGEM_BYTES) return NextResponse.json({ erro: "Cada foto deve ter no máximo 8 MB." }, { status: 400 });
+    const base64 = Buffer.from(await arquivo.arrayBuffer()).toString("base64");
+    imagens.push({ base64, mediaType });
+  }
+
+  try {
+    const itens = await extrairItensCardapio(imagens);
+    if (itens.length === 0) {
+      return NextResponse.json({ erro: "Não encontrei itens com preço legível nessa(s) foto(s). Tente uma foto mais nítida." }, { status: 422 });
+    }
+    return NextResponse.json({ itens });
+  } catch (erro) {
+    return NextResponse.json({ erro: erro instanceof Error ? erro.message : "Não foi possível ler o cardápio." }, { status: 502 });
+  }
+}
