@@ -34,13 +34,13 @@ function normalizar(body: unknown): Horarios | null {
 }
 
 async function admin(request: NextRequest) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return null;
   return (await sessaoEhAdministrador(sessao)) ? sessao : null;
 }
 
 export async function GET(request: NextRequest) {
-  if (!autenticarRequisicao(request)) return respostaNaoAutenticado();
+  if (!await autenticarRequisicao(request)) return respostaNaoAutenticado();
   const sessao = await admin(request);
   if (!sessao) return respostaAdministradorObrigatorio();
   const valor = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  if (!autenticarRequisicao(request)) return respostaNaoAutenticado();
+  if (!await autenticarRequisicao(request)) return respostaNaoAutenticado();
   const sessao = await admin(request);
   if (!sessao) return respostaAdministradorObrigatorio();
   const dados = normalizar(await request.json().catch(() => null));

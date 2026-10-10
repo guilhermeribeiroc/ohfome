@@ -6,7 +6,7 @@ import { comEstabelecimento } from "@/lib/db";
 import { criarVerifierPkce, urlAutorizacaoMercadoPago, MercadoPagoErro } from "@/lib/mercado-pago";
 
 export async function GET(request: NextRequest) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
   if (!await sessaoEhAdministrador(sessao)) return respostaAdministradorObrigatorio();
 

@@ -1063,22 +1063,9 @@ export function CardapioPublico({ slug }: { slug: string }) {
 }
 
 function BotaoWhatsapp({ href }: { href: string }) {
-  const [notificacaoVisivel, setNotificacaoVisivel] = useState(false);
-
-  useEffect(() => {
-    try {
-      setNotificacaoVisivel(window.localStorage.getItem("ohfome_whatsapp_visto") !== "1");
-    } catch {
-      setNotificacaoVisivel(true);
-    }
-  }, []);
+  const [notificacaoVisivel, setNotificacaoVisivel] = useState(true);
 
   function aoClicar() {
-    try {
-      window.localStorage.setItem("ohfome_whatsapp_visto", "1");
-    } catch {
-      /* localStorage indisponível — segue sem lembrar */
-    }
     setNotificacaoVisivel(false);
   }
 
@@ -1509,24 +1496,6 @@ function DetailTag({
   );
 }
 
-interface ClienteSalvo {
-  nome: string;
-  telefone: string;
-  cpf: string;
-  email?: string;
-  notificar: boolean;
-}
-
-function carregarClienteSalvo(slug: string): ClienteSalvo | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const bruto = window.localStorage.getItem(`ohfome_cliente_${slug}`);
-    return bruto ? (JSON.parse(bruto) as ClienteSalvo) : null;
-  } catch {
-    return null;
-  }
-}
-
 interface BairroPublico {
   id: string;
   nome: string;
@@ -1566,18 +1535,15 @@ function CarrinhoSheet({
 }) {
   const painelRef = usePainelAcessivel(onFechar);
   const [etapa, setEtapa] = useState<"itens" | "dados" | "pagamento">("itens");
-  const clienteSalvo = useMemo(() => carregarClienteSalvo(slug), [slug]);
   const { dados: bairros } = usePolling<BairroPublico[]>(
     `/api/publico/${slug}/bairros`,
     60000,
   );
-  const [nome, setNome] = useState(() => clienteSalvo?.nome ?? "");
-  const [telefone, setTelefone] = useState(() => clienteSalvo?.telefone ?? "");
-  const [cpf, setCpf] = useState(() => clienteSalvo?.cpf ?? "");
-  const [email, setEmail] = useState(() => clienteSalvo?.email ?? "");
-  const [notificar, setNotificar] = useState(
-    () => clienteSalvo?.notificar ?? true,
-  );
+  const [nome, setNome] = useState("");
+  const [telefone, setTelefone] = useState("");
+  const [cpf, setCpf] = useState("");
+  const [email, setEmail] = useState("");
+  const [notificar, setNotificar] = useState(true);
   const [rua, setRua] = useState("");
   const [numeroEndereco, setNumeroEndereco] = useState("");
   const [complementoEndereco, setComplementoEndereco] = useState("");
@@ -1621,12 +1587,10 @@ function CarrinhoSheet({
   const totalComTaxa = totalValor + taxaEntrega;
   const valorParte1Numero = numeroDaMoeda(valorParte1);
   const valorParte2Numero = Math.max(0, Math.round((totalComTaxa - valorParte1Numero) * 100) / 100);
-  const usaPixMercadoPagoNaDivisao = dividirPagamento && dados.pix?.modo === "mercado_pago" && (formaPagamento === "pix" || forma2 === "pix");
-  useEffect(() => {
-    if (dividirPagamento && forma2 === formaPagamento) {
-      setForma2((["cartao", "dinheiro", "pix"] as const).find((f) => f !== formaPagamento && (f !== "pix" || dados.pix)) ?? "dinheiro");
-    }
-  }, [dividirPagamento, formaPagamento, forma2, dados.pix]);
+  const forma2Efetiva = dividirPagamento && forma2 === formaPagamento
+    ? (["cartao", "dinheiro", "pix"] as const).find((f) => f !== formaPagamento && (f !== "pix" || dados.pix)) ?? "dinheiro"
+    : forma2;
+  const usaPixMercadoPagoNaDivisao = dividirPagamento && dados.pix?.modo === "mercado_pago" && (formaPagamento === "pix" || forma2Efetiva === "pix");
   const enderecoFormatado = [
     rua.trim() && `${rua.trim()}, ${numeroEndereco.trim()}`,
     complementoEndereco.trim(),
@@ -1661,7 +1625,7 @@ function CarrinhoSheet({
     if (!validarDados()) return;
     const emailPagador = email.trim();
     const usaPixMpNaParte1 = formaPagamento === "pix" && dados.pix?.modo === "mercado_pago";
-    const usaPixMpNaParte2 = dividirPagamento && forma2 === "pix" && dados.pix?.modo === "mercado_pago";
+    const usaPixMpNaParte2 = dividirPagamento && forma2Efetiva === "pix" && dados.pix?.modo === "mercado_pago";
     if (
       (usaPixMpNaParte1 || usaPixMpNaParte2) &&
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailPagador)
@@ -1679,7 +1643,7 @@ function CarrinhoSheet({
       return;
     }
     if (dividirPagamento) {
-      if (formaPagamento === forma2) {
+      if (formaPagamento === forma2Efetiva) {
         setErro("As duas formas de pagamento precisam ser diferentes.");
         return;
       }
@@ -1728,10 +1692,10 @@ function CarrinhoSheet({
                 trocoPara: formaPagamento === "dinheiro" && precisaTroco ? numeroDaMoeda(trocoPara) : undefined,
               },
               {
-                forma: forma2,
+                forma: forma2Efetiva,
                 valor: valorParte2Numero,
-                tipoCartao: forma2 === "cartao" ? tipoCartao2 : undefined,
-                trocoPara: forma2 === "dinheiro" && precisaTroco2 ? numeroDaMoeda(trocoPara2) : undefined,
+                tipoCartao: forma2Efetiva === "cartao" ? tipoCartao2 : undefined,
+                trocoPara: forma2Efetiva === "dinheiro" && precisaTroco2 ? numeroDaMoeda(trocoPara2) : undefined,
               },
             ]
           : undefined,
@@ -1750,20 +1714,6 @@ function CarrinhoSheet({
       return;
     }
     const pedido = await resposta.json();
-    try {
-      window.localStorage.setItem(
-        `ohfome_cliente_${slug}`,
-        JSON.stringify({
-          nome: nome.trim(),
-          telefone: telefone.trim(),
-          cpf: cpf.trim(),
-          email: emailPagador,
-          notificar,
-        }),
-      );
-    } catch {
-      /* localStorage indisponível (modo privado etc.) — segue sem salvar */
-    }
     const numero = (dados.whatsappAtendimento ?? "").replace(/\D/g, "");
     if (pedido.cobranca?.qrCodeBase64 && pedido.cobranca?.copiaCola) {
       onAguardandoPix({
@@ -1781,7 +1731,7 @@ function CarrinhoSheet({
       return troco ? `Dinheiro · troco para ${moeda(numeroDaMoeda(valorTroco))}` : "Dinheiro";
     }
     const pagamento = dividirPagamento
-      ? `${textoForma(formaPagamento, tipoCartao, precisaTroco, trocoPara)} (${moeda(valorParte1Numero)}) + ${textoForma(forma2, tipoCartao2, precisaTroco2, trocoPara2)} (${moeda(valorParte2Numero)})`
+      ? `${textoForma(formaPagamento, tipoCartao, precisaTroco, trocoPara)} (${moeda(valorParte1Numero)}) + ${textoForma(forma2Efetiva, tipoCartao2, precisaTroco2, trocoPara2)} (${moeda(valorParte2Numero)})`
       : formaPagamento === "cartao"
         ? `Cartão · ${tipoCartao === "credito" ? "Crédito" : "Débito"}`
         : formaPagamento === "pix"
@@ -2182,7 +2132,7 @@ function CarrinhoSheet({
                   ) : !dividirPagamento && formaPagamento === "dinheiro" ? (
                     <div className="rounded-2xl border border-black/[.09] bg-white/55 p-3">
                       <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium text-black/75">Precisa de troco?</span><div className="flex rounded-xl bg-black/[.05] p-1"><button type="button" onClick={() => setPrecisaTroco(false)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${!precisaTroco ? "bg-white text-[#0e7775] shadow-sm" : "text-black/50"}`}>Não</button><button type="button" onClick={() => setPrecisaTroco(true)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${precisaTroco ? "bg-white text-[#0e7775] shadow-sm" : "text-black/50"}`}>Sim</button></div></div>
-                      {precisaTroco && <label className="mt-3 flex items-center overflow-hidden rounded-xl border border-black/[.1] bg-white"><span className="px-3 text-sm font-semibold text-black/45">R$</span><input inputMode="decimal" value={trocoPara} onChange={(evento) => setTrocoPara(mascararMoeda(evento.target.value))} placeholder="0,00" className="min-w-0 flex-1 bg-transparent py-3 pr-3 text-sm outline-none" /></label>}
+                      {precisaTroco && <label className="mt-3 block"><span className="mb-2 block text-sm font-semibold text-black/65">Troco para:</span><span className="flex overflow-hidden rounded-xl border border-black/[.1] bg-white"><span className="px-3 py-3 text-sm font-semibold text-black/45">R$</span><input inputMode="decimal" value={trocoPara} onChange={(evento) => setTrocoPara(mascararMoeda(evento.target.value))} placeholder="50,00" className="min-w-0 flex-1 bg-transparent py-3 pr-3 text-sm outline-none" /></span></label>}
                     </div>
                   ) : null}
                   {dividirPagamento && (
@@ -2216,7 +2166,7 @@ function CarrinhoSheet({
                           <b className="text-xs font-semibold uppercase tracking-wide text-black/45">2ª forma</b>
                           <div className="flex gap-1.5">
                             {(["cartao", "dinheiro", "pix"] as const).filter((f) => f !== formaPagamento && (f !== "pix" || dados.pix)).map((f) => (
-                              <button key={f} type="button" onClick={() => setForma2(f)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${forma2 === f ? "bg-[#0e7775] text-white" : "bg-black/[.05] text-black/55"}`}>{f === "cartao" ? "Cartão" : f === "pix" ? "Pix" : "Dinheiro"}</button>
+                              <button key={f} type="button" onClick={() => setForma2(f)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${forma2Efetiva === f ? "bg-[#0e7775] text-white" : "bg-black/[.05] text-black/55"}`}>{f === "cartao" ? "Cartão" : f === "pix" ? "Pix" : "Dinheiro"}</button>
                             ))}
                           </div>
                         </div>
@@ -2224,22 +2174,22 @@ function CarrinhoSheet({
                           <span className="px-3 text-sm font-semibold text-black/45">R$</span>
                           <span className="min-w-0 flex-1 py-3 pr-3 text-sm text-black/65">{moeda(valorParte2Numero)}</span>
                         </div>
-                        {forma2 === "cartao" && (
+                        {forma2Efetiva === "cartao" && (
                           <div className="mt-2 grid grid-cols-2 gap-2">
                             <button type="button" onClick={() => setTipoCartao2("credito")} className={`rounded-xl border px-3 py-2.5 text-sm font-semibold ${tipoCartao2 === "credito" ? "border-coral-500 bg-coral-050 text-coral-600" : "border-black/[.1] bg-white/55 text-black/65"}`}>Crédito</button>
                             <button type="button" onClick={() => setTipoCartao2("debito")} className={`rounded-xl border px-3 py-2.5 text-sm font-semibold ${tipoCartao2 === "debito" ? "border-coral-500 bg-coral-050 text-coral-600" : "border-black/[.1] bg-white/55 text-black/65"}`}>Débito</button>
                           </div>
                         )}
-                        {forma2 === "dinheiro" && (
+                        {forma2Efetiva === "dinheiro" && (
                           <div className="mt-2 flex items-center justify-between gap-3">
                             <span className="text-xs font-medium text-black/60">Precisa de troco?</span>
                             <div className="flex rounded-xl bg-black/[.05] p-1"><button type="button" onClick={() => setPrecisaTroco2(false)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${!precisaTroco2 ? "bg-white text-[#0e7775] shadow-sm" : "text-black/50"}`}>Não</button><button type="button" onClick={() => setPrecisaTroco2(true)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${precisaTroco2 ? "bg-white text-[#0e7775] shadow-sm" : "text-black/50"}`}>Sim</button></div>
                           </div>
                         )}
-                        {forma2 === "dinheiro" && precisaTroco2 && (
+                        {forma2Efetiva === "dinheiro" && precisaTroco2 && (
                           <label className="mt-2 flex items-center overflow-hidden rounded-xl border border-black/[.1] bg-white"><span className="px-3 text-sm font-semibold text-black/45">Troco p/ R$</span><input inputMode="decimal" value={trocoPara2} onChange={(evento) => setTrocoPara2(mascararMoeda(evento.target.value))} placeholder="0,00" className="min-w-0 flex-1 bg-transparent py-3 pr-3 text-sm outline-none" /></label>
                         )}
-                        {forma2 === "pix" && dados.pix?.modo === "mercado_pago" && (
+                        {forma2Efetiva === "pix" && dados.pix?.modo === "mercado_pago" && (
                           <p className="mt-2 text-xs leading-4 text-black/45">Você receberá um QR Code Pix só desse valor.</p>
                         )}
                       </div>
@@ -2359,19 +2309,24 @@ function CarrinhoSheet({
                       </div>
                     </div>
                     {precisaTroco && (
-                      <label className="mt-3 flex items-center overflow-hidden rounded-xl border border-black/[.1] bg-white">
-                        <span className="px-3 text-sm font-semibold text-black/45">
-                          R$
+                      <label className="mt-3 block">
+                        <span className="mb-2 block text-sm font-semibold text-black/65">
+                          Troco para:
                         </span>
-                        <input
-                          inputMode="decimal"
-                          value={trocoPara}
-                          onChange={(evento) =>
-                            setTrocoPara(mascararMoeda(evento.target.value))
-                          }
-                          placeholder="0,00"
-                          className="min-w-0 flex-1 bg-transparent py-3 pr-3 text-sm outline-none"
-                        />
+                        <span className="flex overflow-hidden rounded-xl border border-black/[.1] bg-white">
+                          <span className="px-3 py-3 text-sm font-semibold text-black/45">
+                            R$
+                          </span>
+                          <input
+                            inputMode="decimal"
+                            value={trocoPara}
+                            onChange={(evento) =>
+                              setTrocoPara(mascararMoeda(evento.target.value))
+                            }
+                            placeholder="50,00"
+                            className="min-w-0 flex-1 bg-transparent py-3 pr-3 text-sm outline-none"
+                          />
+                        </span>
                       </label>
                     )}
                   </div>

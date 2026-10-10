@@ -1,12 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { autenticarRequisicao, respostaNaoAutenticado } from "@/lib/api-auth";
+import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, sessaoPodeGerirEstoque } from "@/lib/api-auth";
 import { comEstabelecimento } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
 
   const todos = new URL(request.url).searchParams.get("todos") === "1";
+  if (todos && !sessaoPodeGerirEstoque(sessao)) return respostaAcessoNegado();
 
   const produtos = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     const { rows } = await client.query(
@@ -14,16 +15,16 @@ export async function GET(request: NextRequest) {
          p.id, p.nome, p.tamanho, p.descricao, p.imagem_url as "imagemUrl",
          p.categoria_id as "categoriaId",
          coalesce(c.nome, 'Geral') as "categoriaNome",
-         p.modo_precificacao as "modoPrecificacao",
-         p.preco_custo as "precoCusto",
-         p.margem_percentual as "margemPercentual",
+         case when $2 then p.modo_precificacao end as "modoPrecificacao",
+         case when $2 then p.preco_custo end as "precoCusto",
+         case when $2 then p.margem_percentual end as "margemPercentual",
          p.preco_venda as "precoVenda",
          p.ativo
        from produtos p
        left join categorias_produto c on c.id = p.categoria_id
        where ($1 or p.ativo)
        order by c.ordem_exibicao, p.nome`,
-      [todos]
+      [todos, sessaoPodeGerirEstoque(sessao)]
     );
     return rows;
   });
@@ -32,8 +33,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
+  if (!sessaoPodeGerirEstoque(sessao)) return respostaAcessoNegado();
 
   const body = await request.json().catch(() => null);
   const nome = typeof body?.nome === "string" ? body.nome.trim() : "";

@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { queryPublico } from "@/lib/db";
 import { buscarContexto } from "@/lib/auth-queries";
 import { criarSessao, SESSION_COOKIE } from "@/lib/session";
-import { limitado } from "@/lib/rate-limit";
+import { ipClienteConfiavel, limitado } from "@/lib/rate-limit";
 
 // Hash valido de uma senha que ninguem tem, usado so para gastar o mesmo
 // tempo de CPU quando o usuário nao existe — evita que o tempo de resposta
@@ -19,12 +19,14 @@ interface AutenticarRow {
 }
 
 export async function POST(request: NextRequest) {
-  const ip = request.headers.get("x-forwarded-for") ?? "local";
   const body = await request.json().catch(() => null);
   const usuario = typeof body?.usuario === "string" ? body.usuario.trim().toLowerCase() : "";
   const senha = typeof body?.senha === "string" ? body.senha : "";
 
-  if (limitado(`login:${ip}:${usuario}`)) {
+  const ip = ipClienteConfiavel(request);
+  const limiteUsuario = await limitado("login:usuario", usuario);
+  const limiteIp = ip ? await limitado("login:ip", ip) : false;
+  if (limiteUsuario || limiteIp) {
     return NextResponse.json({ erro: "Muitas tentativas. Aguarde um minuto e tente novamente." }, { status: 429 });
   }
 

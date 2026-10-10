@@ -4,7 +4,7 @@ import { comEstabelecimento } from "@/lib/db";
 import { respostaAdministradorObrigatorio, sessaoEhAdministrador } from "@/lib/admin-auth";
 
 async function autenticarAdministrador(request: NextRequest) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return { sessao: null, autorizado: false };
   return { sessao, autorizado: await sessaoEhAdministrador(sessao) };
 }

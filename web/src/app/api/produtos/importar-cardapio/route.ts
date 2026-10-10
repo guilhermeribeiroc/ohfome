@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { autenticarRequisicao, respostaNaoAutenticado } from "@/lib/api-auth";
-import { extrairItensCardapio, mediaTypeAceito } from "@/lib/importar-cardapio";
+import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, sessaoPodeGerirEstoque } from "@/lib/api-auth";
+import { extrairItensCardapio, mediaTypeAceito, mediaTypePelosBytes } from "@/lib/importar-cardapio";
 
 export const runtime = "nodejs";
 
@@ -8,7 +8,9 @@ const LIMITE_IMAGEM_BYTES = 8 * 1024 * 1024;
 const MAXIMO_IMAGENS = 6;
 
 export async function POST(request: NextRequest) {
-  if (!autenticarRequisicao(request)) return respostaNaoAutenticado();
+  const sessao = await autenticarRequisicao(request);
+  if (!sessao) return respostaNaoAutenticado();
+  if (!sessaoPodeGerirEstoque(sessao)) return respostaAcessoNegado();
 
   const dados = await request.formData().catch(() => null);
   if (!dados) return NextResponse.json({ erro: "Envie ao menos uma foto do cardápio." }, { status: 400 });
@@ -22,7 +24,9 @@ export async function POST(request: NextRequest) {
     const mediaType = mediaTypeAceito(arquivo.type);
     if (!mediaType) return NextResponse.json({ erro: "Envie fotos em JPG, PNG ou WebP." }, { status: 400 });
     if (arquivo.size > LIMITE_IMAGEM_BYTES) return NextResponse.json({ erro: "Cada foto deve ter no máximo 8 MB." }, { status: 400 });
-    const base64 = Buffer.from(await arquivo.arrayBuffer()).toString("base64");
+    const bytes = Buffer.from(await arquivo.arrayBuffer());
+    if (mediaTypePelosBytes(bytes) !== mediaType) return NextResponse.json({ erro: "Uma das fotos tem conteúdo incompatível com o formato informado." }, { status: 400 });
+    const base64 = bytes.toString("base64");
     imagens.push({ base64, mediaType });
   }
 

@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { autenticarRequisicao, respostaNaoAutenticado } from "@/lib/api-auth";
+import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, sessaoPodeGerirEstoque } from "@/lib/api-auth";
 import { comEstabelecimento } from "@/lib/db";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
 
   const { id } = await params;
@@ -27,8 +27,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
+  if (!sessaoPodeGerirEstoque(sessao)) return respostaAcessoNegado();
 
   const { id } = await params;
   const body = await request.json().catch(() => null);

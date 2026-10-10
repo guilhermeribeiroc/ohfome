@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { autenticarRequisicao, respostaNaoAutenticado } from "@/lib/api-auth";
+import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, sessaoPodeGerirEstoque } from "@/lib/api-auth";
 import { comEstabelecimento } from "@/lib/db";
 
 const UNIDADES = ["kg", "g", "l", "ml", "un", "cx", "pct"];
@@ -13,8 +13,9 @@ const RETORNO = `
 `;
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
+  if (!sessaoPodeGerirEstoque(sessao)) return respostaAcessoNegado();
 
   const { id } = await params;
   const body = await request.json().catch(() => null);
@@ -63,8 +64,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
+  if (!sessaoPodeGerirEstoque(sessao)) return respostaAcessoNegado();
 
   const { id } = await params;
   try {

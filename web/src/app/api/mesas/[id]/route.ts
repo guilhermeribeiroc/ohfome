@@ -1,12 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { autenticarRequisicao, respostaNaoAutenticado } from "@/lib/api-auth";
+import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, sessaoPodeAcessarModulo } from "@/lib/api-auth";
 import { comEstabelecimento } from "@/lib/db";
 
 const STATUS_VALIDOS = ["livre", "ocupada", "aguardando_conta", "reservada"];
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
+  if (!sessaoPodeAcessarModulo(sessao, "garcom")) return respostaAcessoNegado();
 
   const { id } = await params;
   const body = await request.json().catch(() => null);
@@ -136,8 +137,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
+  if (sessao.role !== "admin") return respostaAcessoNegado();
 
   const { id } = await params;
   try {

@@ -271,7 +271,8 @@ create table produtos (
   preco_venda numeric(10, 2) not null default 0 check (preco_venda >= 0),
   ativo boolean not null default true,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint uq_produtos_id_estabelecimento unique (id, estabelecimento_id)
 );
 
 create index idx_produtos_estabelecimento on produtos(estabelecimento_id);
@@ -319,7 +320,8 @@ create table insumos (
   custo_unitario numeric(10, 4) not null default 0 check (custo_unitario >= 0),
   fornecedor text,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint uq_insumos_id_estabelecimento unique (id, estabelecimento_id)
 );
 
 create index idx_insumos_estabelecimento on insumos(estabelecimento_id);
@@ -332,9 +334,24 @@ create trigger trg_insumos_updated_at
 create table produto_insumos (
   produto_id uuid not null references produtos(id) on delete cascade,
   insumo_id uuid not null references insumos(id) on delete restrict,
+  estabelecimento_id uuid not null,
   quantidade_necessaria numeric(12, 3) not null check (quantidade_necessaria > 0),
-  primary key (produto_id, insumo_id)
+  primary key (produto_id, insumo_id),
+  constraint fk_produto_insumos_produto_tenant foreign key (produto_id, estabelecimento_id) references produtos(id, estabelecimento_id) on delete cascade,
+  constraint fk_produto_insumos_insumo_tenant foreign key (insumo_id, estabelecimento_id) references insumos(id, estabelecimento_id) on delete restrict
 );
+
+create function preencher_tenant_produto_insumo() returns trigger
+language plpgsql set search_path = public, pg_temp as $$
+begin
+  if new.estabelecimento_id is null then
+    select estabelecimento_id into new.estabelecimento_id from produtos where id = new.produto_id;
+  end if;
+  return new;
+end;
+$$;
+create trigger trg_produto_insumos_tenant before insert or update of produto_id, estabelecimento_id
+  on produto_insumos for each row execute function preencher_tenant_produto_insumo();
 
 -- Recalcula automaticamente o custo do produto somando o custo dos insumos
 -- da ficha tecnica, sempre que a receita ou o custo de um insumo mudar.
@@ -464,7 +481,7 @@ create table pedidos (
   -- partes [{forma, valor, tipoCartao?, trocoPara?}]. Ver migration 029.
   pagamento_dividido jsonb,
   constraint chk_pedido_pagamento_dividido check (
-    (forma_pagamento = 'misto' and jsonb_array_length(pagamento_dividido) = 2)
+    (forma_pagamento = 'misto' and pagamento_dividido is not null and jsonb_typeof(pagamento_dividido) = 'array' and jsonb_array_length(case when jsonb_typeof(pagamento_dividido) = 'array' then pagamento_dividido else '[]'::jsonb end) = 2)
     or (forma_pagamento is distinct from 'misto' and pagamento_dividido is null)
   ),
   pagamento_status text not null default 'pendente' check (pagamento_status in ('pendente', 'pago', 'falhou', 'estornado')),
@@ -481,7 +498,8 @@ create table pedidos (
   ),
   constraint chk_pedido_delivery_cliente check (
     (tipo = 'delivery' and cliente_id is not null) or (tipo <> 'delivery')
-  )
+  ),
+  constraint uq_pedidos_id_estabelecimento unique (id, estabelecimento_id)
 );
 
 -- codigo reinicia por dia (fuso America/Fortaleza), entao a unicidade vale
@@ -566,13 +584,28 @@ create table itens_pedido (
   id uuid primary key default gen_random_uuid(),
   pedido_id uuid not null references pedidos(id) on delete cascade,
   produto_id uuid not null references produtos(id),
+  estabelecimento_id uuid not null,
   quantidade integer not null check (quantidade > 0),
   preco_unitario numeric(10, 2) not null, -- snapshot do preco de venda no momento do pedido
   tamanho tamanho_produto, -- snapshot do tamanho no momento do pedido
   observacoes text,
   status item_pedido_status not null default 'pendente',
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  constraint fk_itens_pedido_pedido_tenant foreign key (pedido_id, estabelecimento_id) references pedidos(id, estabelecimento_id) on delete cascade,
+  constraint fk_itens_pedido_produto_tenant foreign key (produto_id, estabelecimento_id) references produtos(id, estabelecimento_id)
 );
+
+create function preencher_tenant_item_pedido() returns trigger
+language plpgsql set search_path = public, pg_temp as $$
+begin
+  if new.estabelecimento_id is null then
+    select estabelecimento_id into new.estabelecimento_id from pedidos where id = new.pedido_id;
+  end if;
+  return new;
+end;
+$$;
+create trigger trg_itens_pedido_tenant before insert or update of pedido_id, estabelecimento_id
+  on itens_pedido for each row execute function preencher_tenant_item_pedido();
 
 create index idx_itens_pedido_pedido on itens_pedido(pedido_id);
 
@@ -1517,6 +1550,50 @@ $$;
 
 revoke all on function fn_adicionar_itens_pedido_publico(text, uuid, jsonb, text) from public;
 
+-- Limitador persistente do login (compartilhado entre replicas).
+create table api_rate_limits (
+  escopo text not null,
+  chave_hash text not null,
+  janela_inicio timestamptz not null,
+  contagem integer not null check (contagem > 0),
+  primary key (escopo, chave_hash)
+);
+create index idx_api_rate_limits_janela on api_rate_limits(janela_inicio);
+
+create function fn_consumir_rate_limit(
+  p_escopo text,
+  p_chave_hash text,
+  p_limite integer,
+  p_janela_segundos integer
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_contagem integer;
+begin
+  insert into api_rate_limits (escopo, chave_hash, janela_inicio, contagem)
+  values (p_escopo, p_chave_hash, now(), 1)
+  on conflict (escopo, chave_hash) do update
+    set janela_inicio = case
+          when api_rate_limits.janela_inicio <= now() - make_interval(secs => p_janela_segundos) then now()
+          else api_rate_limits.janela_inicio
+        end,
+        contagem = case
+          when api_rate_limits.janela_inicio <= now() - make_interval(secs => p_janela_segundos) then 1
+          else api_rate_limits.contagem + 1
+        end
+  returning contagem into v_contagem;
+
+  delete from api_rate_limits where janela_inicio < now() - interval '1 day';
+
+  return v_contagem <= p_limite;
+end;
+$$;
+revoke all on function fn_consumir_rate_limit(text, text, integer, integer) from public;
+
 -- ============================================================================
 -- ROLE DE APLICACAO (privilegio minimo)
 -- ============================================================================
@@ -1555,6 +1632,7 @@ grant execute on function fn_adicionar_itens_pedido_publico(text, uuid, jsonb, t
 grant execute on function fn_criar_pedido_publico(text, text, text, text, text, text, text, text, numeric, jsonb, text, boolean, uuid, text, jsonb) to ohfome_app;
 grant execute on function fn_bairros_publico(text) to ohfome_app;
 grant execute on function fn_integracao_gestao_clientes(integer, timestamptz, uuid) to ohfome_app;
+grant execute on function fn_consumir_rate_limit(text, text, integer, integer) to ohfome_app;
 
 -- Colunas serial (ex.: pedidos.codigo) usam uma sequence por baixo; inserir
 -- nelas exige USAGE/SELECT na sequence, nao so privilegio na tabela.

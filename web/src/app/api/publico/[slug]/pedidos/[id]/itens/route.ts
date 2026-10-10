@@ -1,18 +1,19 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { queryPublico } from "@/lib/db";
-import { limitado } from "@/lib/rate-limit";
+import { ipClienteConfiavel, limitado } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await params;
-  const ip = request.headers.get("x-forwarded-for") ?? "local";
-
-  if (limitado(`pedido-adicional:${ip}`)) {
-    return NextResponse.json({ erro: "Muitas tentativas em pouco tempo. Aguarde um instante." }, { status: 429 });
-  }
-
   const body = await request.json().catch(() => null);
   const itensBrutos = Array.isArray(body?.itens) ? body.itens : [];
   const observacoes = typeof body?.observacoes === "string" ? body.observacoes.trim() : "";
+
+  const ip = ipClienteConfiavel(request);
+  const limitePedido = await limitado("pedido-adicional:pedido", `${slug}:${id}`);
+  const limiteIp = ip ? await limitado("pedido-adicional:ip", ip) : false;
+  if (limitePedido || limiteIp) {
+    return NextResponse.json({ erro: "Muitas tentativas em pouco tempo. Aguarde um instante." }, { status: 429 });
+  }
 
   if (itensBrutos.length === 0) return NextResponse.json({ erro: "Adicione ao menos um item." }, { status: 400 });
   if (observacoes.length > 1000) return NextResponse.json({ erro: "As observações podem ter até 1.000 caracteres." }, { status: 400 });

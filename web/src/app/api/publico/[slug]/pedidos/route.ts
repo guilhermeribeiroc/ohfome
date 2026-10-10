@@ -2,18 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { randomUUID } from "crypto";
 import { comEstabelecimento, queryPublico } from "@/lib/db";
 import { accessTokenDoEstabelecimento, criarCobrancaPixMercadoPago, MercadoPagoErro } from "@/lib/mercado-pago";
-import { limitado } from "@/lib/rate-limit";
+import { ipClienteConfiavel, limitado } from "@/lib/rate-limit";
 
 const EMAIL_TELEFONE_MIN = 8;
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const ip = request.headers.get("x-forwarded-for") ?? "local";
-
-  if (limitado(`pedido-publico:${ip}`)) {
-    return NextResponse.json({ erro: "Muitos pedidos em pouco tempo. Aguarde um instante." }, { status: 429 });
-  }
-
   const body = await request.json().catch(() => null);
   const clienteNome = typeof body?.clienteNome === "string" ? body.clienteNome.trim() : "";
   const telefone = typeof body?.telefone === "string" ? body.telefone.trim() : "";
@@ -43,6 +37,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const notificar = body?.notificar === true;
   const bairroId = typeof body?.bairroId === "string" ? body.bairroId : null;
   const itens = Array.isArray(body?.itens) ? body.itens : [];
+
+  const ip = ipClienteConfiavel(request);
+  const limiteTelefone = await limitado("pedido-publico:telefone", `${slug}:${telefone}`);
+  const limiteIp = ip ? await limitado("pedido-publico:ip", ip) : false;
+  if (limiteTelefone || limiteIp) {
+    return NextResponse.json({ erro: "Muitos pedidos em pouco tempo. Aguarde um instante." }, { status: 429 });
+  }
 
   if (clienteNome.length < 2) return NextResponse.json({ erro: "Informe seu nome." }, { status: 400 });
   if (telefone.length < EMAIL_TELEFONE_MIN) return NextResponse.json({ erro: "Informe um telefone válido." }, { status: 400 });

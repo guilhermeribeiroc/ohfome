@@ -8,7 +8,7 @@ import type { PapelUsuario } from "@/lib/tenant-types";
 const USUARIO_REGEX = /^[a-z0-9][a-z0-9._-]{2,39}$/;
 
 async function autenticarAdmin(request: NextRequest) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return null;
 
   const admin = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {

@@ -19,13 +19,19 @@ function dataNaZonaAtual() {
   return `${parte("year")}-${parte("month")}-${parte("day")}`;
 }
 
+function dataValida(data: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) return false;
+  const convertida = new Date(`${data}T12:00:00Z`);
+  return !Number.isNaN(convertida.getTime()) && convertida.toISOString().slice(0, 10) === data;
+}
+
 // Venda lancada manualmente pra um dia que ja passou: cliente vendeu sem usar
 // o sistema (papel, esqueceu de lancar) e quer que entre certinho no
 // financeiro do dia em que aconteceu. Cria o pedido ja "finalizado", com
 // created_at no dia escolhido, igual um pedido normal de balcao/delivery —
 // so que sem passar pelo Kanban da cozinha.
 export async function POST(request: NextRequest) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
   if (!(await sessaoEhAdministrador(sessao))) {
     return NextResponse.json({ erro: "Apenas administradores podem lançar vendas de dias anteriores." }, { status: 403 });
@@ -37,7 +43,7 @@ export async function POST(request: NextRequest) {
   const clienteNome = typeof body?.clienteNome === "string" ? body.clienteNome.trim() : "";
   const itensInput: ItemInput[] = Array.isArray(body?.itens) ? body.itens : [];
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(data) || data > dataNaZonaAtual()) {
+  if (!dataValida(data) || data > dataNaZonaAtual()) {
     return NextResponse.json({ erro: "Selecione uma data válida, até hoje." }, { status: 400 });
   }
   if (tipo === "delivery" && !clienteNome) {

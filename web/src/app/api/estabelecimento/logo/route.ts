@@ -4,7 +4,7 @@ import { comEstabelecimento } from "@/lib/db";
 import type { SessionPayload } from "@/lib/session";
 
 async function administradorDaRequisicao(request: NextRequest): Promise<SessionPayload | null> {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return null;
 
   const ehAdmin = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
@@ -19,7 +19,7 @@ function respostaSemPermissao() {
 }
 
 export async function GET(request: NextRequest) {
-  if (!autenticarRequisicao(request)) return respostaNaoAutenticado();
+  if (!await autenticarRequisicao(request)) return respostaNaoAutenticado();
   const sessao = await administradorDaRequisicao(request);
   if (!sessao) return respostaSemPermissao();
 
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  if (!autenticarRequisicao(request)) return respostaNaoAutenticado();
+  if (!await autenticarRequisicao(request)) return respostaNaoAutenticado();
   const sessao = await administradorDaRequisicao(request);
   if (!sessao) return respostaSemPermissao();
 

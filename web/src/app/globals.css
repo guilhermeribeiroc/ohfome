@@ -1,6 +1,44 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "Lexend";
+  src: url("/fonts/lexend-latin.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Lexend";
+  src: url("/fonts/lexend-latin-ext.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("/fonts/bricolage-latin.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("/fonts/bricolage-latin-ext.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 :root {
+  --font-lexend: "Lexend";
+  --font-bricolage: "Bricolage Grotesque";
   --color-cream-50: #faf9f7;
   --color-cream-100: #f5f2ee;
   --color-cream-200: #eae5df;
@@ -8,7 +46,7 @@
   --color-surface: #ffffff;
   --color-ink-900: #191714;
   --color-ink-600: #615b54;
-  --color-ink-400: #918a82;
+  --color-ink-400: #766f67;
   --color-coral-050: #fff1ed;
   --color-coral-100: #ffddd3;
   --color-coral-400: #f47d62;
@@ -96,7 +134,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .of-btn-danger { color: var(--color-danger-600); background: var(--color-danger-050); }
 .of-icon-btn { width: 44px; padding: 0; color: var(--color-ink-600); border: 1px solid var(--color-cream-200); background: white; }
 .of-btn-primary:disabled, .of-btn-secondary:disabled { cursor: not-allowed; opacity: .42; transform: none; }
-.of-field { width: 100%; min-height: 46px; border: 1px solid var(--color-cream-200); border-radius: .85rem; background: rgba(255,255,255,.92); padding: .72rem .85rem; color: var(--color-ink-900); font-size: .82rem; outline: none; transition: border-color .2s ease, box-shadow .2s ease, background .2s ease; }
+.of-field { width: 100%; min-height: 46px; border: 1px solid var(--color-cream-200); border-radius: .85rem; background: rgba(255,255,255,.92); padding: .72rem .85rem; color: var(--color-ink-900); font-size: 1rem; outline: none; transition: border-color .2s ease, box-shadow .2s ease, background .2s ease; }
 .of-field::placeholder { color: #aaa39c; }
 .of-field:focus { border-color: rgba(232,93,63,.55); background: white; box-shadow: 0 0 0 4px rgba(232,93,63,.1); }
 .of-label { display: block; margin-bottom: .42rem; color: var(--color-ink-600); font-size: .69rem; font-weight: 650; }
@@ -108,7 +146,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .of-status { display: inline-flex; align-items: center; gap: .35rem; border-radius: 999px; padding: .28rem .58rem; font-size: .65rem; font-weight: 650; line-height: 1; }
 .of-skeleton { position: relative; overflow: hidden; background: var(--color-cream-200); }
 .of-skeleton::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255,255,255,.8), transparent); animation: of-shimmer 1.4s infinite; }
-.menu-field { width: 100%; min-height: 50px; border: 1px solid var(--color-cream-200); border-radius: 1rem; background: rgba(255,255,255,.72); padding: .85rem 1rem; color: var(--color-ink-900); font-size: .85rem; outline: none; transition: border-color .2s ease, box-shadow .2s ease, background .2s ease; }
+.menu-field { width: 100%; min-height: 50px; border: 1px solid var(--color-cream-200); border-radius: 1rem; background: rgba(255,255,255,.72); padding: .85rem 1rem; color: var(--color-ink-900); font-size: 1rem; outline: none; transition: border-color .2s ease, box-shadow .2s ease, background .2s ease; }
 .menu-field::placeholder { color: var(--color-ink-400); }
 .menu-field:focus { border-color: rgba(201,67,41,.5); background: white; box-shadow: 0 0 0 4px rgba(201,67,41,.1); }
 

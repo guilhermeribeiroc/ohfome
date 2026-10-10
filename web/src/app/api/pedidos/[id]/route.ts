@@ -1,12 +1,20 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { autenticarRequisicao, respostaNaoAutenticado } from "@/lib/api-auth";
+import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, sessaoPodeAcessarModulo } from "@/lib/api-auth";
 import { sessaoEhAdministrador } from "@/lib/admin-auth";
 import { comEstabelecimento } from "@/lib/db";
 
 const STATUS_VALIDOS = ["novo", "em_preparo", "pronto", "saiu_para_entrega", "finalizado", "cancelado"];
+const TRANSICOES: Record<string, string[]> = {
+  novo: ["em_preparo", "cancelado"],
+  em_preparo: ["pronto", "cancelado"],
+  pronto: ["saiu_para_entrega", "finalizado", "cancelado"],
+  saiu_para_entrega: ["finalizado", "cancelado"],
+  finalizado: [],
+  cancelado: [],
+};
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
 
   const { id } = await params;
@@ -16,11 +24,25 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (!STATUS_VALIDOS.includes(status)) {
     return NextResponse.json({ erro: "Status inválido." }, { status: 400 });
   }
+  const podeAtualizarPedido = sessao.role === "admin"
+    || sessaoPodeAcessarModulo(sessao, "balcao")
+    || ((status === "em_preparo" || status === "pronto") && sessaoPodeAcessarModulo(sessao, "cozinha"))
+    || ((status === "saiu_para_entrega" || status === "finalizado") && sessaoPodeAcessarModulo(sessao, "delivery"));
+  if (!podeAtualizarPedido) return respostaAcessoNegado();
 
   const pedido = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
+    const { rows: existentes } = await client.query(
+      `select status from pedidos where id = $1 for update`,
+      [id]
+    );
+    const statusAnterior = existentes[0]?.status as string | undefined;
+    if (!statusAnterior) return null;
+    if (!TRANSICOES[statusAnterior]?.includes(status)) {
+      return { conflito: true as const, id, status: statusAnterior };
+    }
     const { rows } = await client.query(
-      `update pedidos set status = $1 where id = $2 returning id, status`,
-      [status, id]
+      `update pedidos set status = $1 where id = $2 and status = $3 returning id, status`,
+      [status, id, statusAnterior]
     );
     const atualizado = rows[0] ?? null;
     if (!atualizado) return null;
@@ -80,15 +102,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
     }
 
-    return atualizado;
+    return atualizado ? { ...atualizado, conflito: false as const } : null;
   });
 
   if (!pedido) return NextResponse.json({ erro: "Pedido não encontrado." }, { status: 404 });
+  if (pedido.conflito) return NextResponse.json({ erro: "Esta mudança de status não é permitida." }, { status: 409 });
   return NextResponse.json(pedido);
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
   if (!(await sessaoEhAdministrador(sessao))) {
     return NextResponse.json({ erro: "Apenas administradores podem excluir pedidos." }, { status: 403 });

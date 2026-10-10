@@ -4,7 +4,7 @@ import { comEstabelecimento } from "@/lib/db";
 import type { ModoBannerCardapio } from "@/lib/types";
 
 async function sessaoAdmin(request: NextRequest) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return null;
   const permitido = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     const { rows } = await client.query("select role from usuarios where id = $1 and ativo", [sessao.usuarioId]);
@@ -18,7 +18,7 @@ function semPermissao() {
 }
 
 export async function GET(request: NextRequest) {
-  if (!autenticarRequisicao(request)) return respostaNaoAutenticado();
+  if (!await autenticarRequisicao(request)) return respostaNaoAutenticado();
   const sessao = await sessaoAdmin(request);
   if (!sessao) return semPermissao();
   const dados = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!autenticarRequisicao(request)) return respostaNaoAutenticado();
+  if (!await autenticarRequisicao(request)) return respostaNaoAutenticado();
   const sessao = await sessaoAdmin(request);
   if (!sessao) return semPermissao();
   const body = await request.json().catch(() => null);
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  if (!autenticarRequisicao(request)) return respostaNaoAutenticado();
+  if (!await autenticarRequisicao(request)) return respostaNaoAutenticado();
   const sessao = await sessaoAdmin(request);
   if (!sessao) return semPermissao();
   const body = await request.json().catch(() => null);

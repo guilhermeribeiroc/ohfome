@@ -3,7 +3,7 @@ import { autenticarRequisicao, respostaNaoAutenticado } from "@/lib/api-auth";
 import { credencialQz } from "@/lib/qz-credentials";
 
 export async function GET(request: NextRequest) {
-  if (!autenticarRequisicao(request)) return respostaNaoAutenticado();
+  if (!await autenticarRequisicao(request)) return respostaNaoAutenticado();
 
   const certificado = credencialQz("QZ_CERTIFICATE");
   if (!certificado) return new NextResponse(null, { status: 204 });

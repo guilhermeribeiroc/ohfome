@@ -110,10 +110,18 @@ export function FinanceiroModule() {
   }
 
   function aplicarPeriodoPersonalizado() {
+    const dataValida = (valor: string) => {
+      const partes = /^(\d{4})-(\d{2})-(\d{2})$/.exec(valor);
+      if (!partes) return false;
+      const data = new Date(Date.UTC(Number(partes[1]), Number(partes[2]) - 1, Number(partes[3])));
+      return data.getUTCFullYear() === Number(partes[1])
+        && data.getUTCMonth() === Number(partes[2]) - 1
+        && data.getUTCDate() === Number(partes[3]);
+    };
     const quantidadeDeDias = inicioPersonalizado && fimPersonalizado
-      ? (new Date(`${fimPersonalizado}T12:00:00`).getTime() - new Date(`${inicioPersonalizado}T12:00:00`).getTime()) / 86_400_000
+      ? (Date.parse(`${fimPersonalizado}T00:00:00Z`) - Date.parse(`${inicioPersonalizado}T00:00:00Z`)) / 86_400_000
       : Number.POSITIVE_INFINITY;
-    if (!inicioPersonalizado || !fimPersonalizado || inicioPersonalizado > fimPersonalizado || quantidadeDeDias > 366) {
+    if (!dataValida(inicioPersonalizado) || !dataValida(fimPersonalizado) || inicioPersonalizado > fimPersonalizado || quantidadeDeDias > 366) {
       setErroPeriodo("Informe um período válido de até 12 meses.");
       return;
     }

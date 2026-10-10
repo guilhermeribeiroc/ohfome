@@ -1,10 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { autenticarRequisicao, respostaNaoAutenticado } from "@/lib/api-auth";
+import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, sessaoPodeAcessarModulo } from "@/lib/api-auth";
 import { comEstabelecimento } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
+  if (!sessaoPodeAcessarModulo(sessao, "garcom")) return respostaAcessoNegado();
 
   const mesas = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     const { rows } = await client.query(
@@ -17,8 +18,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
+  if (sessao.role !== "admin") return respostaAcessoNegado();
 
   const body = await request.json().catch(() => null);
   const numero = Number(body?.numero);

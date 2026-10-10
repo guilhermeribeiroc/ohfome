@@ -287,24 +287,37 @@ interface ItemRevisao {
 function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; onCriados: (ids: string[]) => void }) {
   const { dados: categorias } = usePolling<Categoria[]>("/api/categorias", 60000);
   const [etapa, setEtapa] = useState<EtapaImportacao>("selecionar");
-  const [arquivos, setArquivos] = useState<File[]>([]);
-  const [previews, setPreviews] = useState<string[]>([]);
+  const [arquivos, setArquivos] = useState<{ arquivo: File; preview: string }[]>([]);
+  const urlsAtivos = useRef(new Set<string>());
+  const previews = arquivos.map((item) => item.preview);
   const [itens, setItens] = useState<ItemRevisao[]>([]);
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    const urls = arquivos.map((arquivo) => URL.createObjectURL(arquivo));
-    setPreviews(urls);
-    return () => urls.forEach((url) => URL.revokeObjectURL(url));
-  }, [arquivos]);
+    const urls = urlsAtivos.current;
+    return () => {
+      urls.forEach((url) => URL.revokeObjectURL(url));
+      urls.clear();
+    };
+  }, []);
 
   function adicionarArquivos(lista: FileList | null) {
     if (!lista) return;
     setErro("");
-    setArquivos((atual) => [...atual, ...Array.from(lista)].slice(0, 6));
+    const novos = Array.from(lista).slice(0, Math.max(0, 6 - arquivos.length)).map((arquivo) => {
+      const preview = URL.createObjectURL(arquivo);
+      urlsAtivos.current.add(preview);
+      return { arquivo, preview };
+    });
+    setArquivos((atual) => [...atual, ...novos].slice(0, 6));
   }
 
   function removerArquivo(indice: number) {
+    const item = arquivos[indice];
+    if (item) {
+      URL.revokeObjectURL(item.preview);
+      urlsAtivos.current.delete(item.preview);
+    }
     setArquivos((atual) => atual.filter((_, i) => i !== indice));
   }
 
@@ -313,7 +326,7 @@ function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; 
     setErro("");
     setEtapa("analisando");
     const formData = new FormData();
-    arquivos.forEach((arquivo) => formData.append("arquivo", arquivo));
+    arquivos.forEach(({ arquivo }) => formData.append("arquivo", arquivo));
     const resposta = await fetch("/api/produtos/importar-cardapio", { method: "POST", body: formData });
     const corpo = await resposta.json().catch(() => null);
     if (!resposta.ok) {

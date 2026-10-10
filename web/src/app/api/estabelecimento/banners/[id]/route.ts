@@ -3,7 +3,7 @@ import { autenticarRequisicao, respostaNaoAutenticado } from "@/lib/api-auth";
 import { comEstabelecimento } from "@/lib/db";
 
 async function sessaoAdmin(request: NextRequest) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return null;
   const permitido = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     const { rows } = await client.query("select role from usuarios where id = $1 and ativo", [sessao.usuarioId]);
@@ -13,7 +13,7 @@ async function sessaoAdmin(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!autenticarRequisicao(request)) return respostaNaoAutenticado();
+  if (!await autenticarRequisicao(request)) return respostaNaoAutenticado();
   const sessao = await sessaoAdmin(request);
   if (!sessao) return NextResponse.json({ erro: "Apenas administradores podem alterar o banner." }, { status: 403 });
   const { id } = await params;
@@ -34,7 +34,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!autenticarRequisicao(request)) return respostaNaoAutenticado();
+  if (!await autenticarRequisicao(request)) return respostaNaoAutenticado();
   const sessao = await sessaoAdmin(request);
   if (!sessao) return NextResponse.json({ erro: "Apenas administradores podem alterar o banner." }, { status: 403 });
   const { id } = await params;

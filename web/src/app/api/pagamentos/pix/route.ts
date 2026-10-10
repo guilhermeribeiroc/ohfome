@@ -4,13 +4,13 @@ import { respostaAdministradorObrigatorio, sessaoEhAdministrador } from "@/lib/a
 import { comEstabelecimento } from "@/lib/db";
 
 async function sessaoAdmin(request: NextRequest) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return null;
   return await sessaoEhAdministrador(sessao) ? sessao : null;
 }
 
 export async function GET(request: NextRequest) {
-  if (!autenticarRequisicao(request)) return respostaNaoAutenticado();
+  if (!await autenticarRequisicao(request)) return respostaNaoAutenticado();
   const sessao = await sessaoAdmin(request);
   if (!sessao) return respostaAdministradorObrigatorio();
 
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  if (!autenticarRequisicao(request)) return respostaNaoAutenticado();
+  if (!await autenticarRequisicao(request)) return respostaNaoAutenticado();
   const sessao = await sessaoAdmin(request);
   if (!sessao) return respostaAdministradorObrigatorio();
   const body = await request.json().catch(() => null);

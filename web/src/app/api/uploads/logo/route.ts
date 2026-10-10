@@ -1,11 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { autenticarRequisicao, respostaNaoAutenticado } from "@/lib/api-auth";
+import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado } from "@/lib/api-auth";
 import { salvarImagem } from "@/lib/armazenamento-imagens";
 
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
-  if (!autenticarRequisicao(request)) return respostaNaoAutenticado();
+  const sessao = await autenticarRequisicao(request);
+  if (!sessao) return respostaNaoAutenticado();
+  if (sessao.role !== "admin") return respostaAcessoNegado();
 
   const dados = await request.formData().catch(() => null);
   const arquivo = dados?.get("arquivo");

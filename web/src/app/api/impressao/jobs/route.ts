@@ -53,7 +53,7 @@ const PEDIDO_IMPRESSAO_SELECT = `
 `;
 
 export async function GET(request: NextRequest) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
 
   const statusSolicitado = request.nextUrl.searchParams.get("status");
@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
 
   const body = await request.json().catch(() => null);

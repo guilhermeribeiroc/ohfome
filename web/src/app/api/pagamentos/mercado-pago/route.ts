@@ -4,7 +4,7 @@ import { respostaAdministradorObrigatorio, sessaoEhAdministrador } from "@/lib/a
 import { comEstabelecimento } from "@/lib/db";
 
 export async function DELETE(request: NextRequest) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
   if (!(await sessaoEhAdministrador(sessao))) return respostaAdministradorObrigatorio();
 

@@ -22,9 +22,9 @@ const PASSOS = ["Estabelecimento", "Módulos", "Administrador", "Revisão"];
 const GRADIENTE_CORAL = "linear-gradient(120deg, var(--color-coral-600), var(--color-coral-500), var(--color-mango-500))";
 
 const CAMPO_CLASSE =
-  "w-full rounded-xl border border-transparent bg-cream-50 px-3.5 py-3 text-sm text-ink-900 outline-none transition focus:border-coral-400 focus:ring-4 focus:ring-coral-100";
+  "w-full rounded-xl border border-transparent bg-cream-50 px-3.5 py-3 text-base text-ink-900 outline-none transition focus:border-coral-400 focus:ring-4 focus:ring-coral-100";
 const CAMPO_CLASSE_SM =
-  "rounded-lg border border-transparent bg-cream-50 px-2.5 py-2.5 text-sm text-ink-900 outline-none transition focus:border-coral-400 focus:ring-4 focus:ring-coral-100";
+  "rounded-lg border border-transparent bg-cream-50 px-2.5 py-2.5 text-base text-ink-900 outline-none transition focus:border-coral-400 focus:ring-4 focus:ring-coral-100";
 
 export default function RegistroPage() {
   const { registrar } = useTenant();
@@ -234,26 +234,37 @@ export default function RegistroPage() {
           <div className="rounded-2xl bg-coral-050 p-3.5 ring-1 ring-coral-100">
             <p className="text-xs font-semibold text-coral-600">Administrador (acesso total)</p>
             <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <input
+              <label className="block">
+                <span className="sr-only">Nome do administrador</span>
+                <input
                 value={admin.nome}
                 onChange={(e) => setAdmin({ ...admin, nome: e.target.value })}
                 placeholder="Nome"
                 className={CAMPO_CLASSE_SM}
-              />
-              <input
+                autoComplete="name"
+                />
+              </label>
+              <label className="block">
+                <span className="sr-only">Usuário do administrador</span>
+                <input
                 value={admin.usuario}
                 onChange={(e) => setAdmin({ ...admin, usuario: e.target.value.toLowerCase() })}
                 placeholder="Usuário"
                 autoComplete="username"
                 className={CAMPO_CLASSE_SM}
-              />
-              <input
+                />
+              </label>
+              <label className="block">
+                <span className="sr-only">Senha do administrador</span>
+                <input
                 type="password"
                 value={admin.senha}
                 onChange={(e) => setAdmin({ ...admin, senha: e.target.value })}
                 placeholder="Senha"
+                autoComplete="new-password"
                 className={CAMPO_CLASSE_SM}
-              />
+                />
+              </label>
             </div>
           </div>
 

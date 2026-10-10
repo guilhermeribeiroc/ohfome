@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { autenticarRequisicao, respostaNaoAutenticado } from "@/lib/api-auth";
+import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, sessaoPodeAcessarModulo } from "@/lib/api-auth";
 import { comEstabelecimento } from "@/lib/db";
 
 const PEDIDOS_ATIVOS_QUERY = `
@@ -39,7 +39,7 @@ const PEDIDOS_ATIVOS_QUERY = `
 `;
 
 export async function GET(request: NextRequest) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
 
   const origem = new URL(request.url).searchParams.get("origem");
@@ -55,7 +55,14 @@ export async function GET(request: NextRequest) {
     return rows;
   });
 
-  return NextResponse.json(pedidos);
+  const podeVerContatoDoCliente = sessao.role === "admin"
+    || sessaoPodeAcessarModulo(sessao, "balcao")
+    || sessaoPodeAcessarModulo(sessao, "delivery");
+  return NextResponse.json(pedidos.map((pedido) => ({
+    ...pedido,
+    clienteTelefone: podeVerContatoDoCliente ? pedido.clienteTelefone : null,
+    enderecoEntrega: podeVerContatoDoCliente ? pedido.enderecoEntrega : null,
+  })));
 }
 
 interface ItemInput {
@@ -65,7 +72,7 @@ interface ItemInput {
 }
 
 export async function POST(request: NextRequest) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
 
   const body = await request.json().catch(() => null);
@@ -82,6 +89,11 @@ export async function POST(request: NextRequest) {
   if (tipo !== "mesa" && tipo !== "balcao" && tipo !== "delivery") {
     return NextResponse.json({ erro: "Tipo de pedido inválido." }, { status: 400 });
   }
+  const podeCriarPedido = sessao.role === "admin"
+    || (tipo === "mesa" && sessaoPodeAcessarModulo(sessao, "garcom"))
+    || (tipo === "balcao" && sessaoPodeAcessarModulo(sessao, "balcao"))
+    || (tipo === "delivery" && (sessaoPodeAcessarModulo(sessao, "balcao") || sessaoPodeAcessarModulo(sessao, "delivery")));
+  if (!podeCriarPedido) return respostaAcessoNegado();
   if (tipo === "mesa" && typeof mesaId !== "string") {
     return NextResponse.json({ erro: "Informe a mesa." }, { status: 400 });
   }

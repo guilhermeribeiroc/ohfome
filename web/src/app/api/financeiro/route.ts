@@ -48,7 +48,7 @@ function periodoDaRequisicao(request: NextRequest): Periodo | null {
 }
 
 async function administradorDaRequisicao(request: NextRequest): Promise<SessionPayload | null> {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return null;
   const admin = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     const { rows } = await client.query("select role from usuarios where id = $1", [sessao.usuarioId]);
@@ -62,7 +62,7 @@ function respostaSemPermissao() {
 }
 
 export async function GET(request: NextRequest) {
-  const autenticado = autenticarRequisicao(request);
+  const autenticado = await autenticarRequisicao(request);
   if (!autenticado) return respostaNaoAutenticado();
   const sessao = await administradorDaRequisicao(request);
   if (!sessao) return respostaSemPermissao();
@@ -186,7 +186,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const autenticado = autenticarRequisicao(request);
+  const autenticado = await autenticarRequisicao(request);
   if (!autenticado) return respostaNaoAutenticado();
   const sessao = await administradorDaRequisicao(request);
   if (!sessao) return respostaSemPermissao();
@@ -200,6 +200,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ erro: "Preencha categoria, descrição e um valor maior que zero." }, { status: 400 });
   }
 
+  const tipo = body?.tipo as Tipo;
+  const data = typeof body?.dataMovimento === "string" ? body.dataMovimento : dataNaZonaAtual();
+  if (tipoRegistro === "movimento" && (!TIPOS.includes(tipo) || !dataValida(data))) {
+    return NextResponse.json({ erro: "Movimento financeiro inválido." }, { status: 400 });
+  }
+
   const registro = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     if (tipoRegistro === "custo_fixo") {
       const vencimento = Math.round(numero(body?.diaVencimento));
@@ -211,9 +217,6 @@ export async function POST(request: NextRequest) {
       return rows[0];
     }
 
-    const tipo = body?.tipo as Tipo;
-    const data = typeof body?.dataMovimento === "string" ? body.dataMovimento : new Date().toISOString().slice(0, 10);
-    if (!TIPOS.includes(tipo) || !/^\d{4}-\d{2}-\d{2}$/.test(data)) throw new Error("Movimento financeiro inválido.");
     const { rows } = await client.query(`insert into movimentacoes_financeiras (estabelecimento_id, tipo, categoria, descricao, valor, data_movimento, usuario_id)
       values ($1, $2, $3, $4, $5, $6, $7)
       returning id, tipo, categoria, descricao, valor, data_movimento as "dataMovimento"`,
@@ -224,7 +227,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const autenticado = autenticarRequisicao(request);
+  const autenticado = await autenticarRequisicao(request);
   if (!autenticado) return respostaNaoAutenticado();
   const sessao = await administradorDaRequisicao(request);
   if (!sessao) return respostaSemPermissao();

@@ -66,17 +66,22 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const entrar = useCallback(async (usuario: string, senha: string) => {
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ usuario, senha }),
-    });
-    if (!res.ok) return extrairErro(res);
-    const dados = await res.json();
-    limparCachePolling();
-    setEstabelecimento(dados.estabelecimento);
-    setUsuarioAtual(dados.usuario);
-    return null;
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ usuario, senha }),
+      });
+      if (res.status >= 500) return "O serviço está temporariamente indisponível. Tente novamente em instantes.";
+      if (!res.ok) return extrairErro(res);
+      const dados = await res.json();
+      limparCachePolling();
+      setEstabelecimento(dados.estabelecimento);
+      setUsuarioAtual(dados.usuario);
+      return null;
+    } catch {
+      return "Não foi possível conectar ao serviço. Verifique sua conexão e tente novamente.";
+    }
   }, []);
 
   const sair = useCallback(async () => {

@@ -6,7 +6,7 @@ const ACOES = ["reservar", "heartbeat", "concluir", "falhar"] as const;
 type Acao = (typeof ACOES)[number];
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
 
   const { id } = await params;

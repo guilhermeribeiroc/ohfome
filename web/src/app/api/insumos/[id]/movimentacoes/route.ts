@@ -1,12 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { autenticarRequisicao, respostaNaoAutenticado } from "@/lib/api-auth";
+import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, sessaoPodeGerirEstoque } from "@/lib/api-auth";
 import { comEstabelecimento } from "@/lib/db";
 
 const TIPOS = ["entrada", "saida", "ajuste", "perda"];
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
+  if (!sessaoPodeGerirEstoque(sessao)) return respostaAcessoNegado();
 
   const { id } = await params;
   const body = await request.json().catch(() => null);

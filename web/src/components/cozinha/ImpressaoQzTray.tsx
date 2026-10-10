@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { CheckCircle2, ChevronDown, LoaderCircle, Printer, Radio, Settings2, TriangleAlert, WifiOff, X } from "lucide-react";
 import type qz from "qz-tray";
 import type { ImpressaoJob, PagamentoParte, Pedido } from "@/lib/types";
@@ -217,15 +217,15 @@ export function ImpressaoQzTray({ compacta = false }: ImpressaoQzTrayProps) {
   const [ultimoContato, setUltimoContato] = useState<number | null>(null);
   const [painelAberto, setPainelAberto] = useState(!compacta);
   const [mensagem, setMensagem] = useState("Conecte o QZ Tray nesta estação para imprimir.");
-  const [dispositivoTatil, setDispositivoTatil] = useState(false);
-
-  useEffect(() => {
-    const consulta = window.matchMedia("(pointer: coarse)");
-    setDispositivoTatil(consulta.matches);
-    const aoMudar = (evento: MediaQueryListEvent) => setDispositivoTatil(evento.matches);
-    consulta.addEventListener("change", aoMudar);
-    return () => consulta.removeEventListener("change", aoMudar);
-  }, []);
+  const dispositivoTatil = useSyncExternalStore(
+    useCallback((notificar) => {
+      const consulta = window.matchMedia("(pointer: coarse)");
+      consulta.addEventListener("change", notificar);
+      return () => consulta.removeEventListener("change", notificar);
+    }, []),
+    () => window.matchMedia("(pointer: coarse)").matches,
+    () => false,
+  );
 
   useEffect(() => {
     const sincronizarPreferencias = window.setTimeout(() => {

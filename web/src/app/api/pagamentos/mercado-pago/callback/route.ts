@@ -12,7 +12,7 @@ function destino(request: NextRequest, estado: "conectado" | "erro", mensagem?: 
 }
 
 export async function GET(request: NextRequest) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return destino(request, "erro", "Sessão expirada. Entre novamente e refaça a conexão.");
   if (!(await sessaoEhAdministrador(sessao))) return destino(request, "erro", "Somente administradores podem conectar o Mercado Pago.");
   const params = new URL(request.url).searchParams;

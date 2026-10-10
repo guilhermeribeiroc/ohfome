@@ -1,10 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { autenticarRequisicao, respostaNaoAutenticado } from "@/lib/api-auth";
+import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, sessaoPodeAcessarModulo } from "@/lib/api-auth";
 import { comEstabelecimento } from "@/lib/db";
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
+  if (!sessaoPodeAcessarModulo(sessao, "delivery")) return respostaAcessoNegado();
 
   const { id } = await params;
   const body = await request.json().catch(() => null);
@@ -52,7 +53,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         const { rows: entregaAnterior } = await client.query("select entregador_id from entregas where id = $1", [id]);
         const { rows } = await client.query(
           `update entregas set status = 'aguardando', entregador_id = null, saiu_em = null
-           where id = $1 and status <> 'cancelada'
+           where id = $1 and status = 'em_rota'
            returning id, status, entregador_id, pedido_id`,
           [id]
         );
@@ -68,7 +69,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (status === "entregue") {
         const { rows } = await client.query(
           `update entregas set status = 'entregue', entregue_em = now()
-           where id = $1
+           where id = $1 and status = 'em_rota'
            returning id, status, entregador_id, pedido_id`,
           [id]
         );

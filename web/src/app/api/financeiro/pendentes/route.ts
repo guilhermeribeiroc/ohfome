@@ -11,7 +11,7 @@ function semPermissao() {
 // em "finalizado"/"cancelado" — normalmente mesa ou comanda esquecida aberta
 // virando o dia. Servem pro aviso no Financeiro e pro fechamento em lote.
 export async function GET(request: NextRequest) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
   if (!(await sessaoEhAdministrador(sessao))) return semPermissao();
 
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
 // hoje), sincroniza a entrega (se for delivery) e fecha a comanda quando
 // nao sobra mais nada pendente nela (libera a mesa via trigger do banco).
 export async function POST(request: NextRequest) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
   if (!(await sessaoEhAdministrador(sessao))) return semPermissao();
 

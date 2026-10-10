@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { CheckCircle2, ShieldCheck, Sparkles } from "lucide-react";
 
 export default function AuthLayout({ children }: LayoutProps<"/">) {
@@ -36,6 +37,7 @@ export default function AuthLayout({ children }: LayoutProps<"/">) {
             </span>
           </div>
           <section className="rounded-[1.6rem] border border-cream-200/80 bg-surface/90 p-5 shadow-[0_28px_80px_-48px_rgba(25,23,20,.45)] backdrop-blur-xl sm:p-8">{children}</section>
+          <p className="mt-4 text-center text-xs text-ink-400"><Link href="/privacidade" className="underline underline-offset-4 transition hover:text-ink-600">Privacidade e solicitações de dados</Link></p>
         </div>
       </main>
     </div>

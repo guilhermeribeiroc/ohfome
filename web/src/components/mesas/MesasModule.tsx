@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ArrowRight, Banknote, Check, CreditCard, DoorOpen, Minus, Plus, Printer, QrCode, Search, Settings2, Users, X } from "lucide-react";
 import type { Mesa, MesaStatus, PagamentoParte, Pedido, Produto } from "@/lib/types";
 import { MESA_STATUS_LABEL, nomeProdutoComTamanho } from "@/lib/types";
@@ -383,11 +383,14 @@ function FecharContaModal({
   const trocoInvalido = ehDinheiro && precisaTroco && numeroDaMoeda(trocoPara) <= 0;
   const valor1Numero = numeroDaMoeda(valor1);
   const valor2Numero = Math.max(0, Math.round((total - valor1Numero) * 100) / 100);
+  const forma2Efetiva = dividir && forma2 === forma1
+    ? (["dinheiro", "pix", "cartao"] as const).find((f) => f !== forma1) ?? "cartao"
+    : forma2;
   const divisaoInvalida = dividir && (
-    forma1 === forma2 ||
+    forma1 === forma2Efetiva ||
     valor1Numero <= 0 || valor2Numero <= 0 ||
     (forma1 === "dinheiro" && precisaTroco1 && numeroDaMoeda(trocoValor1) <= 0) ||
-    (forma2 === "dinheiro" && precisaTroco2 && numeroDaMoeda(trocoValor2) <= 0)
+    (forma2Efetiva === "dinheiro" && precisaTroco2 && numeroDaMoeda(trocoValor2) <= 0)
   );
 
   function selecionar(indice: number) {
@@ -396,12 +399,6 @@ function FecharContaModal({
     setPrecisaTroco(false);
     setTrocoPara("");
   }
-
-  useEffect(() => {
-    if (dividir && forma2 === forma1) {
-      setForma2((["dinheiro", "pix", "cartao"] as const).find((f) => f !== forma1) ?? "cartao");
-    }
-  }, [dividir, forma1, forma2]);
 
   function textoParte(forma: "dinheiro" | "pix" | "cartao", tipoCartao: "credito" | "debito", troco: boolean, valorTroco: string, valor: number) {
     const rotulo = forma === "cartao" ? `Cartão · ${tipoCartao === "credito" ? "Crédito" : "Débito"}` : forma === "pix" ? "PIX" : troco && numeroDaMoeda(valorTroco) > 0 ? `Dinheiro · troco para R$ ${numeroDaMoeda(valorTroco).toFixed(2).replace(".", ",")}` : "Dinheiro";
@@ -414,12 +411,12 @@ function FecharContaModal({
       setEnviando(true);
       const partes: [PagamentoParte, PagamentoParte] = [
         { forma: forma1, valor: valor1Numero, tipoCartao: forma1 === "cartao" ? tipoCartao1 : undefined, trocoPara: forma1 === "dinheiro" && precisaTroco1 ? numeroDaMoeda(trocoValor1) : undefined },
-        { forma: forma2, valor: valor2Numero, tipoCartao: forma2 === "cartao" ? tipoCartao2 : undefined, trocoPara: forma2 === "dinheiro" && precisaTroco2 ? numeroDaMoeda(trocoValor2) : undefined },
+        { forma: forma2Efetiva, valor: valor2Numero, tipoCartao: forma2Efetiva === "cartao" ? tipoCartao2 : undefined, trocoPara: forma2Efetiva === "dinheiro" && precisaTroco2 ? numeroDaMoeda(trocoValor2) : undefined },
       ];
       await onConfirmar({
         formaPagamento: "misto",
         pagamentoDividido: partes,
-        texto: `${textoParte(forma1, tipoCartao1, precisaTroco1, trocoValor1, valor1Numero)} + ${textoParte(forma2, tipoCartao2, precisaTroco2, trocoValor2, valor2Numero)}`,
+        texto: `${textoParte(forma1, tipoCartao1, precisaTroco1, trocoValor1, valor1Numero)} + ${textoParte(forma2Efetiva, tipoCartao2, precisaTroco2, trocoValor2, valor2Numero)}`,
       });
       setEnviando(false);
       return;
@@ -533,24 +530,24 @@ function FecharContaModal({
                 <b className="text-[10px] font-semibold uppercase tracking-[.12em] text-ink-400">2ª forma</b>
                 <div className="flex gap-1.5">
                   {(["dinheiro", "pix", "cartao"] as const).filter((f) => f !== forma1).map((f) => (
-                    <button key={f} type="button" onClick={() => setForma2(f)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${forma2 === f ? "bg-ink-900 text-white" : "bg-cream-100 text-ink-500"}`}>{f === "cartao" ? "Cartão" : f === "pix" ? "Pix" : "Dinheiro"}</button>
+                    <button key={f} type="button" onClick={() => setForma2(f)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${forma2Efetiva === f ? "bg-ink-900 text-white" : "bg-cream-100 text-ink-500"}`}>{f === "cartao" ? "Cartão" : f === "pix" ? "Pix" : "Dinheiro"}</button>
                   ))}
                 </div>
               </div>
               <div className="flex items-center overflow-hidden rounded-xl border border-cream-200 bg-cream-100"><span className="px-3 text-sm font-semibold text-ink-400">R$</span><span className="min-w-0 flex-1 py-3 pr-3 text-sm text-ink-600">{valor2Numero.toFixed(2).replace(".", ",")}</span></div>
-              {forma2 === "cartao" && (
+              {forma2Efetiva === "cartao" && (
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   <button type="button" onClick={() => setTipoCartao2("credito")} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${tipoCartao2 === "credito" ? "border-ink-900 bg-ink-900 text-white" : "border-cream-200 bg-white text-ink-500"}`}>Crédito</button>
                   <button type="button" onClick={() => setTipoCartao2("debito")} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${tipoCartao2 === "debito" ? "border-ink-900 bg-ink-900 text-white" : "border-cream-200 bg-white text-ink-500"}`}>Débito</button>
                 </div>
               )}
-              {forma2 === "dinheiro" && (
+              {forma2Efetiva === "dinheiro" && (
                 <div className="mt-2 flex items-center justify-between gap-3">
                   <span className="text-xs font-medium text-ink-600">Precisa de troco?</span>
                   <div className="flex rounded-lg bg-cream-100 p-1"><button type="button" onClick={() => setPrecisaTroco2(false)} className={`rounded-md px-2 py-1 text-xs font-semibold ${!precisaTroco2 ? "bg-white text-ink-900" : "text-ink-400"}`}>Não</button><button type="button" onClick={() => setPrecisaTroco2(true)} className={`rounded-md px-2 py-1 text-xs font-semibold ${precisaTroco2 ? "bg-white text-ink-900" : "text-ink-400"}`}>Sim</button></div>
                 </div>
               )}
-              {forma2 === "dinheiro" && precisaTroco2 && (
+              {forma2Efetiva === "dinheiro" && precisaTroco2 && (
                 <label className="mt-2 flex items-center overflow-hidden rounded-xl border border-cream-200 bg-white"><span className="px-3 text-sm font-semibold text-ink-400">Troco p/ R$</span><input inputMode="decimal" value={trocoValor2} onChange={(evento) => setTrocoValor2(mascararMoeda(evento.target.value))} placeholder="0,00" className="min-w-0 flex-1 bg-transparent py-3 pr-3 text-sm outline-none" /></label>
               )}
             </div>

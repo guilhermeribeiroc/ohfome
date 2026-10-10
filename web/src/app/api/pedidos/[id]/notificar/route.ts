@@ -1,11 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { autenticarRequisicao, respostaNaoAutenticado } from "@/lib/api-auth";
+import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, sessaoPodeAcessarModulo } from "@/lib/api-auth";
 import { comEstabelecimento } from "@/lib/db";
 import { PEDIDO_STATUS_LABEL, type PedidoStatus } from "@/lib/types";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const sessao = autenticarRequisicao(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
+  if (sessao.role !== "admin" && !sessaoPodeAcessarModulo(sessao, "balcao")) return respostaAcessoNegado();
 
   const { id } = await params;
 

@@ -6,6 +6,7 @@ import { criarSessao, SESSION_COOKIE } from "@/lib/session";
 import { gerarSlug } from "@/lib/slug";
 import { MODULOS_DE_VENDA, SEGMENTOS, planoParaModulos } from "@/lib/tenant-types";
 import type { ModuloSistema } from "@/lib/tenant-types";
+import { ipClienteConfiavel, limitado } from "@/lib/rate-limit";
 
 const USUARIO_REGEX = /^[a-z0-9][a-z0-9._-]{2,39}$/;
 
@@ -20,6 +21,13 @@ function validarCampo(c: CampoUsuario | undefined): c is Required<CampoUsuario> 
 }
 
 export async function POST(request: NextRequest) {
+  // O limite global protege o bcrypt e a criação de tenants mesmo quando o
+  // proxy ainda não foi configurado como fonte confiável do IP do cliente.
+  const ip = ipClienteConfiavel(request);
+  if (await limitado("registro:global", "todos") || (ip && await limitado("registro:ip", ip))) {
+    return NextResponse.json({ erro: "Muitos cadastros em pouco tempo. Aguarde um minuto e tente novamente." }, { status: 429 });
+  }
+
   const body = await request.json().catch(() => null);
   if (!body) return NextResponse.json({ erro: "Corpo da requisição inválido." }, { status: 400 });
 
