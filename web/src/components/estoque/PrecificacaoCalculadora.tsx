@@ -402,7 +402,7 @@ function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; 
 
   return (
     <div className="of-modal-backdrop">
-      <div className="of-modal-panel flex max-w-lg flex-col">
+      <div className="of-modal-panel flex h-[min(90dvh,820px)] max-w-lg flex-col">
         <div className="of-panel-header bg-surface">
           <div>
             <p className="of-eyebrow">Cardápio</p>
@@ -619,7 +619,7 @@ function NovoProdutoModal({ onFechar, onCriado }: { onFechar: () => void; onCria
 
   return (
     <div className="of-modal-backdrop">
-      <div className="of-modal-panel flex max-w-md flex-col">
+      <div className="of-modal-panel flex h-[min(90dvh,820px)] max-w-md flex-col">
         <div className="of-panel-header bg-surface">
           <div><p className="of-eyebrow">Cardápio</p><p className="font-display text-lg font-bold text-ink-900">Novo produto</p></div>
           <button onClick={onFechar} className="of-icon-btn" aria-label="Fechar"><X size={17} /></button>

@@ -1820,7 +1820,7 @@ function CarrinhoSheet({
         aria-modal="true"
         aria-labelledby="carrinho-titulo"
         tabIndex={-1}
-        className="flex max-h-[96dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-[2rem] bg-[#eee8df] shadow-2xl outline-none sm:max-h-[90dvh] sm:rounded-[2rem]"
+        className="flex h-[min(96dvh,760px)] w-full max-w-2xl flex-col overflow-hidden rounded-t-[2rem] bg-[#eee8df] shadow-2xl outline-none sm:h-[min(90dvh,760px)] sm:rounded-[2rem]"
       >
         <header className="flex items-center justify-between border-b border-black/[.08] p-5">
           <div>
@@ -1848,7 +1848,7 @@ function CarrinhoSheet({
           <>
             <div
               data-lenis-prevent
-              className="flex-1 overflow-y-auto p-4 sm:p-5"
+              className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5"
             >
               {itens.length === 0 ? (
                 <div className="flex min-h-52 flex-col items-center justify-center text-center">
@@ -2472,7 +2472,7 @@ function InfoSheet({
   const painelRef = usePainelAcessivel(onFechar);
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center sm:p-6">
-      <section ref={painelRef} role="dialog" aria-modal="true" aria-labelledby="informacoes-titulo" tabIndex={-1} className="w-full max-w-lg rounded-t-[2rem] bg-[#eee8df] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl outline-none sm:rounded-[2rem] sm:p-7">
+      <section ref={painelRef} role="dialog" aria-modal="true" aria-labelledby="informacoes-titulo" tabIndex={-1} className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-[2rem] bg-[#eee8df] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl outline-none sm:rounded-[2rem] sm:p-7">
         <div className="flex items-start justify-between">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#0e7775]">
@@ -2630,7 +2630,7 @@ function TelaPix({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm sm:p-6">
-      <section ref={painelRef} role="dialog" aria-modal="true" aria-labelledby="pix-titulo" tabIndex={-1} className="w-full max-w-md overflow-hidden rounded-[2rem] bg-[#eee8df] shadow-2xl outline-none">
+      <section ref={painelRef} role="dialog" aria-modal="true" aria-labelledby="pix-titulo" tabIndex={-1} className="flex h-[min(90dvh,720px)] w-full max-w-md flex-col overflow-hidden rounded-[2rem] bg-[#eee8df] shadow-2xl outline-none">
         <header className="flex items-start justify-between border-b border-black/[.08] p-5">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#0e7775]">
@@ -2648,7 +2648,7 @@ function TelaPix({
             <X size={18} />
           </button>
         </header>
-        <div className="space-y-4 p-5 text-center">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5 text-center">
           {expirado ? (
             <div className="rounded-2xl bg-red-500/10 p-5 text-sm leading-6 text-red-800">
               <b className="block">Este Pix expirou.</b>
@@ -2866,7 +2866,7 @@ function montarMensagemAcompanhamento(pedido: PedidoStatusPublico) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 backdrop-blur-sm sm:items-center sm:p-6">
-      <section ref={painelRef} role="dialog" aria-modal="true" aria-labelledby="pedido-titulo" tabIndex={-1} className="flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-[2rem] bg-[#eee8df] shadow-2xl outline-none sm:rounded-[2rem]">
+      <section ref={painelRef} role="dialog" aria-modal="true" aria-labelledby="pedido-titulo" tabIndex={-1} className="flex h-[min(90dvh,760px)] w-full max-w-lg flex-col overflow-hidden rounded-t-[2rem] bg-[#eee8df] shadow-2xl outline-none sm:rounded-[2rem]">
         <header className="flex items-center justify-between border-b border-black/[.08] p-5">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#0e7775]">
@@ -2898,7 +2898,7 @@ function montarMensagemAcompanhamento(pedido: PedidoStatusPublico) {
           </div>
         </header>
 
-        <div data-lenis-prevent className="flex-1 overflow-y-auto p-5">
+        <div data-lenis-prevent className="min-h-0 flex-1 overflow-y-auto p-5">
           {!dados ? (
             <div className="flex min-h-52 flex-col items-center justify-center text-center text-black/40">
               <PackageSearch size={26} />

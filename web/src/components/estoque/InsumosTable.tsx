@@ -177,7 +177,7 @@ function NovoInsumoModal({ onFechar, onCriado }: { onFechar: () => void; onCriad
 
   return (
     <div className="of-modal-backdrop px-3">
-      <div className="of-modal-panel max-w-md overflow-hidden">
+      <div className="of-modal-panel of-modal-scroll max-w-md">
         <div className="flex items-center justify-between border-b border-cream-200 bg-surface px-5 py-4"><div><p className="of-eyebrow">Estoque</p><p className="font-display text-xl font-bold tracking-tight text-ink-900">Novo insumo</p></div><button onClick={onFechar} className="of-icon-btn" aria-label="Fechar"><X size={17} /></button></div>
         <form onSubmit={(e) => { e.preventDefault(); criar(); }} className="space-y-4 p-5">
           <label className="block"><span className="mb-1.5 block text-xs font-semibold text-ink-600">Nome do insumo</span><input autoFocus value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex.: Carne bovina, queijo, farinha" className={CAMPO_CLASSE} /></label>

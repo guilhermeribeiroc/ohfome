@@ -351,7 +351,7 @@ function LancarVendaRetroativaModal({ onFechar, onLancada }: { onFechar: () => v
 
   return (
     <div className="of-modal-backdrop z-50" role="dialog" aria-modal="true" aria-label="Lançar venda de outro dia">
-      <div className="of-modal-panel flex max-h-[90dvh] max-w-lg flex-col overflow-hidden">
+      <div className="of-modal-panel flex h-[min(90dvh,820px)] max-w-lg flex-col overflow-hidden">
         <header className="flex items-start justify-between border-b border-cream-200 p-5">
           <div>
             <p className="of-eyebrow">Financeiro</p>
