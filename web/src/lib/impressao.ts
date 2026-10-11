@@ -58,7 +58,7 @@ export function imprimirPedido(pedido: Pedido, titulo = "Via do pedido") {
     pagamento: textoPagamento(pedido),
     pagamentoPartes: partesPagamento(pedido),
     observacoes: pedido.observacoes,
-    itens: pedido.itens.map((item) => ({ nome: item.produtoNome, quantidade: item.quantidade, valor: item.precoUnitario * item.quantidade })),
+    itens: pedido.itens.map((item) => ({ nome: `${item.produtoNome}${item.opcoes?.length ? `\n  ${item.opcoes.map((opcao) => `${opcao.grupoNome}: ${opcao.opcaoNome}`).join(" · ")}` : ""}`, quantidade: item.quantidade, valor: item.precoUnitario * item.quantidade })),
     total: pedido.total,
     cozinha: /cozinha/i.test(titulo),
   });

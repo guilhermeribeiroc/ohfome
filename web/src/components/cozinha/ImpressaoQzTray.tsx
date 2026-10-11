@@ -109,6 +109,7 @@ export function dadosEscPosPedido(pedido: Pedido, largura = LARGURA_TICKET) {
 
   for (const item of pedido.itens) {
     linhas.push("\x1D\x21\x10", "\x1B\x45\x01", ...linhaComValor(`${item.quantidade}X ${item.produtoNome}`, moedaTermica(item.precoUnitario * item.quantidade), largura), "\x1B\x45\x00");
+    for (const opcao of item.opcoes ?? []) linhas.push("\x1B\x21\x00", `  ${opcao.grupoNome}: ${opcao.opcaoNome}`, "\n");
     if (item.observacoes) linhas.push("\x1B\x45\x01", ...quebrarLinha(`  OBS: ${item.observacoes}`, largura).map((linha) => `${linha}\n`), "\x1B\x45\x00");
     linhas.push("\x1D\x21\x00");
   }

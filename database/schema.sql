@@ -280,6 +280,22 @@ create table produtos (
 create index idx_produtos_estabelecimento on produtos(estabelecimento_id);
 create index idx_produtos_categoria on produtos(categoria_id);
 
+-- Escolhas adicionais do produto (ex.: pão e adicionais de um sanduíche).
+create table produto_grupos_opcoes (
+  id uuid primary key default gen_random_uuid(), estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade,
+  produto_id uuid not null references produtos(id) on delete cascade, nome text not null,
+  minimo_selecoes integer not null default 0 check (minimo_selecoes >= 0),
+  maximo_selecoes integer not null default 1 check (maximo_selecoes >= 1 and maximo_selecoes >= minimo_selecoes),
+  ativo boolean not null default true, ordem integer not null default 0, created_at timestamptz not null default now(), unique (id, estabelecimento_id)
+);
+create table produto_opcoes (
+  id uuid primary key default gen_random_uuid(), estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade,
+  grupo_id uuid not null references produto_grupos_opcoes(id) on delete cascade, nome text not null,
+  acrescimo numeric(10,2) not null default 0 check (acrescimo >= 0), ativo boolean not null default true, ordem integer not null default 0, created_at timestamptz not null default now(), unique (id, estabelecimento_id)
+);
+create index idx_produto_grupos_opcoes_produto on produto_grupos_opcoes(produto_id, ordem);
+create index idx_produto_opcoes_grupo on produto_opcoes(grupo_id, ordem);
+
 -- Calculadora automatica de precificacao: recalcula o campo que nao foi
 -- editado diretamente pelo usuario, conforme o modo escolhido.
 --  - modo = 'margem'        -> preco_venda = preco_custo * (1 + margem/100)
@@ -613,6 +629,13 @@ create trigger trg_itens_pedido_tenant before insert or update of pedido_id, est
 
 create index idx_itens_pedido_pedido on itens_pedido(pedido_id);
 
+create table itens_pedido_opcoes (
+  id uuid primary key default gen_random_uuid(), estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade,
+  item_pedido_id uuid not null references itens_pedido(id) on delete cascade, grupo_nome text not null, opcao_nome text not null,
+  acrescimo numeric(10,2) not null check (acrescimo >= 0), created_at timestamptz not null default now()
+);
+create index idx_itens_pedido_opcoes_item on itens_pedido_opcoes(item_pedido_id);
+
 create function copiar_tamanho_produto_no_item() returns trigger as $$
 begin
   if new.tamanho is null then
@@ -863,6 +886,7 @@ begin
     'clientes', 'pedidos', 'entregadores', 'movimentacoes_financeiras',
     'custos_fixos', 'whatsapp_mensagens', 'estado_aplicacao', 'estabelecimento_modulos',
     'impressao_jobs', 'bairros_entrega', 'banners_cardapio'
+    , 'produto_grupos_opcoes', 'produto_opcoes', 'itens_pedido_opcoes'
   ]
   loop
     execute format('alter table %I enable row level security', tabela);
@@ -1687,6 +1711,7 @@ grant select, insert, update, delete on
   estabelecimento_modulos, impressao_jobs, bairros_entrega,
   configuracoes_pix, mercado_pago_conexoes, mercado_pago_oauth_states, pagamentos_pix,
   demonstracao_referencias, pedidos_idempotencia
+  , produto_grupos_opcoes, produto_opcoes, itens_pedido_opcoes
 to ohfome_app;
 
 -- estabelecimentos: sem insert/delete direto (so via fn_registrar_estabelecimento);

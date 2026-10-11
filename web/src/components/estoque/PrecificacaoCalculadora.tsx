@@ -6,6 +6,7 @@ import { nomeProdutoComTamanho, type Categoria, type ModoPrecificacao, type Prod
 import { usePolling } from "@/lib/use-polling";
 import { mascararMoeda, moedaComCentavos, numeroDaMoeda } from "@/lib/moeda";
 import { FichaTecnica } from "./FichaTecnica";
+import { OpcoesProduto } from "./OpcoesProduto";
 
 const GRADIENTE_CORAL = "linear-gradient(120deg, var(--color-coral-600), var(--color-coral-500), var(--color-mango-500))";
 const CAMPO_CLASSE =
@@ -243,6 +244,7 @@ export function PrecificacaoCalculadora() {
             </div>
 
             <FichaTecnica produtoId={selecionado.id} />
+            <OpcoesProduto produtoId={selecionado.id} />
           </div>
         </div>
       )}

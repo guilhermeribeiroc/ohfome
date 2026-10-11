@@ -22,7 +22,16 @@ const PEDIDOS_ATIVOS_QUERY = `
           'quantidade', ip.quantidade,
           'precoUnitario', ip.preco_unitario,
           'observacoes', ip.observacoes,
-          'status', ip.status
+          'status', ip.status,
+          'opcoes', coalesce((
+            select json_agg(json_build_object(
+              'grupoNome', ipo.grupo_nome,
+              'opcaoNome', ipo.opcao_nome,
+              'acrescimo', ipo.acrescimo
+            ) order by ipo.created_at)
+            from itens_pedido_opcoes ipo
+            where ipo.item_pedido_id = ip.id
+          ), '[]')
         ) order by ip.created_at)
         from itens_pedido ip
         join produtos pr on pr.id = ip.produto_id
@@ -70,6 +79,7 @@ interface ItemInput {
   produtoId?: string;
   quantidade?: number;
   observacoes?: string;
+  opcoes?: { grupoId?: string; opcaoId?: string }[];
 }
 
 export async function POST(request: NextRequest) {
@@ -121,7 +131,7 @@ export async function POST(request: NextRequest) {
     }
   }
   const itensValidos = itensInput.filter(
-    (i): i is Required<ItemInput> => typeof i.produtoId === "string" && Number.isInteger(i.quantidade) && (i.quantidade ?? 0) > 0
+    (i): i is ItemInput & { produtoId: string; quantidade: number } => typeof i.produtoId === "string" && Number.isInteger(i.quantidade) && (i.quantidade ?? 0) > 0
   );
   if (itensValidos.length === 0) {
     return NextResponse.json({ erro: "O pedido precisa de ao menos um item." }, { status: 400 });
@@ -148,7 +158,7 @@ export async function POST(request: NextRequest) {
         `select id, preco_venda from produtos where id = any($1::uuid[]) and ativo`,
         [idsProdutos]
       );
-      const precoPorProduto = new Map<string, number>(produtosRows.map((r) => [r.id, r.preco_venda]));
+      const precoPorProduto = new Map<string, number>(produtosRows.map((r) => [r.id, Number(r.preco_venda)]));
       if (precoPorProduto.size !== new Set(idsProdutos).size) {
         throw Object.assign(new Error("Produto inválido ou inexistente."), { status: 400 });
       }
@@ -230,11 +240,48 @@ export async function POST(request: NextRequest) {
       const pedidoId = pedidoRows[0].id;
 
       for (const item of itensValidos) {
-        await client.query(
-          `insert into itens_pedido (pedido_id, produto_id, quantidade, preco_unitario, observacoes)
-           values ($1, $2, $3, $4, $5)`,
-          [pedidoId, item.produtoId, item.quantidade, precoPorProduto.get(item.produtoId), item.observacoes ?? null]
+        const escolhas = Array.isArray(item.opcoes) ? item.opcoes : [];
+        if (escolhas.some((escolha) => typeof escolha?.grupoId !== "string" || typeof escolha?.opcaoId !== "string")) {
+          throw Object.assign(new Error("Opções do produto inválidas."), { status: 400 });
+        }
+        const opcaoIds = escolhas.map((escolha) => escolha.opcaoId as string);
+        if (new Set(opcaoIds).size !== opcaoIds.length) {
+          throw Object.assign(new Error("Não repita a mesma opção."), { status: 400 });
+        }
+        const { rows: grupos } = await client.query(
+          `select id, nome, minimo_selecoes as "minimoSelecoes", maximo_selecoes as "maximoSelecoes"
+           from produto_grupos_opcoes where produto_id = $1 and ativo order by ordem, nome`,
+          [item.produtoId]
         );
+        const { rows: opcoes } = opcaoIds.length ? await client.query(
+          `select o.id, o.grupo_id as "grupoId", o.nome, o.acrescimo, g.nome as "grupoNome"
+           from produto_opcoes o
+           join produto_grupos_opcoes g on g.id = o.grupo_id
+           where o.id = any($1::uuid[]) and o.ativo and g.ativo and g.produto_id = $2`,
+          [opcaoIds, item.produtoId]
+        ) : { rows: [] as { id: string; grupoId: string; nome: string; acrescimo: number; grupoNome: string }[] };
+        if (opcoes.length !== escolhas.length || opcoes.some((opcao) => !escolhas.some((escolha) => escolha.opcaoId === opcao.id && escolha.grupoId === opcao.grupoId))) {
+          throw Object.assign(new Error("Uma opção não pertence a este produto."), { status: 400 });
+        }
+        for (const grupo of grupos) {
+          const quantidade = opcoes.filter((opcao) => opcao.grupoId === grupo.id).length;
+          if (quantidade < Number(grupo.minimoSelecoes) || quantidade > Number(grupo.maximoSelecoes)) {
+            throw Object.assign(new Error(`Escolha entre ${grupo.minimoSelecoes} e ${grupo.maximoSelecoes} opção(ões) em ${grupo.nome}.`), { status: 400 });
+          }
+        }
+        const acrescimo = opcoes.reduce((total, opcao) => total + Number(opcao.acrescimo), 0);
+        const { rows: itensCriados } = await client.query(
+          `insert into itens_pedido (pedido_id, produto_id, quantidade, preco_unitario, observacoes)
+           values ($1, $2, $3, $4, $5) returning id`,
+          [pedidoId, item.produtoId, item.quantidade, (precoPorProduto.get(item.produtoId) ?? 0) + acrescimo, item.observacoes ?? null]
+        );
+        for (const opcao of opcoes) {
+          await client.query(
+            `insert into itens_pedido_opcoes (estabelecimento_id, item_pedido_id, grupo_nome, opcao_nome, acrescimo)
+             values ($1, $2, $3, $4, $5)`,
+            [sessao.estabelecimentoId, itensCriados[0].id, opcao.grupoNome, opcao.nome, opcao.acrescimo]
+          );
+        }
       }
 
       if (tipo === "delivery") {

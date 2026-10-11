@@ -120,6 +120,7 @@ export interface ItemPedido {
   precoUnitario: number;
   observacoes?: string;
   status: ItemPedidoStatus;
+  opcoes?: { grupoNome: string; opcaoNome: string; acrescimo: number }[];
 }
 
 export interface Pedido {
