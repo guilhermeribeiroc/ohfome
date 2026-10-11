@@ -468,8 +468,10 @@ function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; 
               </div>
               {pizzas.map((pizza) => <div key={pizza.chave} className="rounded-2xl border border-coral-200 bg-coral-050/50 p-3.5"><div className="flex items-start gap-2"><input type="checkbox" checked={pizza.incluir} onChange={() => setPizzas((atuais) => atuais.map((item) => item.chave === pizza.chave ? { ...item, incluir: !item.incluir } : item))} className="mt-1" /><div className="min-w-0 flex-1"><p className="text-sm font-bold text-ink-900">🍕 {pizza.nome}</p><p className="mt-1 text-xs text-ink-500">{pizza.categoriaNome} · meio a meio: {pizza.regraMeioAMeio === "maior_valor" ? "maior valor" : pizza.regraMeioAMeio === "media" ? "média" : "preço fixo"}</p><p className="mt-2 text-xs text-ink-700"><b>Tamanhos:</b> {pizza.tamanhos.map((tamanho) => `${tamanho.nome} R$ ${tamanho.precoSaborUnico.toFixed(2).replace(".", ",")}`).join(" · ")}</p><p className="mt-1 text-xs text-ink-700"><b>Sabores:</b> {pizza.sabores.map((sabor) => sabor.nome).join(" · ")}</p><p className="mt-2 text-[11px] text-ink-400">Após criar, você pode ajustar sabores, tamanhos e valores na edição do produto.</p></div></div></div>)}
               <div className="space-y-3">
-                {itens.map((item) => (
-                  <div key={item.chave} className={`rounded-2xl border p-3.5 transition ${item.incluir ? "border-coral-200/70 bg-surface" : "border-cream-200 bg-cream-50/60 opacity-60"}`}>
+                {itens.map((item, indice) => (
+                  <div key={item.chave}>
+                  {item.categoriaNome !== itens[indice - 1]?.categoriaNome && <p className="px-1 pb-1 pt-3 text-[10px] font-bold uppercase tracking-[.14em] text-coral-600">{item.categoriaNome}</p>}
+                  <div className={`rounded-2xl border p-3.5 transition ${item.incluir ? "border-coral-200/70 bg-surface" : "border-cream-200 bg-cream-50/60 opacity-60"}`}>
                     <div className="flex items-start gap-2.5">
                       <button
                         type="button"
@@ -503,7 +505,7 @@ function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; 
                         <Trash2 size={14} />
                       </button>
                     </div>
-                  </div>
+                  </div></div>
                 ))}
               </div>
               <datalist id="categorias-existentes">
