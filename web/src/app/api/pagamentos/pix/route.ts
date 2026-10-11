@@ -23,10 +23,13 @@ export async function GET(request: NextRequest) {
       expiracaoMinutos: number;
       collectorId: string | null;
       conectadoEm: Date | null;
+      ambienteMercadoPago: "producao" | "teste" | null;
+      demonstracao: boolean;
     }>(`select coalesce(cp.ativo, false) as ativo, coalesce(cp.modo, 'manual') as modo,
           cp.chave_manual as "chaveManual", cp.instrucao_manual as "instrucaoManual",
           coalesce(cp.expiracao_minutos, 30) as "expiracaoMinutos",
-          mp.collector_id as "collectorId", mp.conectado_em as "conectadoEm"
+          mp.collector_id as "collectorId", mp.conectado_em as "conectadoEm",
+          mp.ambiente as "ambienteMercadoPago", e.demonstracao
         from estabelecimentos e
         left join configuracoes_pix cp on cp.estabelecimento_id = e.id
         left join mercado_pago_conexoes mp on mp.estabelecimento_id = e.id

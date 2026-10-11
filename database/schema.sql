@@ -83,6 +83,8 @@ create table estabelecimentos (
   whatsapp_atendimento text,
   cardapio_banner_modo text not null default 'padrao' check (cardapio_banner_modo in ('padrao', 'fixo', 'carrossel')),
   onboarding_concluido boolean not null default false,
+  -- Conta interna usada para apresentar o produto; não é exposta no cardápio.
+  demonstracao boolean not null default false,
   -- proximo numero de ticket (pedidos.codigo) deste estabelecimento — cada
   -- um tem sua propria contagem, comecando do 1, em vez de um numero global
   -- compartilhado entre todos os clientes do OhFome. Reinicia a cada dia
@@ -1034,11 +1036,77 @@ create table mercado_pago_conexoes (
   estabelecimento_id uuid primary key references estabelecimentos(id) on delete cascade,
   collector_id text not null,
   access_token_cifrado text not null,
-  refresh_token_cifrado text not null,
-  token_expira_em timestamptz not null,
+  -- Produção usa OAuth; o token de testes da conta demonstrativa não precisa
+  -- nem pode participar desse refresh.
+  refresh_token_cifrado text,
+  token_expira_em timestamptz,
+  ambiente text not null default 'producao' check (ambiente in ('producao', 'teste')),
   scope text,
-  conectado_em timestamptz not null default now()
+  conectado_em timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
+
+create trigger trg_mercado_pago_conexoes_updated_at
+  before update on mercado_pago_conexoes
+  for each row execute function set_updated_at();
+
+create function validar_conexao_mercado_pago_teste() returns trigger as $$
+begin
+  if new.ambiente = 'teste' and not exists (
+    select 1 from estabelecimentos e
+    where e.id = new.estabelecimento_id and e.demonstracao and e.slug = 'restauranteteste'
+  ) then
+    raise exception 'Credencial Mercado Pago de teste só pode ser usada pela conta demonstrativa restauranteteste'
+      using errcode = '23514';
+  end if;
+  if tg_op = 'UPDATE' and old.ambiente = 'teste'
+     and new.estabelecimento_id is distinct from old.estabelecimento_id then
+    raise exception 'Uma credencial Mercado Pago de teste não pode ser movida entre estabelecimentos'
+      using errcode = '23514';
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+create trigger trg_validar_conexao_mercado_pago_teste
+  before insert or update on mercado_pago_conexoes
+  for each row execute function validar_conexao_mercado_pago_teste();
+
+create function proteger_estabelecimento_demo_mercado_pago_teste() returns trigger as $$
+begin
+  if exists (
+    select 1 from mercado_pago_conexoes mp
+    where mp.estabelecimento_id = new.id and mp.ambiente = 'teste'
+  ) and (not new.demonstracao or new.slug <> 'restauranteteste') then
+    raise exception 'Não é possível remover a identidade demonstrativa enquanto existir credencial Mercado Pago de teste'
+      using errcode = '23514';
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+create trigger trg_proteger_estabelecimento_demo_mercado_pago_teste
+  before update of demonstracao, slug on estabelecimentos
+  for each row execute function proteger_estabelecimento_demo_mercado_pago_teste();
+
+create table demonstracao_referencias (
+  estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade,
+  tipo text not null,
+  chave text not null,
+  entidade_id uuid not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (estabelecimento_id, tipo, chave)
+);
+
+create trigger trg_demonstracao_referencias_updated_at
+  before update on demonstracao_referencias
+  for each row execute function set_updated_at();
+
+alter table demonstracao_referencias enable row level security;
+create policy tenant_isolation on demonstracao_referencias
+  using (estabelecimento_id = current_setting('app.estabelecimento_id', true)::uuid)
+  with check (estabelecimento_id = current_setting('app.estabelecimento_id', true)::uuid);
 
 -- Estado temporario do fluxo OAuth (PKCE) entre "conectar" e "callback".
 create table mercado_pago_oauth_states (
@@ -1615,7 +1683,8 @@ grant select, insert, update, delete on
   historico_status_pedido, entregadores, entregas, whatsapp_mensagens,
   movimentacoes_financeiras, custos_fixos, estado_aplicacao,
   estabelecimento_modulos, impressao_jobs, bairros_entrega,
-  configuracoes_pix, mercado_pago_conexoes, mercado_pago_oauth_states, pagamentos_pix
+  configuracoes_pix, mercado_pago_conexoes, mercado_pago_oauth_states, pagamentos_pix,
+  demonstracao_referencias
 to ohfome_app;
 
 -- estabelecimentos: sem insert/delete direto (so via fn_registrar_estabelecimento);

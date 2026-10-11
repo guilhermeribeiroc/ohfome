@@ -43,7 +43,7 @@ outro tenant falham dentro da transação.
 - Alterar `web/src/app/api/pagamentos/mercado-pago/conectar/route.ts`
 - Alterar `web/src/app/api/pagamentos/mercado-pago/callback/route.ts`
 - Alterar `web/src/app/api/pagamentos/pix/route.ts`
-- Criar `web/scripts/provisionar-mercado-pago-demo.ts`
+- Criar `web/scripts/provisionar-mercado-pago-demo.mjs`
 
 1. Estender a leitura da conexão para retornar seu ambiente. Para `producao`,
    manter o fluxo atual: renovar token OAuth quando necessário. Para `teste`,
@@ -131,7 +131,7 @@ catálogo público deve retornar disponibilidade correta.
 3. Executar a carga SQL e conferir as contagens de categorias, produtos,
    equipe, entregadores, bairros, estoque, clientes e pedidos.
 4. Inserir a credencial de teste apenas no ambiente seguro de execução e rodar
-   o script de provisionamento. Não copiar o token para terminal compartilhado,
+   o script de provisionamento nativo do Node (`.mjs`). Não copiar o token para terminal compartilhado,
    logs, commit ou mensagem.
 5. Testar manualmente com `teste123`: login, painel, busca de cliente, venda
    balcão, retirada, delivery, entrega com entregador, ajuste de estoque e

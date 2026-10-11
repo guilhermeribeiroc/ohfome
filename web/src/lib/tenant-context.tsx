@@ -17,6 +17,7 @@ interface EstabelecimentoSessao {
   tipo: TipoEstabelecimento;
   tipoComida: string;
   slug: string;
+  demonstracao: boolean;
   modulosAtivos: ModuloSistema[];
   onboardingConcluido: boolean;
 }

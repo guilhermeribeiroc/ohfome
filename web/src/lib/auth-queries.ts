@@ -8,6 +8,7 @@ export interface ContextoSessao {
     tipo: TipoEstabelecimento;
     tipoComida: string;
     slug: string;
+    demonstracao: boolean;
     modulosAtivos: ModuloSistema[];
     onboardingConcluido: boolean;
   };
@@ -22,7 +23,9 @@ export interface ContextoSessao {
 export async function buscarContexto(estabelecimentoId: string, usuarioId: string): Promise<ContextoSessao | null> {
   return comEstabelecimento(estabelecimentoId, async (client) => {
     const { rows: estRows } = await client.query(
-      `select id, nome, tipo, tipo_comida as "tipoComida", slug, onboarding_concluido as "onboardingConcluido" from estabelecimentos where id = $1 and ativo`,
+      `select id, nome, tipo, tipo_comida as "tipoComida", slug, demonstracao,
+          onboarding_concluido as "onboardingConcluido"
+         from estabelecimentos where id = $1 and ativo`,
       [estabelecimentoId]
     );
     if (estRows.length === 0) return null;

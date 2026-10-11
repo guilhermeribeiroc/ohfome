@@ -14,6 +14,13 @@ export async function GET(request: NextRequest) {
     const state = randomUUID();
     const verifier = criarVerifierPkce();
     await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
+      const { rows: existentes } = await client.query<{ ambiente: "producao" | "teste" }>(
+        "select ambiente from mercado_pago_conexoes where estabelecimento_id = $1",
+        [sessao.estabelecimentoId],
+      );
+      if (existentes[0]?.ambiente === "teste") {
+        throw new MercadoPagoErro("A conta de demonstração usa uma credencial Mercado Pago de teste gerenciada com segurança.", 409);
+      }
       await client.query("delete from mercado_pago_oauth_states where expira_em < now() or usuario_id = $1", [sessao.usuarioId]);
       await client.query(`insert into mercado_pago_oauth_states (state, estabelecimento_id, usuario_id, code_verifier, expira_em)
         values ($1, $2, $3, $4, now() + interval '10 minutes')`, [state, sessao.estabelecimentoId, sessao.usuarioId, verifier]);

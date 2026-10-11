@@ -123,15 +123,26 @@ async function renovarTokenMercadoPago(refreshToken: string) {
 export async function accessTokenDoEstabelecimento(client: PoolClient, estabelecimentoId: string) {
   const { rows } = await client.query<{
     accessTokenCifrado: string;
-    refreshTokenCifrado: string;
+    refreshTokenCifrado: string | null;
     tokenExpiraEm: Date | null;
-  }>(`select access_token_cifrado as "accessTokenCifrado", refresh_token_cifrado as "refreshTokenCifrado", token_expira_em as "tokenExpiraEm"
+    ambiente: "producao" | "teste";
+  }>(`select access_token_cifrado as "accessTokenCifrado", refresh_token_cifrado as "refreshTokenCifrado",
+        token_expira_em as "tokenExpiraEm", ambiente
       from mercado_pago_conexoes where estabelecimento_id = $1 for update`, [estabelecimentoId]);
   const conexao = rows[0];
   if (!conexao) throw new MercadoPagoErro("Conecte a conta Mercado Pago deste restaurante antes de ativar Pix automático.", 409);
 
+  // A credencial de teste é provisionada apenas para a conta demonstrativa e
+  // não usa OAuth. Renovar aqui faria a aplicação chamar o fluxo de produção
+  // com uma credencial que não possui refresh token.
+  if (conexao.ambiente === "teste") return decifrarSegredo(conexao.accessTokenCifrado);
+
   const expiraEm = conexao.tokenExpiraEm?.getTime() ?? 0;
   if (expiraEm > Date.now() + 5 * 60_000) return decifrarSegredo(conexao.accessTokenCifrado);
+
+  if (!conexao.refreshTokenCifrado) {
+    throw new MercadoPagoErro("A conexão Mercado Pago não possui um token de renovação válido.", 503);
+  }
 
   const renovado = await renovarTokenMercadoPago(decifrarSegredo(conexao.refreshTokenCifrado));
   const proximaExpiracao = new Date(Date.now() + Math.max(60, renovado.expires_in ?? 60 * 60) * 1000);

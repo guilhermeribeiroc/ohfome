@@ -22,6 +22,13 @@ export async function GET(request: NextRequest) {
 
   try {
     await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
+      const { rows: conexoes } = await client.query<{ ambiente: "producao" | "teste" }>(
+        "select ambiente from mercado_pago_conexoes where estabelecimento_id = $1 for update",
+        [sessao.estabelecimentoId],
+      );
+      if (conexoes[0]?.ambiente === "teste") {
+        throw new MercadoPagoErro("A conta de demonstração usa uma credencial Mercado Pago de teste gerenciada com segurança.", 409);
+      }
       const { rows } = await client.query<{ codeVerifier: string }>(`select code_verifier as "codeVerifier" from mercado_pago_oauth_states
         where state = $1 and usuario_id = $2 and estabelecimento_id = $3 and expira_em > now() for update`, [state, sessao.usuarioId, sessao.estabelecimentoId]);
       const oauth = rows[0];
@@ -30,11 +37,12 @@ export async function GET(request: NextRequest) {
       if (!token.user_id) throw new MercadoPagoErro("O Mercado Pago não informou a conta autorizada.", 502);
       const expiraEm = new Date(Date.now() + Math.max(60, token.expires_in ?? 60 * 60) * 1000);
       await client.query(`insert into mercado_pago_conexoes
-        (estabelecimento_id, collector_id, access_token_cifrado, refresh_token_cifrado, token_expira_em, scope)
-        values ($1, $2, $3, $4, $5, $6)
+        (estabelecimento_id, collector_id, access_token_cifrado, refresh_token_cifrado, token_expira_em, scope, ambiente)
+        values ($1, $2, $3, $4, $5, $6, 'producao')
         on conflict (estabelecimento_id) do update set collector_id = excluded.collector_id,
           access_token_cifrado = excluded.access_token_cifrado, refresh_token_cifrado = excluded.refresh_token_cifrado,
-          token_expira_em = excluded.token_expira_em, scope = excluded.scope, conectado_em = now()`,
+          token_expira_em = excluded.token_expira_em, scope = excluded.scope,
+          ambiente = excluded.ambiente, conectado_em = now()`,
         [sessao.estabelecimentoId, String(token.user_id), cifrarSegredo(token.access_token), cifrarSegredo(token.refresh_token), expiraEm, token.scope ?? null]);
       await client.query("delete from mercado_pago_oauth_states where state = $1", [state]);
     });
