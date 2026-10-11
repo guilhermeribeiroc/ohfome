@@ -240,6 +240,10 @@ export async function POST(request: NextRequest) {
       const pedidoId = pedidoRows[0].id;
 
       for (const item of itensValidos) {
+        // Apps/estações que ainda não exibem o configurador enviam o campo
+        // ausente e continuam compatíveis. Quando o campo vem (inclusive []),
+        // todas as regras de mínimo/máximo passam a ser obrigatórias.
+        const opcoesFornecidas = Array.isArray(item.opcoes);
         const escolhas = Array.isArray(item.opcoes) ? item.opcoes : [];
         if (escolhas.some((escolha) => typeof escolha?.grupoId !== "string" || typeof escolha?.opcaoId !== "string")) {
           throw Object.assign(new Error("Opções do produto inválidas."), { status: 400 });
@@ -265,7 +269,7 @@ export async function POST(request: NextRequest) {
         }
         for (const grupo of grupos) {
           const quantidade = opcoes.filter((opcao) => opcao.grupoId === grupo.id).length;
-          if (quantidade < Number(grupo.minimoSelecoes) || quantidade > Number(grupo.maximoSelecoes)) {
+          if (opcoesFornecidas && (quantidade < Number(grupo.minimoSelecoes) || quantidade > Number(grupo.maximoSelecoes))) {
             throw Object.assign(new Error(`Escolha entre ${grupo.minimoSelecoes} e ${grupo.maximoSelecoes} opção(ões) em ${grupo.nome}.`), { status: 400 });
           }
         }
