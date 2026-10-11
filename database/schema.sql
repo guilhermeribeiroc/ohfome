@@ -1686,7 +1686,7 @@ grant select, insert, update, delete on
   movimentacoes_financeiras, custos_fixos, estado_aplicacao,
   estabelecimento_modulos, impressao_jobs, bairros_entrega,
   configuracoes_pix, mercado_pago_conexoes, mercado_pago_oauth_states, pagamentos_pix,
-  demonstracao_referencias
+  demonstracao_referencias, pedidos_idempotencia
 to ohfome_app;
 
 -- estabelecimentos: sem insert/delete direto (so via fn_registrar_estabelecimento);
