@@ -287,6 +287,12 @@ interface ItemRevisao {
   precoVenda: string;
   categoriaNome: string;
 }
+interface PizzaRevisao {
+  chave: string; incluir: boolean; nome: string; categoriaNome: string; descricao: string;
+  regraMeioAMeio: "maior_valor" | "media" | "preco_fixo";
+  tamanhos: { nome: string; precoSaborUnico: number; precoMeioAMeio: number | null }[];
+  sabores: { nome: string; descricao: string; acrescimo: number }[];
+}
 
 function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; onCriados: (ids: string[]) => void }) {
   const { dados: categorias } = usePolling<Categoria[]>("/api/categorias", 60000);
@@ -295,6 +301,7 @@ function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; 
   const urlsAtivos = useRef(new Set<string>());
   const previews = arquivos.map((item) => item.preview);
   const [itens, setItens] = useState<ItemRevisao[]>([]);
+  const [pizzas, setPizzas] = useState<PizzaRevisao[]>([]);
   const [erro, setErro] = useState("");
 
   useEffect(() => {
@@ -340,7 +347,7 @@ function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; 
     }
     const extraidos: { nome: string; tamanho: "P" | "M" | "G" | null; descricao: string; precoVenda: number; categoriaSugerida: string }[] = corpo.itens ?? [];
     setItens(
-      extraidos.map((item, indice) => ({
+      extraidos.slice().sort((a, b) => a.categoriaSugerida.localeCompare(b.categoriaSugerida, "pt-BR") || a.nome.localeCompare(b.nome, "pt-BR")).map((item, indice) => ({
         chave: `${indice}-${item.nome}`,
         incluir: true,
         nome: item.nome,
@@ -350,6 +357,8 @@ function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; 
         categoriaNome: item.categoriaSugerida,
       })),
     );
+    const pizzasExtraidas: { nome: string; categoriaSugerida: string; descricao: string; regraMeioAMeio: PizzaRevisao["regraMeioAMeio"]; tamanhos: PizzaRevisao["tamanhos"]; sabores: PizzaRevisao["sabores"] }[] = corpo.pizzas ?? [];
+    setPizzas(pizzasExtraidas.map((pizza, indice) => ({ chave: `pizza-${indice}-${pizza.nome}`, incluir: true, nome: pizza.nome, categoriaNome: pizza.categoriaSugerida, descricao: pizza.descricao, regraMeioAMeio: pizza.regraMeioAMeio, tamanhos: pizza.tamanhos, sabores: pizza.sabores })));
     setEtapa("revisar");
   }
 
@@ -362,9 +371,10 @@ function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; 
   }
 
   const selecionados = itens.filter((item) => item.incluir);
+  const pizzasSelecionadas = pizzas.filter((pizza) => pizza.incluir);
 
   async function salvar() {
-    if (selecionados.length === 0) return;
+    if (selecionados.length + pizzasSelecionadas.length === 0) return;
     setErro("");
     setEtapa("salvando");
     const resposta = await fetch("/api/produtos/lote", {
@@ -378,6 +388,7 @@ function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; 
           precoVenda: numeroDaMoeda(item.precoVenda),
           categoriaNome: item.categoriaNome,
         })),
+        pizzas: pizzasSelecionadas.map((pizza) => ({ nome: pizza.nome, categoriaNome: pizza.categoriaNome, descricao: pizza.descricao, regraMeioAMeio: pizza.regraMeioAMeio, tamanhos: pizza.tamanhos, sabores: pizza.sabores })),
       }),
     });
     const corpo = await resposta.json().catch(() => null);
@@ -453,8 +464,9 @@ function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; 
           {(etapa === "revisar" || etapa === "salvando") && (
             <>
               <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-ink-600">{itens.length} item(ns) encontrado(s) · {selecionados.length} selecionado(s)</p>
+                <p className="text-xs font-semibold text-ink-600">{itens.length} item(ns) e {pizzas.length} pizza(s) encontrada(s) · {selecionados.length + pizzasSelecionadas.length} selecionado(s)</p>
               </div>
+              {pizzas.map((pizza) => <div key={pizza.chave} className="rounded-2xl border border-coral-200 bg-coral-050/50 p-3.5"><div className="flex items-start gap-2"><input type="checkbox" checked={pizza.incluir} onChange={() => setPizzas((atuais) => atuais.map((item) => item.chave === pizza.chave ? { ...item, incluir: !item.incluir } : item))} className="mt-1" /><div className="min-w-0 flex-1"><p className="text-sm font-bold text-ink-900">🍕 {pizza.nome}</p><p className="mt-1 text-xs text-ink-500">{pizza.categoriaNome} · meio a meio: {pizza.regraMeioAMeio === "maior_valor" ? "maior valor" : pizza.regraMeioAMeio === "media" ? "média" : "preço fixo"}</p><p className="mt-2 text-xs text-ink-700"><b>Tamanhos:</b> {pizza.tamanhos.map((tamanho) => `${tamanho.nome} R$ ${tamanho.precoSaborUnico.toFixed(2).replace(".", ",")}`).join(" · ")}</p><p className="mt-1 text-xs text-ink-700"><b>Sabores:</b> {pizza.sabores.map((sabor) => sabor.nome).join(" · ")}</p><p className="mt-2 text-[11px] text-ink-400">Após criar, você pode ajustar sabores, tamanhos e valores na edição do produto.</p></div></div></div>)}
               <div className="space-y-3">
                 {itens.map((item) => (
                   <div key={item.chave} className={`rounded-2xl border p-3.5 transition ${item.incluir ? "border-coral-200/70 bg-surface" : "border-cream-200 bg-cream-50/60 opacity-60"}`}>
@@ -510,8 +522,8 @@ function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; 
               </button>
             )}
             {(etapa === "revisar" || etapa === "salvando") && (
-              <button onClick={salvar} disabled={selecionados.length === 0 || etapa === "salvando"} className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold text-white shadow-lg shadow-coral-500/25 transition hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-40" style={{ background: GRADIENTE_CORAL }}>
-                {etapa === "salvando" ? <><Loader2 size={16} className="animate-spin" /> Criando produtos...</> : `Adicionar ${selecionados.length} produto(s)`}
+              <button onClick={salvar} disabled={selecionados.length + pizzasSelecionadas.length === 0 || etapa === "salvando"} className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold text-white shadow-lg shadow-coral-500/25 transition hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-40" style={{ background: GRADIENTE_CORAL }}>
+                {etapa === "salvando" ? <><Loader2 size={16} className="animate-spin" /> Criando produtos...</> : `Adicionar ${selecionados.length + pizzasSelecionadas.length} produto(s)`}
               </button>
             )}
           </div>

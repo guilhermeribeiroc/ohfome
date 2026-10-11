@@ -41,11 +41,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const itens = await extrairItensCardapio(imagens);
-    if (itens.length === 0) {
+    const resultado = await extrairItensCardapio(imagens);
+    if (resultado.itens.length === 0 && resultado.pizzas.length === 0) {
       return NextResponse.json({ erro: "Não encontrei itens com preço legível nessa(s) foto(s). Tente uma foto mais nítida." }, { status: 422 });
     }
-    return NextResponse.json({ itens });
+    return NextResponse.json(resultado);
   } catch (erro) {
     return NextResponse.json({ erro: erro instanceof Error ? erro.message : "Não foi possível ler o cardápio." }, { status: 502 });
   }

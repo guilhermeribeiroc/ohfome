@@ -9,6 +9,11 @@ interface ItemEntrada {
   precoVenda: number;
   categoriaNome: string;
 }
+interface PizzaEntrada {
+  nome: string; categoriaNome: string; descricao: string; regraMeioAMeio: "maior_valor" | "media" | "preco_fixo";
+  tamanhos: { nome: string; precoSaborUnico: number; precoMeioAMeio: number | null }[];
+  sabores: { nome: string; descricao: string; acrescimo: number }[];
+}
 
 export async function POST(request: NextRequest) {
   const sessao = await autenticarRequisicao(request);
@@ -17,8 +22,9 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => null);
   const itensBrutos = Array.isArray(body?.itens) ? body.itens : [];
-  if (itensBrutos.length === 0) return NextResponse.json({ erro: "Nenhum item para criar." }, { status: 400 });
-  if (itensBrutos.length > 100) return NextResponse.json({ erro: "Envie no máximo 100 itens por vez." }, { status: 400 });
+  const pizzasBrutas = Array.isArray(body?.pizzas) ? body.pizzas : [];
+  if (itensBrutos.length + pizzasBrutas.length === 0) return NextResponse.json({ erro: "Nenhum item para criar." }, { status: 400 });
+  if (itensBrutos.length + pizzasBrutas.length > 100) return NextResponse.json({ erro: "Envie no máximo 100 itens por vez." }, { status: 400 });
 
   const itens: ItemEntrada[] = itensBrutos.map((item: Record<string, unknown>) => ({
     nome: typeof item?.nome === "string" ? item.nome.trim() : "",
@@ -31,6 +37,15 @@ export async function POST(request: NextRequest) {
   if (itens.some((item) => item.nome.length < 2 || !Number.isFinite(item.precoVenda) || item.precoVenda < 0)) {
     return NextResponse.json({ erro: "Um ou mais itens têm nome ou preço inválido." }, { status: 400 });
   }
+  const pizzas: PizzaEntrada[] = pizzasBrutas.map((pizza: Record<string, unknown>) => ({
+    nome: typeof pizza?.nome === "string" ? pizza.nome.trim() : "",
+    categoriaNome: typeof pizza?.categoriaNome === "string" ? pizza.categoriaNome.trim() : "",
+    descricao: typeof pizza?.descricao === "string" ? pizza.descricao.trim() : "",
+    regraMeioAMeio: pizza?.regraMeioAMeio === "media" || pizza?.regraMeioAMeio === "preco_fixo" ? pizza.regraMeioAMeio : "maior_valor",
+    tamanhos: (Array.isArray(pizza?.tamanhos) ? pizza.tamanhos : []).map((tamanho: Record<string, unknown>) => ({ nome: typeof tamanho?.nome === "string" ? tamanho.nome.trim() : "", precoSaborUnico: Number(tamanho?.precoSaborUnico), precoMeioAMeio: tamanho?.precoMeioAMeio === null || tamanho?.precoMeioAMeio === undefined ? null : Number(tamanho.precoMeioAMeio) })),
+    sabores: (Array.isArray(pizza?.sabores) ? pizza.sabores : []).map((sabor: Record<string, unknown>) => ({ nome: typeof sabor?.nome === "string" ? sabor.nome.trim() : "", descricao: typeof sabor?.descricao === "string" ? sabor.descricao.trim() : "", acrescimo: Number(sabor?.acrescimo ?? 0) })),
+  }));
+  if (pizzas.some((pizza) => pizza.nome.length < 2 || !pizza.categoriaNome || !pizza.tamanhos.length || !pizza.sabores.length || pizza.tamanhos.some((tamanho) => !tamanho.nome || !Number.isFinite(tamanho.precoSaborUnico) || tamanho.precoSaborUnico < 0 || (tamanho.precoMeioAMeio !== null && (!Number.isFinite(tamanho.precoMeioAMeio) || tamanho.precoMeioAMeio < 0))) || (pizza.regraMeioAMeio === "preco_fixo" && pizza.tamanhos.some((tamanho) => tamanho.precoMeioAMeio === null)) || pizza.sabores.some((sabor) => sabor.nome.length < 2 || !Number.isFinite(sabor.acrescimo) || sabor.acrescimo < 0))) return NextResponse.json({ erro: "Revise tamanhos, sabores e preços das pizzas." }, { status: 400 });
 
   const estabelecimentoId = sessao.estabelecimentoId;
   const criados = await comEstabelecimento(estabelecimentoId, async (client) => {
@@ -71,6 +86,15 @@ export async function POST(request: NextRequest) {
         [estabelecimentoId, catId, item.nome, item.tamanho, item.descricao || null, item.precoVenda]
       );
       resultado.push(rows[0]);
+    }
+    for (const pizza of pizzas) {
+      const catId = await categoriaId(pizza.categoriaNome);
+      const { rows } = await client.query(`insert into produtos (estabelecimento_id, categoria_id, nome, descricao, modo_precificacao, preco_custo, margem_percentual, preco_venda, tipo_produto) values ($1,$2,$3,$4,'preco_manual',0,0,$5,'pizza') returning id, nome, descricao`, [estabelecimentoId, catId, pizza.nome, pizza.descricao || null, Math.min(...pizza.tamanhos.map((tamanho) => tamanho.precoSaborUnico))]);
+      const produto = rows[0];
+      await client.query(`insert into produto_configuracoes_pizza (produto_id, estabelecimento_id, regra_meio_a_meio) values ($1,$2,$3)`, [produto.id, estabelecimentoId, pizza.regraMeioAMeio]);
+      for (const [ordem, tamanho] of pizza.tamanhos.entries()) await client.query(`insert into pizza_tamanhos (produto_id, estabelecimento_id, nome, preco_sabor_unico, preco_meio_a_meio, ordem) values ($1,$2,$3,$4,$5,$6)`, [produto.id, estabelecimentoId, tamanho.nome, tamanho.precoSaborUnico, tamanho.precoMeioAMeio, ordem]);
+      for (const [ordem, sabor] of pizza.sabores.entries()) await client.query(`insert into pizza_sabores (produto_id, estabelecimento_id, nome, descricao, acrescimo, ordem) values ($1,$2,$3,$4,$5,$6)`, [produto.id, estabelecimentoId, sabor.nome, sabor.descricao || null, sabor.acrescimo, ordem]);
+      resultado.push(produto);
     }
     return resultado;
   });
