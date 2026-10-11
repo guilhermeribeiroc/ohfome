@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type DragEvent } from "react";
-import { ArrowRight, Bell, BellOff, BellRing, Check, ChefHat, Clock3, Loader2, MapPin, MessageSquareText, Minus, PackageCheck, PackageSearch, Plus, Printer, Search, ShoppingBag, Trash2, Truck, X } from "lucide-react";
+import { ArrowRight, Bell, BellOff, BellRing, Check, ChefHat, Clock3, Loader2, MapPin, MessageSquareText, Minus, PackageCheck, PackageSearch, Plus, Printer, Search, ShoppingBag, Store, Trash2, Truck, UtensilsCrossed, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { BairroEntrega, Cliente, Entregador, Mesa, Pedido, PedidoStatus, Produto } from "@/lib/types";
 import { MESA_STATUS_LABEL, PEDIDO_STATUS_LABEL, nomeProdutoComTamanho } from "@/lib/types";
@@ -12,8 +12,15 @@ import { ClienteBuscaCampo } from "@/components/clientes/ClienteBuscaCampo";
 
 const TODAS_COLUNAS: PedidoStatus[] = ["novo", "em_preparo", "pronto", "saiu_para_entrega", "finalizado"];
 const PROXIMO_STATUS: Partial<Record<PedidoStatus, PedidoStatus>> = { novo: "em_preparo", em_preparo: "pronto", pronto: "saiu_para_entrega", saiu_para_entrega: "finalizado" };
-const TIPO_LABEL: Record<Pedido["tipo"], string> = { mesa: "Mesa", balcao: "Central de pedidos", delivery: "Delivery" };
 const STATUS_ICON: Record<Exclude<PedidoStatus, "cancelado">, LucideIcon> = { novo: Bell, em_preparo: ChefHat, pronto: PackageCheck, saiu_para_entrega: Truck, finalizado: Check };
+type PedidoCanal = "delivery" | "mesa" | "retirada" | "balcao";
+
+const CANAL_CONFIG: Record<PedidoCanal, { label: string; icon: LucideIcon; tone: string }> = {
+  delivery: { label: "Delivery", icon: Truck, tone: "bg-sky-500/10 text-sky-700 ring-1 ring-sky-500/25" },
+  mesa: { label: "Mesa", icon: UtensilsCrossed, tone: "bg-violet-500/10 text-violet-700 ring-1 ring-violet-500/25" },
+  retirada: { label: "Retirada", icon: ShoppingBag, tone: "bg-emerald-500/10 text-emerald-700 ring-1 ring-emerald-500/25" },
+  balcao: { label: "Balcão", icon: Store, tone: "bg-ink-100 text-ink-700 ring-1 ring-ink-200" },
+};
 const STATUS_TONE: Record<Exclude<PedidoStatus, "cancelado">, string> = {
   novo: "bg-amber-500/10 text-amber-700 ring-1 ring-amber-500/20",
   em_preparo: "bg-orange-500/10 text-orange-700 ring-1 ring-orange-500/20",
@@ -27,6 +34,34 @@ function tempoDecorrido(iso: string) {
   if (minutos < 1) return "agora";
   if (minutos < 60) return `${minutos} min`;
   return `${Math.floor(minutos / 60)}h ${minutos % 60}min`;
+}
+
+function canalDoPedido(pedido: Pedido): PedidoCanal {
+  if (pedido.tipo === "delivery") return "delivery";
+  if (pedido.tipo === "mesa") return "mesa";
+  if (pedido.formaRecebimento === "retirada") return "retirada";
+  return "balcao";
+}
+
+function nomeCanal(pedido: Pedido) {
+  const canal = canalDoPedido(pedido);
+  if (canal === "mesa" && pedido.mesaNumero) return `Mesa ${String(pedido.mesaNumero).padStart(2, "0")}`;
+  return CANAL_CONFIG[canal].label;
+}
+
+function resumoDoAtendimento(pedido: Pedido) {
+  const canal = canalDoPedido(pedido);
+  if (pedido.clienteNome) return pedido.clienteNome;
+  if (canal === "mesa") return "Atendimento no salão";
+  if (canal === "retirada") return "Retirada no balcão";
+  if (canal === "delivery") return "Cliente delivery";
+  return "Atendimento presencial";
+}
+
+function PedidoCanalBadge({ pedido }: { pedido: Pedido }) {
+  const canal = canalDoPedido(pedido);
+  const { icon: Icon, tone } = CANAL_CONFIG[canal];
+  return <span className={`inline-flex min-h-6 items-center gap-1.5 rounded-lg px-2 py-1 text-[10px] font-extrabold uppercase tracking-[.09em] ${tone}`} aria-label={`Canal do pedido: ${nomeCanal(pedido)}`}><Icon aria-hidden size={12} strokeWidth={2.25} />{nomeCanal(pedido)}</span>;
 }
 
 function linkWhatsapp(telefone: string, mensagem: string) {
@@ -49,7 +84,7 @@ interface KanbanBoardProps { titulo?: string; subtitulo?: string; colunas?: Pedi
 export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Central de pedidos em tempo real", colunas = TODAS_COLUNAS, permiteCriar = true, permiteCancelar = true, origem, modoCozinha = false }: KanbanBoardProps) {
   const url = origem ? `/api/pedidos?origem=${origem}` : "/api/pedidos";
   const { dados, setDados, recarregar } = usePolling<Pedido[]>(url, 4000);
-  const pedidos = dados ?? [];
+  const pedidos = useMemo(() => dados ?? [], [dados]);
   const { usuarioAtual } = useTenant();
   const souAdmin = usuarioAtual?.role === "admin";
   const [somAtivo, setSomAtivo] = useState(true);
@@ -60,6 +95,14 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Central
   const [promptNotificar, setPromptNotificar] = useState<{ pedido: Pedido; status: PedidoStatus } | null>(null);
   const [notificando, setNotificando] = useState(false);
   const [pedidoParaDespachar, setPedidoParaDespachar] = useState<Pedido | null>(null);
+  const [filtroCanal, setFiltroCanal] = useState<"todos" | PedidoCanal>("todos");
+  const pedidosFiltrados = useMemo(() => filtroCanal === "todos" ? pedidos : pedidos.filter((pedido) => canalDoPedido(pedido) === filtroCanal), [filtroCanal, pedidos]);
+  const quantidadePorCanal = useMemo(() => {
+    const quantidades: Record<"todos" | PedidoCanal, number> = { todos: pedidos.length, delivery: 0, mesa: 0, retirada: 0, balcao: 0 };
+    for (const pedido of pedidos) quantidades[canalDoPedido(pedido)] += 1;
+    return quantidades;
+  }, [pedidos]);
+  const mostrarFiltrosDeCanal = !modoCozinha && !origem;
 
   async function moverPedido(pedidoId: string, status: PedidoStatus) {
     const pedidoAtual = pedidos.find((pedido) => pedido.id === pedidoId);
@@ -147,10 +190,19 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Central
         </div>
       </header>
 
+      {mostrarFiltrosDeCanal && <nav className="mb-5 flex gap-2 overflow-x-auto pb-1" aria-label="Filtrar pedidos por canal">
+        {(["todos", "delivery", "mesa", "retirada", "balcao"] as const).map((canal) => {
+          const ativo = filtroCanal === canal;
+          const config = canal === "todos" ? null : CANAL_CONFIG[canal];
+          const Icon = config?.icon ?? PackageSearch;
+          const rotulo = config?.label ?? "Todos";
+          return <button key={canal} onClick={() => setFiltroCanal(canal)} aria-pressed={ativo} className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl border px-3 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-coral-400 ${ativo ? "border-ink-900 bg-ink-900 text-white shadow-sm" : "border-cream-200 bg-surface text-ink-600 hover:border-cream-300 hover:bg-cream-50"}`}><Icon aria-hidden size={15} /><span>{rotulo}</span><span className={`rounded-md px-1.5 py-0.5 text-[10px] ${ativo ? "bg-white/15 text-white" : "bg-cream-100 text-ink-500"}`}>{quantidadePorCanal[canal]}</span></button>;
+        })}
+      </nav>}
 
       <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-4 lg:grid lg:snap-none lg:overflow-visible" style={{ gridTemplateColumns: `repeat(${colunas.length}, minmax(0, 1fr))` }}>
         {colunas.map((status) => {
-          const itens = pedidos.filter((pedido) => pedido.status === status);
+          const itens = pedidosFiltrados.filter((pedido) => pedido.status === status);
           const Icon = STATUS_ICON[status as Exclude<PedidoStatus, "cancelado">];
           return (
             <section key={status} onDragOver={(evento) => { evento.preventDefault(); evento.dataTransfer.dropEffect = "move"; setColunaDestino(status); }} onDragLeave={() => setColunaDestino((atual) => atual === status ? null : atual)} onDrop={(evento) => void soltarPedido(evento, status)} className={`of-panel min-w-[86vw] snap-center overflow-hidden transition sm:min-w-[330px] lg:min-w-0 ${colunaDestino === status ? "ring-2 ring-coral-400 ring-offset-2" : ""}`}>
@@ -162,7 +214,7 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Central
                 {itens.length === 0 && <div className="flex min-h-32 flex-col items-center justify-center rounded-2xl border border-dashed border-cream-300 text-center"><ShoppingBag size={20} className="mb-2 text-ink-400" /><p className="text-xs font-medium text-ink-400">Nenhum pedido aqui</p></div>}
                 {itens.map((pedido) => (
                   <article key={pedido.id} draggable onClick={() => setPedidoDetalhe(pedido)} onKeyDown={(evento) => { if (evento.key === "Enter") setPedidoDetalhe(pedido); }} tabIndex={0} role="button" onDragStart={(evento) => iniciarArraste(evento, pedido.id)} onDragEnd={() => { setPedidoArrastado(null); setColunaDestino(null); }} className={`group cursor-grab rounded-2xl border border-cream-200/80 bg-surface p-3.5 shadow-sm transition-all duration-200 active:cursor-grabbing hover:-translate-y-0.5 hover:border-cream-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-coral-400 ${pedidoArrastado === pedido.id ? "opacity-45" : ""}`}>
-                    <div className="flex items-start justify-between gap-3"><div><span className="font-display text-base font-bold tracking-tight text-ink-900">#{pedido.codigo}</span>{pedido.pedidoPaiCodigo && <span className="ml-2 inline-flex items-center rounded-full bg-coral-050 px-2 py-0.5 text-[10px] font-bold text-coral-600">Adicional #{pedido.pedidoPaiCodigo}</span>}<p className="mt-0.5 text-[11px] text-ink-400">{pedido.formaRecebimento === "entrega" ? "Entrega" : pedido.formaRecebimento === "retirada" ? "Retirada" : TIPO_LABEL[pedido.tipo]}{pedido.mesaNumero ? ` · Mesa ${pedido.mesaNumero}` : ""}{pedido.clienteNome ? ` · ${pedido.clienteNome}` : ""}</p></div><span className="inline-flex items-center gap-1 text-[10px] font-medium text-ink-400"><Clock3 size={12} />{tempoDecorrido(pedido.createdAt)}</span></div>
+                    <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="font-display text-base font-bold tracking-tight text-ink-900">#{pedido.codigo}</span><PedidoCanalBadge pedido={pedido} />{pedido.pedidoPaiCodigo && <span className="inline-flex items-center rounded-full bg-coral-050 px-2 py-0.5 text-[10px] font-bold text-coral-600">Adicional #{pedido.pedidoPaiCodigo}</span>}</div><p className="mt-1 truncate text-[11px] font-medium text-ink-500">{resumoDoAtendimento(pedido)}</p></div><span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-medium text-ink-400"><Clock3 size={12} />{tempoDecorrido(pedido.createdAt)}</span></div>
                     <ul className="my-3 space-y-1.5 border-y border-cream-100 py-3">{pedido.itens.map((item) => <li key={item.id} className="flex gap-2 text-xs leading-5 text-ink-600"><b className="font-semibold text-ink-900">{item.quantidade}×</b><span>{item.produtoNome}{item.pizza && <small className="block text-coral-600">{item.pizza.tamanhoNome} · {item.pizza.saborDoisNome ? `½ ${item.pizza.saborUmNome} / ½ ${item.pizza.saborDoisNome}` : item.pizza.saborUmNome}</small>}{item.opcoes?.map((opcao) => <small key={`${opcao.grupoNome}-${opcao.opcaoNome}`} className="block text-ink-500">{opcao.grupoNome}: {opcao.opcaoNome}</small>)}</span></li>)}</ul>
                     {(pedido.enderecoEntrega || pedido.observacoes) && <div className="mb-3 space-y-1.5 rounded-xl bg-cream-50 p-2.5 text-[11px] leading-4 text-ink-600">{pedido.enderecoEntrega && <p className="flex gap-1.5"><MapPin size={13} className="mt-0.5 shrink-0 text-coral-600" /><span><b className="font-semibold text-ink-800">Entrega:</b> {pedido.enderecoEntrega}</span></p>}{pedido.observacoes && <p className="flex gap-1.5"><MessageSquareText size={13} className="mt-0.5 shrink-0 text-coral-600" /><span><b className="font-semibold text-ink-800">Obs.:</b> {pedido.observacoes}</span></p>}</div>}
                     <div className="flex items-center justify-between gap-2"><strong className="whitespace-nowrap font-display text-sm font-bold text-ink-900">R$ {pedido.total.toFixed(2).replace(".", ",")}</strong>{permiteCancelar && status === "novo" && <button onClick={(evento) => { evento.stopPropagation(); void cancelarPedido(pedido.id); }} className="flex h-10 w-10 items-center justify-center rounded-xl text-danger-600 transition hover:bg-danger-050" aria-label={`Cancelar pedido ${pedido.codigo}`}><X size={15} /></button>}</div>{status !== "finalizado" && <button onClick={(evento) => { evento.stopPropagation(); void avancarStatus(pedido.id, pedido.status); }} className="mt-2 flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-ink-900 px-3 text-[11px] font-semibold text-white transition active:scale-95">{pedido.tipo === "delivery" && status === "pronto" ? "Selecionar entregador" : "Avançar"} <ArrowRight size={13} /></button>}
@@ -215,9 +267,9 @@ function PedidoDetalheModal({ pedido, onFechar, onNotificar, permitirReimpressao
 
   return <div className="of-modal-backdrop z-50" role="dialog" aria-modal="true" aria-label={`Detalhes do pedido ${pedido.codigo}`}>
     <section className="of-modal-panel flex max-h-[90dvh] max-w-lg flex-col overflow-hidden">
-      <header className="flex items-start justify-between border-b border-cream-200 p-5"><div><p className="of-eyebrow">Pedido #{pedido.codigo}</p><h2 className="font-display text-xl font-bold tracking-tight text-ink-900">Detalhes do pedido</h2>{pedido.pedidoPaiCodigo && <span className="mt-1.5 inline-flex items-center rounded-full bg-coral-050 px-2.5 py-1 text-[11px] font-bold text-coral-600">Adicional do pedido #{pedido.pedidoPaiCodigo}</span>}</div><button onClick={onFechar} className="of-icon-btn" aria-label="Fechar detalhes"><X size={17} /></button></header>
+      <header className="flex items-start justify-between border-b border-cream-200 p-5"><div><p className="of-eyebrow">Pedido #{pedido.codigo}</p><h2 className="font-display text-xl font-bold tracking-tight text-ink-900">Detalhes do pedido</h2><div className="mt-2"><PedidoCanalBadge pedido={pedido} /></div>{pedido.pedidoPaiCodigo && <span className="mt-1.5 inline-flex items-center rounded-full bg-coral-050 px-2.5 py-1 text-[11px] font-bold text-coral-600">Adicional do pedido #{pedido.pedidoPaiCodigo}</span>}</div><button onClick={onFechar} className="of-icon-btn" aria-label="Fechar detalhes"><X size={17} /></button></header>
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5"><div className="rounded-2xl bg-cream-50 p-3.5 text-sm"><p className="font-semibold text-ink-900">{pedido.clienteNome || (pedido.mesaNumero ? `Mesa ${pedido.mesaNumero}` : "Pedido presencial")}</p>{pedido.clienteTelefone && <p className="mt-1 text-xs text-ink-500">WhatsApp: {pedido.clienteTelefone}</p>}{pedido.enderecoEntrega && <p className="mt-2 flex gap-1.5 text-xs leading-5 text-ink-600"><MapPin size={13} className="mt-0.5 shrink-0 text-coral-600" />{pedido.enderecoEntrega}</p>}{pagamento && <p className="mt-2 text-xs font-medium text-ink-700">Pagamento: {pagamento}</p>}{pedido.observacoes && <p className="mt-2 flex gap-1.5 text-xs leading-5 text-ink-600"><MessageSquareText size={13} className="mt-0.5 shrink-0 text-coral-600" />{pedido.observacoes}</p>}{pedido.clienteTelefone && <button onClick={() => onNotificar(pedido)} className="mt-3 flex min-h-9 items-center gap-1.5 rounded-lg bg-ink-900 px-3 text-xs font-semibold text-white transition active:scale-95"><Bell size={13} /> Notificar cliente</button>}</div><div><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-ink-400">Itens do pedido</p><ul className="divide-y divide-cream-100 rounded-2xl border border-cream-200 bg-surface px-3.5">{pedido.itens.map((item) => <li key={item.id} className="py-3"><div className="flex items-center justify-between gap-3 text-sm"><span><b className="mr-2 text-ink-900">{item.quantidade}×</b>{item.produtoNome}</span><b className="shrink-0 text-ink-900">R$ {(item.precoUnitario * item.quantidade).toFixed(2).replace(".", ",")}</b></div>{item.opcoes?.map((opcao) => <p key={`${opcao.grupoNome}-${opcao.opcaoNome}`} className="mt-1 pl-6 text-xs font-medium text-coral-600">{opcao.grupoNome}: {opcao.opcaoNome}</p>)}{item.observacoes && <p className="mt-1 pl-6 text-xs text-ink-500">Obs.: {item.observacoes}</p>}</li>)}</ul></div></div>
-      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-cream-200 bg-surface p-5"><div className="flex flex-wrap gap-2"><button onClick={() => imprimirPedido(pedido, pedido.mesaNumero ? "Comanda da mesa" : "Via do pedido")} className="of-btn-secondary min-h-11 px-3"><Printer size={16} /> Imprimir</button>{permitirReimpressao && <button onClick={() => void reimprimirNaCozinha()} disabled={reimprimindo} className="of-btn-secondary min-h-11 px-3"><Printer size={16} /> {reimprimindo ? "Enviando..." : "Reimprimir cozinha"}</button>}{permitirExcluir && <button onClick={() => onExcluir(pedido)} className="of-icon-btn min-h-11 !w-11 text-danger-600 hover:!bg-danger-050" aria-label={`Excluir pedido ${pedido.codigo}`}><Trash2 size={16} /></button>}{mensagemImpressao && <p className="basis-full text-xs text-ink-500">{mensagemImpressao}</p>}</div><div className="text-right"><span className="block text-xs text-ink-400">{pedido.formaRecebimento === "entrega" ? "Entrega" : pedido.formaRecebimento === "retirada" ? "Retirada" : TIPO_LABEL[pedido.tipo]}</span><strong className="font-display text-xl font-bold text-ink-900">R$ {pedido.total.toFixed(2).replace(".", ",")}</strong></div></footer>
+      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-cream-200 bg-surface p-5"><div className="flex flex-wrap gap-2"><button onClick={() => imprimirPedido(pedido, pedido.mesaNumero ? "Comanda da mesa" : "Via do pedido")} className="of-btn-secondary min-h-11 px-3"><Printer size={16} /> Imprimir</button>{permitirReimpressao && <button onClick={() => void reimprimirNaCozinha()} disabled={reimprimindo} className="of-btn-secondary min-h-11 px-3"><Printer size={16} /> {reimprimindo ? "Enviando..." : "Reimprimir cozinha"}</button>}{permitirExcluir && <button onClick={() => onExcluir(pedido)} className="of-icon-btn min-h-11 !w-11 text-danger-600 hover:!bg-danger-050" aria-label={`Excluir pedido ${pedido.codigo}`}><Trash2 size={16} /></button>}{mensagemImpressao && <p className="basis-full text-xs text-ink-500">{mensagemImpressao}</p>}</div><div className="text-right"><div className="mb-1 flex justify-end"><PedidoCanalBadge pedido={pedido} /></div><strong className="font-display text-xl font-bold text-ink-900">R$ {pedido.total.toFixed(2).replace(".", ",")}</strong></div></footer>
     </section>
   </div>;
 }
