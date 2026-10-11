@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, sessaoPodeAcessarModulo } from "@/lib/api-auth";
+import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, sessaoPodeGerirClientes } from "@/lib/api-auth";
 import { comEstabelecimento } from "@/lib/db";
 
 function normalizarBusca(valor: string) {
@@ -9,8 +9,7 @@ function normalizarBusca(valor: string) {
 export async function GET(request: NextRequest) {
   const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
-  const podeBuscar = sessao.role === "admin" || sessaoPodeAcessarModulo(sessao, "balcao") || sessaoPodeAcessarModulo(sessao, "delivery");
-  if (!podeBuscar) return respostaAcessoNegado();
+  if (!sessaoPodeGerirClientes(sessao)) return respostaAcessoNegado();
 
   const termo = new URL(request.url).searchParams.get("q")?.trim() ?? "";
   const normalizado = normalizarBusca(termo);
@@ -18,7 +17,8 @@ export async function GET(request: NextRequest) {
 
   const clientes = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     const { rows } = await client.query(
-      `select id, nome, telefone, endereco, ponto_referencia as "pontoReferencia"
+      `select id, nome, telefone, endereco, bairro, ponto_referencia as "pontoReferencia",
+              email, notificar_pedido as "notificarPedido"
        from clientes
        where regexp_replace(translate(lower(nome), 'áàãâäéèêëíìîïóòõôöúùûüç', 'aaaaaeeeeiiiiooooouuuuc'), '[^a-z0-9]', '', 'g') like $1
           or regexp_replace(coalesce(telefone, ''), '[^0-9]', '', 'g') like $1

@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { KeyRound, Plus, Power, Save, ShieldCheck, UserRound, UsersRound } from "lucide-react";
+import { KeyRound, Plus, Power, Save, ShieldCheck, Truck, UserRound, UsersRound } from "lucide-react";
 import { MODULOS } from "@/lib/tenant-types";
 import type { PapelUsuario } from "@/lib/tenant-types";
 import { usePolling } from "@/lib/use-polling";
 import { useTenant } from "@/lib/tenant-context";
+import type { Entregador } from "@/lib/types";
 
 interface UsuarioEquipe {
   id: string;
@@ -25,6 +26,7 @@ function labelCargo(role: PapelUsuario) {
 
 export function EquipeModule() {
   const { dados, setDados } = usePolling<UsuarioEquipe[]>("/api/usuarios", 60000);
+  const { dados: entregadores, setDados: setEntregadores } = usePolling<Entregador[]>("/api/entregadores", 30000);
   const { estabelecimento } = useTenant();
   const [nome, setNome] = useState("");
   const [usuario, setUsuario] = useState("");
@@ -32,6 +34,11 @@ export function EquipeModule() {
   const [role, setRole] = useState<PapelUsuario | "">("");
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [nomeEntregador, setNomeEntregador] = useState("");
+  const [veiculoEntregador, setVeiculoEntregador] = useState("");
+  const [telefoneEntregador, setTelefoneEntregador] = useState("");
+  const [enviandoEntregador, setEnviandoEntregador] = useState(false);
+  const [erroEntregador, setErroEntregador] = useState("");
 
   const cargos = MODULOS.filter((modulo) => estabelecimento?.modulosAtivos.includes(modulo.id));
   const usuarios = dados ?? [];
@@ -55,6 +62,17 @@ export function EquipeModule() {
     setNome(""); setUsuario(""); setSenha(""); setRole("");
   }
 
+  async function criarEntregador() {
+    if (nomeEntregador.trim().length < 2) { setErroEntregador("Informe o nome do entregador."); return; }
+    setEnviandoEntregador(true); setErroEntregador("");
+    const resposta = await fetch("/api/entregadores", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nome: nomeEntregador, veiculo: veiculoEntregador, telefone: telefoneEntregador }) });
+    const dadosResposta = await resposta.json().catch(() => null);
+    setEnviandoEntregador(false);
+    if (!resposta.ok) { setErroEntregador(dadosResposta?.erro ?? "Não foi possível cadastrar o entregador."); return; }
+    setEntregadores((atual) => [...(atual ?? []), dadosResposta as Entregador]);
+    setNomeEntregador(""); setVeiculoEntregador(""); setTelefoneEntregador("");
+  }
+
   return (
     <section className="of-page">
       <header className="of-page-header">
@@ -76,6 +94,12 @@ export function EquipeModule() {
         <header className="of-panel-header"><div><h2 className="font-display text-lg font-bold text-ink-900">Acessos cadastrados</h2><p className="mt-0.5 text-xs text-ink-400">{usuarios.length} {usuarios.length === 1 ? "usuário" : "usuários"} neste estabelecimento.</p></div><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-basil-050 text-basil-600"><UsersRound size={19} /></span></header>
         <div className="divide-y divide-cream-200">{usuarios.map((conta) => <UsuarioLinha key={conta.id} conta={conta} cargos={cargos.map((cargo) => cargo.papel)} onAtualizado={(atualizado) => setDados((atual) => (atual ?? []).map((item) => item.id === atualizado.id ? atualizado : item))} onFalha={setErro} />)}</div>
         {!usuarios.length && <div className="p-10 text-center text-sm text-ink-400">Carregando equipe…</div>}
+      </section>
+
+      <section className="of-panel mt-5 overflow-hidden">
+        <header className="of-panel-header"><div><h2 className="font-display text-lg font-bold text-ink-900">Entregadores</h2><p className="mt-0.5 text-xs text-ink-400">Cadastro operacional para despacho; não cria login nem senha.</p></div><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-basil-050 text-basil-600"><Truck size={19} /></span></header>
+        <div className="grid gap-3 p-4 sm:grid-cols-3"><label><span className="of-label">Nome</span><input value={nomeEntregador} onChange={(evento) => setNomeEntregador(evento.target.value)} className="of-field" placeholder="Ex.: João da Moto" /></label><label><span className="of-label">Veículo</span><input value={veiculoEntregador} onChange={(evento) => setVeiculoEntregador(evento.target.value)} className="of-field" placeholder="Ex.: Moto" /></label><label><span className="of-label">Telefone</span><input value={telefoneEntregador} onChange={(evento) => setTelefoneEntregador(evento.target.value)} className="of-field" inputMode="tel" placeholder="Opcional" /></label></div>
+        <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-cream-200 bg-cream-50/50 p-4">{erroEntregador ? <p role="alert" className="text-xs font-medium text-danger-600">{erroEntregador}</p> : <p className="text-xs text-ink-400">{(entregadores ?? []).filter((entregador) => entregador.ativo !== false).length} entregador(es) ativo(s).</p>}<button onClick={() => void criarEntregador()} disabled={enviandoEntregador} className="of-btn-primary">{enviandoEntregador ? "Cadastrando..." : "Cadastrar entregador"}<Plus size={16} /></button></footer>
       </section>
     </section>
   );

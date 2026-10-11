@@ -444,6 +444,7 @@ create table clientes (
   nome text not null,
   telefone text not null,
   endereco text,
+  bairro text,
   ponto_referencia text,
   cpf text,
   email text,
@@ -453,6 +454,7 @@ create table clientes (
 );
 
 create index idx_clientes_estabelecimento on clientes(estabelecimento_id);
+create index idx_clientes_estabelecimento_nome on clientes(estabelecimento_id, nome);
 
 -- ============================================================================
 -- PEDIDOS

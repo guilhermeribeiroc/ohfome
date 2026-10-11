@@ -246,6 +246,18 @@ export interface BairroEntrega {
   ativo: boolean;
 }
 
+export interface Cliente {
+  id: string;
+  nome: string;
+  telefone?: string | null;
+  endereco?: string | null;
+  bairro?: string | null;
+  pontoReferencia?: string | null;
+  email?: string | null;
+  notificarPedido: boolean;
+  createdAt?: string;
+}
+
 export const PEDIDO_STATUS_LABEL: Record<PedidoStatus, string> = {
   novo: "Novo",
   em_preparo: "Em preparo",

@@ -37,6 +37,10 @@ export function sessaoPodeAcessarModulo(sessao: SessaoAutenticada, modulo: Modul
   return sessao.role === "admin" || (sessao.role === modulo && sessao.modulosAtivos.includes(modulo));
 }
 
+export function sessaoPodeGerirClientes(sessao: SessaoAutenticada): boolean {
+  return sessao.role === "admin" || sessao.role === "balcao" || sessao.role === "delivery";
+}
+
 export function respostaAcessoNegado() {
   return NextResponse.json({ erro: "Você não tem permissão para esta operação." }, { status: 403 });
 }

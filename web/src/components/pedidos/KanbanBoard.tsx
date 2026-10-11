@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { ArrowRight, Bell, BellOff, BellRing, Check, ChefHat, Clock3, MapPin, MessageSquareText, Minus, PackageCheck, PackageSearch, Plus, Printer, Search, ShoppingBag, Trash2, Truck, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { Mesa, Pedido, PedidoStatus, Produto } from "@/lib/types";
+import type { BairroEntrega, Cliente, Entregador, Mesa, Pedido, PedidoStatus, Produto } from "@/lib/types";
 import { MESA_STATUS_LABEL, PEDIDO_STATUS_LABEL, nomeProdutoComTamanho } from "@/lib/types";
 import { usePolling } from "@/lib/use-polling";
 import { imprimirPedido, textoPagamento } from "@/lib/impressao";
 import { useTenant } from "@/lib/tenant-context";
+import { ClienteBuscaCampo } from "@/components/clientes/ClienteBuscaCampo";
 
 const TODAS_COLUNAS: PedidoStatus[] = ["novo", "em_preparo", "pronto", "saiu_para_entrega", "finalizado"];
 const PROXIMO_STATUS: Partial<Record<PedidoStatus, PedidoStatus>> = { novo: "em_preparo", em_preparo: "pronto", pronto: "saiu_para_entrega", saiu_para_entrega: "finalizado" };
@@ -58,12 +59,13 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Central
   const [pedidoDetalhe, setPedidoDetalhe] = useState<Pedido | null>(null);
   const [promptNotificar, setPromptNotificar] = useState<{ pedido: Pedido; status: PedidoStatus } | null>(null);
   const [notificando, setNotificando] = useState(false);
+  const [pedidoParaDespachar, setPedidoParaDespachar] = useState<Pedido | null>(null);
 
   async function moverPedido(pedidoId: string, status: PedidoStatus) {
     const pedidoAtual = pedidos.find((pedido) => pedido.id === pedidoId);
     if (!pedidoAtual || pedidoAtual.status === status) return;
     if (pedidoAtual.tipo === "delivery" && status === "saiu_para_entrega") {
-      alert("Despache o pedido na tela Delivery, selecionando o entregador responsável.");
+      setPedidoParaDespachar(pedidoAtual);
       return;
     }
     setDados((lista) => (lista ?? []).map((pedido) => pedido.id === pedidoId ? { ...pedido, status } : pedido));
@@ -72,6 +74,17 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Central
     if (pedidoAtual.clienteTelefone && status !== "cancelado") {
       setPromptNotificar({ pedido: { ...pedidoAtual, status }, status });
     }
+  }
+
+  async function despacharPedido(entregadorId: string) {
+    if (!pedidoParaDespachar) return { erro: "Pedido não encontrado." };
+    const resposta = await fetch(`/api/pedidos/${pedidoParaDespachar.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "saiu_para_entrega", entregadorId }) });
+    if (!resposta.ok) { const dados = await resposta.json().catch(() => null); return { erro: dados?.erro ?? "Não foi possível despachar o pedido." }; }
+    const atualizado = await resposta.json().catch(() => null) as { status?: PedidoStatus } | null;
+    setDados((lista) => (lista ?? []).map((pedido) => pedido.id === pedidoParaDespachar.id ? { ...pedido, status: atualizado?.status ?? "saiu_para_entrega" } : pedido));
+    if (pedidoParaDespachar.clienteTelefone) setPromptNotificar({ pedido: { ...pedidoParaDespachar, status: "saiu_para_entrega" }, status: "saiu_para_entrega" });
+    setPedidoParaDespachar(null);
+    return {};
   }
 
   useEffect(() => {
@@ -152,7 +165,7 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Central
                     <div className="flex items-start justify-between gap-3"><div><span className="font-display text-base font-bold tracking-tight text-ink-900">#{pedido.codigo}</span>{pedido.pedidoPaiCodigo && <span className="ml-2 inline-flex items-center rounded-full bg-coral-050 px-2 py-0.5 text-[10px] font-bold text-coral-600">Adicional #{pedido.pedidoPaiCodigo}</span>}<p className="mt-0.5 text-[11px] text-ink-400">{pedido.formaRecebimento === "entrega" ? "Entrega" : pedido.formaRecebimento === "retirada" ? "Retirada" : TIPO_LABEL[pedido.tipo]}{pedido.mesaNumero ? ` · Mesa ${pedido.mesaNumero}` : ""}{pedido.clienteNome ? ` · ${pedido.clienteNome}` : ""}</p></div><span className="inline-flex items-center gap-1 text-[10px] font-medium text-ink-400"><Clock3 size={12} />{tempoDecorrido(pedido.createdAt)}</span></div>
                     <ul className="my-3 space-y-1.5 border-y border-cream-100 py-3">{pedido.itens.map((item) => <li key={item.id} className="flex gap-2 text-xs leading-5 text-ink-600"><b className="font-semibold text-ink-900">{item.quantidade}×</b><span>{item.produtoNome}</span></li>)}</ul>
                     {(pedido.enderecoEntrega || pedido.observacoes) && <div className="mb-3 space-y-1.5 rounded-xl bg-cream-50 p-2.5 text-[11px] leading-4 text-ink-600">{pedido.enderecoEntrega && <p className="flex gap-1.5"><MapPin size={13} className="mt-0.5 shrink-0 text-coral-600" /><span><b className="font-semibold text-ink-800">Entrega:</b> {pedido.enderecoEntrega}</span></p>}{pedido.observacoes && <p className="flex gap-1.5"><MessageSquareText size={13} className="mt-0.5 shrink-0 text-coral-600" /><span><b className="font-semibold text-ink-800">Obs.:</b> {pedido.observacoes}</span></p>}</div>}
-                    <div className="flex items-center justify-between gap-2"><strong className="whitespace-nowrap font-display text-sm font-bold text-ink-900">R$ {pedido.total.toFixed(2).replace(".", ",")}</strong>{permiteCancelar && status === "novo" && <button onClick={(evento) => { evento.stopPropagation(); void cancelarPedido(pedido.id); }} className="flex h-10 w-10 items-center justify-center rounded-xl text-danger-600 transition hover:bg-danger-050" aria-label={`Cancelar pedido ${pedido.codigo}`}><X size={15} /></button>}</div>{status !== "finalizado" && !(pedido.tipo === "delivery" && status === "pronto") && <button onClick={(evento) => { evento.stopPropagation(); void avancarStatus(pedido.id, pedido.status); }} className="mt-2 flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-ink-900 px-3 text-[11px] font-semibold text-white transition active:scale-95">Avançar <ArrowRight size={13} /></button>}{pedido.tipo === "delivery" && status === "pronto" && <p className="mt-2 rounded-xl bg-blue-500/10 px-3 py-2 text-center text-[11px] font-semibold text-blue-800">Despache em Delivery com o entregador.</p>}
+                    <div className="flex items-center justify-between gap-2"><strong className="whitespace-nowrap font-display text-sm font-bold text-ink-900">R$ {pedido.total.toFixed(2).replace(".", ",")}</strong>{permiteCancelar && status === "novo" && <button onClick={(evento) => { evento.stopPropagation(); void cancelarPedido(pedido.id); }} className="flex h-10 w-10 items-center justify-center rounded-xl text-danger-600 transition hover:bg-danger-050" aria-label={`Cancelar pedido ${pedido.codigo}`}><X size={15} /></button>}</div>{status !== "finalizado" && <button onClick={(evento) => { evento.stopPropagation(); void avancarStatus(pedido.id, pedido.status); }} className="mt-2 flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-ink-900 px-3 text-[11px] font-semibold text-white transition active:scale-95">{pedido.tipo === "delivery" && status === "pronto" ? "Selecionar entregador" : "Avançar"} <ArrowRight size={13} /></button>}
                   </article>
                 ))}
               </div>
@@ -161,8 +174,9 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Central
         })}
       </div>
 
-      {modalAberto && <NovoPedidoModal onFechar={() => setModalAberto(false)} onCriado={() => { setModalAberto(false); if (somAtivo) playBeep(); recarregar(); }} />}
+      {modalAberto && <NovoPedidoCentralModal onFechar={() => setModalAberto(false)} onCriado={() => { setModalAberto(false); if (somAtivo) playBeep(); recarregar(); }} />}
       {pedidoDetalhe && <PedidoDetalheModal pedido={pedidoDetalhe} onFechar={() => setPedidoDetalhe(null)} onNotificar={(pedido) => { setPedidoDetalhe(null); setPromptNotificar({ pedido, status: pedido.status }); }} permitirReimpressao={modoCozinha} permitirExcluir={souAdmin} onExcluir={excluirPedido} />}
+      {pedidoParaDespachar && <DespacharPedidoModal pedido={pedidoParaDespachar} onFechar={() => setPedidoParaDespachar(null)} onDespachar={despacharPedido} />}
 
       {promptNotificar && (
         <div className="fixed inset-x-4 bottom-4 z-[60] mx-auto flex max-w-sm items-start gap-3 overflow-hidden rounded-2xl bg-ink-900 p-4 text-white shadow-2xl sm:right-4 sm:left-auto" style={{ animation: "onb-pop .3s cubic-bezier(.2,.8,.2,1) both" }}>
@@ -208,7 +222,7 @@ function PedidoDetalheModal({ pedido, onFechar, onNotificar, permitirReimpressao
   </div>;
 }
 
-function NovoPedidoModal({ onFechar, onCriado }: { onFechar: () => void; onCriado: () => void }) {
+export function NovoPedidoModal({ onFechar, onCriado }: { onFechar: () => void; onCriado: () => void }) {
   const { dados: produtos } = usePolling<Produto[]>("/api/produtos", 60000);
   const { dados: mesas } = usePolling<Mesa[]>("/api/mesas", 60000);
   const [itens, setItens] = useState<Record<string, number>>({}); const [busca, setBusca] = useState(""); const [mesaId, setMesaId] = useState(""); const [modalidade, setModalidade] = useState<"preparo" | "imediata">("preparo"); const [formaPagamento, setFormaPagamento] = useState<"dinheiro" | "cartao" | "pix">("dinheiro"); const [tipoCartao, setTipoCartao] = useState<"credito" | "debito">("credito"); const [confirmarRecebimento, setConfirmarRecebimento] = useState(false); const [enviando, setEnviando] = useState(false); const [erro, setErro] = useState(""); const [chaveIdempotencia] = useState(() => crypto.randomUUID());
@@ -226,4 +240,69 @@ function NovoPedidoModal({ onFechar, onCriado }: { onFechar: () => void; onCriad
     <div className="min-h-0 flex-1 overflow-y-auto p-4">{!(produtos ?? []).length ? <div className="flex min-h-full flex-col items-center justify-center rounded-2xl border border-dashed border-cream-300 bg-cream-50/60 px-6 text-center"><PackageSearch size={28} className="text-coral-500" /><p className="mt-3 text-sm font-semibold text-ink-900">Nenhum produto cadastrado</p><p className="mt-1 max-w-xs text-xs leading-5 text-ink-400">Cadastre os itens em Cardápio Digital antes de registrar a primeira venda na Central de pedidos.</p></div> : !filtrados.length ? <div className="flex min-h-full flex-col items-center justify-center text-center"><Search size={24} className="text-ink-400" /><p className="mt-3 text-sm font-semibold text-ink-600">Nenhum item encontrado</p><p className="mt-1 text-xs text-ink-400">Tente outro nome ou limpe a busca.</p></div> : <div className="space-y-2">{filtrados.map((produto) => { const qtd = itens[produto.id] ?? 0; const esgotado = produto.controlaEstoqueUnidades && (produto.estoqueDisponivel ?? 0) <= qtd; return <div key={produto.id} className={`flex min-h-[76px] items-center gap-3 rounded-2xl border p-3 transition-all ${qtd > 0 ? "border-coral-200 bg-coral-050/65" : "border-cream-200 bg-surface"}`}><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-ink-900">{produto.nome}</p><p className="mt-1 text-xs font-medium text-coral-600">R$ {produto.precoVenda.toFixed(2).replace(".", ",")}{produto.controlaEstoqueUnidades ? ` · ${esgotado ? "Esgotado" : `${produto.estoqueDisponivel} disponíveis`}` : ""}</p></div><div className="flex items-center gap-1.5 rounded-xl bg-cream-50 p-1"><button onClick={() => ajustar(produto.id, -1)} disabled={qtd === 0} className="flex h-10 w-10 items-center justify-center rounded-lg text-ink-600 disabled:opacity-30" aria-label={`Remover ${produto.nome}`}><Minus size={15} /></button><strong className="w-6 text-center font-display text-sm text-ink-900">{qtd}</strong><button onClick={() => ajustar(produto.id, 1)} disabled={esgotado} className="flex h-10 w-10 items-center justify-center rounded-lg bg-ink-900 text-white shadow-sm active:scale-95 disabled:opacity-30" aria-label={`Adicionar ${produto.nome}`}><Plus size={15} /></button></div></div>; })}</div>}</div>
     <footer className="shrink-0 border-t border-cream-200 bg-surface p-4"><div className="mb-3 flex items-end justify-between"><span className="text-xs text-ink-400">{Object.values(itens).reduce((a,b) => a+b,0)} {Object.values(itens).reduce((a,b) => a+b,0) === 1 ? "item" : "itens"}</span><strong className="font-display text-xl tracking-tight text-ink-900">R$ {total.toFixed(2).replace(".", ",")}</strong></div>{erro && <p className="mb-2 rounded-xl bg-danger-050 px-3 py-2 text-xs text-danger-600">{erro}</p>}<button onClick={criar} disabled={enviando || Object.keys(itens).length === 0} className="of-btn-primary w-full">{enviando ? "Criando pedido..." : modalidade === "imediata" && !mesaId ? "Concluir venda imediata" : "Enviar para preparo"}<ArrowRight size={16} /></button></footer>
   </div></div>;
+}
+
+function NovoPedidoCentralModal({ onFechar, onCriado }: { onFechar: () => void; onCriado: () => void }) {
+  const { dados: produtos } = usePolling<Produto[]>("/api/produtos", 60000);
+  const { dados: mesas } = usePolling<Mesa[]>("/api/mesas", 60000);
+  const { dados: bairros } = usePolling<BairroEntrega[]>("/api/entrega/bairros", 60000);
+  const [tipo, setTipo] = useState<"balcao" | "delivery" | "mesa">("balcao");
+  const [cliente, setCliente] = useState<Cliente | null>(null);
+  const [endereco, setEndereco] = useState("");
+  const [bairroId, setBairroId] = useState("");
+  const [mesaId, setMesaId] = useState("");
+  const [modalidade, setModalidade] = useState<"preparo" | "imediata">("preparo");
+  const [formaPagamento, setFormaPagamento] = useState<"dinheiro" | "cartao" | "pix">("dinheiro");
+  const [tipoCartao, setTipoCartao] = useState<"credito" | "debito">("credito");
+  const [confirmarRecebimento, setConfirmarRecebimento] = useState(false);
+  const [itens, setItens] = useState<Record<string, number>>({});
+  const [busca, setBusca] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState("");
+  const [chaveIdempotencia] = useState(() => crypto.randomUUID());
+  const bairrosAtivos = (bairros ?? []).filter((bairro) => bairro.ativo);
+  const bairroSelecionadoId = bairroId || (cliente ? bairrosAtivos.find((bairro) => bairro.nome === cliente.bairro)?.id ?? "" : "");
+  const taxaEntrega = bairrosAtivos.find((bairro) => bairro.id === bairroSelecionadoId)?.taxa ?? 0;
+  const filtrados = (produtos ?? []).map((produto) => ({ ...produto, nome: nomeProdutoComTamanho(produto) })).filter((produto) => produto.nome.toLowerCase().includes(busca.toLowerCase()));
+  const subtotal = useMemo(() => Object.entries(itens).reduce((soma, [id, quantidade]) => soma + ((produtos ?? []).find((produto) => produto.id === id)?.precoVenda ?? 0) * quantidade, 0), [itens, produtos]);
+
+  function selecionarCliente(novoCliente: Cliente) {
+    setCliente(novoCliente); setEndereco(novoCliente.endereco ?? ""); setBairroId("");
+  }
+  function ajustar(id: string, delta: number) {
+    setItens((atual) => { const produto = (produtos ?? []).find((item) => item.id === id); const quantidade = (atual[id] ?? 0) + delta; if (delta > 0 && produto?.controlaEstoqueUnidades && quantidade > (produto.estoqueDisponivel ?? 0)) { setErro(`${nomeProdutoComTamanho(produto)} está esgotado ou sem saldo suficiente.`); return atual; } if (quantidade <= 0) return Object.fromEntries(Object.entries(atual).filter(([chave]) => chave !== id)); return { ...atual, [id]: quantidade }; });
+  }
+  async function criar() {
+    if (!Object.keys(itens).length) return;
+    if (tipo === "delivery" && (!cliente || !endereco.trim() || !bairroSelecionadoId)) { setErro("Selecione um cliente, endereço e bairro para o delivery."); return; }
+    if (tipo === "mesa" && !mesaId) { setErro("Selecione a mesa."); return; }
+    if (tipo === "balcao" && modalidade === "imediata" && !confirmarRecebimento) { setErro("Confirme a entrega e o recebimento para concluir a venda imediata."); return; }
+    setEnviando(true); setErro("");
+    const resposta = await fetch("/api/pedidos", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": chaveIdempotencia }, body: JSON.stringify({
+      tipo, mesaId: tipo === "mesa" ? mesaId : undefined, modalidade: tipo === "balcao" ? modalidade : "preparo", confirmarRecebimento: tipo === "balcao" && modalidade === "imediata" && confirmarRecebimento, formaPagamento: tipo === "balcao" && modalidade === "imediata" ? formaPagamento : undefined, tipoCartao: tipo === "balcao" && modalidade === "imediata" && formaPagamento === "cartao" ? tipoCartao : undefined,
+      clienteId: tipo === "delivery" ? cliente?.id : undefined, clienteNome: tipo === "delivery" ? cliente?.nome : undefined, endereco: tipo === "delivery" ? endereco : undefined, bairroId: tipo === "delivery" ? bairroSelecionadoId : undefined, itens: Object.entries(itens).map(([produtoId, quantidade]) => ({ produtoId, quantidade })),
+    }) });
+    setEnviando(false);
+    if (!resposta.ok) { const dados = await resposta.json().catch(() => null); setErro(dados?.erro ?? "Não foi possível criar o pedido."); return; }
+    onCriado();
+  }
+  return <div className="of-modal-backdrop" role="dialog" aria-modal="true" aria-label="Novo pedido"><section className="of-modal-panel flex h-[min(90dvh,760px)] max-w-lg flex-col"><header className="of-panel-header bg-surface"><div><p className="of-eyebrow">Central de pedidos</p><h2 className="font-display text-lg font-bold tracking-tight">Novo pedido</h2></div><button onClick={onFechar} className="of-icon-btn" aria-label="Fechar"><X size={17} /></button></header>
+    <div className="space-y-3 border-b border-cream-200 bg-surface p-4"><label className="block"><span className="mb-1.5 block text-[11px] font-semibold text-ink-500">Tipo de atendimento</span><select value={tipo} onChange={(evento) => { setTipo(evento.target.value as "balcao" | "delivery" | "mesa"); setErro(""); }} className="of-field"><option value="balcao">Balcão / retirada</option><option value="delivery">Delivery</option><option value="mesa">Mesa</option></select></label>
+      {tipo === "delivery" && <div className="space-y-3 rounded-2xl bg-cream-50 p-3"><ClienteBuscaCampo cliente={cliente} onSelecionar={selecionarCliente} />{cliente && <p className="text-xs text-ink-500">{cliente.telefone || "Sem telefone"}{cliente.pontoReferencia ? ` · ${cliente.pontoReferencia}` : ""}</p>}<label className="block"><span className="mb-1.5 block text-[11px] font-semibold text-ink-500">Bairro *</span><select value={bairroSelecionadoId} onChange={(evento) => setBairroId(evento.target.value)} className="of-field"><option value="">Selecione o bairro</option>{bairrosAtivos.map((bairro) => <option key={bairro.id} value={bairro.id}>{bairro.nome} · R$ {bairro.taxa.toFixed(2).replace(".", ",")}</option>)}</select></label><label className="block"><span className="mb-1.5 block text-[11px] font-semibold text-ink-500">Endereço *</span><input value={endereco} onChange={(evento) => setEndereco(evento.target.value)} className="of-field" placeholder="Rua, número e complemento" /></label></div>}
+      {tipo === "mesa" && <label className="block"><span className="mb-1.5 block text-[11px] font-semibold text-ink-500">Mesa *</span><select value={mesaId} onChange={(evento) => setMesaId(evento.target.value)} className="of-field"><option value="">Selecione a mesa</option>{(mesas ?? []).filter((mesa) => mesa.status !== "reservada").map((mesa) => <option key={mesa.id} value={mesa.id}>Mesa {mesa.numero} · {MESA_STATUS_LABEL[mesa.status]}</option>)}</select></label>}
+      {tipo === "balcao" && <><label className="block"><span className="mb-1.5 block text-[11px] font-semibold text-ink-500">Destino do balcão</span><select value={modalidade} onChange={(evento) => setModalidade(evento.target.value as "preparo" | "imediata")} className="of-field"><option value="preparo">Preparar para retirada</option><option value="imediata">Venda imediata (não envia à cozinha)</option></select></label>{modalidade === "imediata" && <div className="rounded-xl bg-amber-500/10 p-3"><select value={formaPagamento} onChange={(evento) => setFormaPagamento(evento.target.value as "dinheiro" | "cartao" | "pix")} className="of-field !min-h-10"><option value="dinheiro">Dinheiro</option><option value="cartao">Cartão</option><option value="pix">Pix</option></select>{formaPagamento === "cartao" && <select value={tipoCartao} onChange={(evento) => setTipoCartao(evento.target.value as "credito" | "debito")} className="mt-2 of-field !min-h-10"><option value="credito">Crédito</option><option value="debito">Débito</option></select>}<label className="mt-2 flex items-start gap-2 text-xs text-ink-700"><input type="checkbox" checked={confirmarRecebimento} onChange={(evento) => setConfirmarRecebimento(evento.target.checked)} className="mt-0.5" />Confirmo que os itens foram entregues e o pagamento foi recebido.</label></div>}</>}
+      <div className="relative"><Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" /><input value={busca} onChange={(evento) => setBusca(evento.target.value)} placeholder="Buscar item do cardápio" className="of-field !pl-10" /></div></div>
+    <div className="min-h-0 flex-1 overflow-y-auto p-4"><div className="space-y-2">{filtrados.map((produto) => { const quantidade = itens[produto.id] ?? 0; const esgotado = produto.controlaEstoqueUnidades && (produto.estoqueDisponivel ?? 0) <= quantidade; return <div key={produto.id} className={`flex min-h-[70px] items-center gap-3 rounded-2xl border p-3 ${quantidade > 0 ? "border-coral-200 bg-coral-050/65" : "border-cream-200 bg-surface"}`}><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-ink-900">{produto.nome}</p><p className="mt-1 text-xs text-coral-600">R$ {produto.precoVenda.toFixed(2).replace(".", ",")}</p></div><div className="flex items-center gap-1.5 rounded-xl bg-cream-50 p-1"><button onClick={() => ajustar(produto.id, -1)} disabled={!quantidade} className="flex h-10 w-10 items-center justify-center rounded-lg disabled:opacity-30"><Minus size={15} /></button><strong className="w-6 text-center text-sm">{quantidade}</strong><button onClick={() => ajustar(produto.id, 1)} disabled={esgotado} className="flex h-10 w-10 items-center justify-center rounded-lg bg-ink-900 text-white disabled:opacity-30"><Plus size={15} /></button></div></div>; })}</div></div>
+    <footer className="shrink-0 border-t border-cream-200 bg-surface p-4"><div className="mb-3 flex items-end justify-between"><span className="text-xs text-ink-400">{Object.values(itens).reduce((a, b) => a + b, 0)} itens{tipo === "delivery" && taxaEntrega > 0 ? ` · taxa R$ ${taxaEntrega.toFixed(2).replace(".", ",")}` : ""}</span><strong className="font-display text-xl tracking-tight text-ink-900">R$ {(subtotal + (tipo === "delivery" ? taxaEntrega : 0)).toFixed(2).replace(".", ",")}</strong></div>{erro && <p className="mb-2 rounded-xl bg-danger-050 px-3 py-2 text-xs text-danger-600">{erro}</p>}<button onClick={() => void criar()} disabled={enviando || !Object.keys(itens).length} className="of-btn-primary w-full">{enviando ? "Criando pedido..." : tipo === "balcao" && modalidade === "imediata" ? "Concluir venda imediata" : "Enviar para preparo"}<ArrowRight size={16} /></button></footer>
+  </section></div>;
+}
+
+function DespacharPedidoModal({ pedido, onFechar, onDespachar }: { pedido: Pedido; onFechar: () => void; onDespachar: (entregadorId: string) => Promise<{ erro?: string }> }) {
+  const { dados: entregadores } = usePolling<Entregador[]>("/api/entregadores", 10000);
+  const [entregadorId, setEntregadorId] = useState("");
+  const [erro, setErro] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  async function confirmar() { if (!entregadorId) { setErro("Selecione um entregador."); return; } setEnviando(true); const resultado = await onDespachar(entregadorId); setEnviando(false); if (resultado.erro) setErro(resultado.erro); }
+  const ativos = (entregadores ?? []).filter((entregador) => entregador.ativo !== false);
+  return <div className="of-modal-backdrop z-[70]" role="dialog" aria-modal="true" aria-label={`Despachar pedido ${pedido.codigo}`}><section className="of-modal-panel max-w-sm p-5"><header className="mb-4 flex items-start justify-between"><div><p className="of-eyebrow">Pedido #{pedido.codigo}</p><h2 className="font-display text-xl font-bold tracking-tight text-ink-900">Selecionar entregador</h2></div><button onClick={onFechar} className="of-icon-btn" aria-label="Fechar"><X size={17} /></button></header><p className="mb-4 text-sm text-ink-600">Escolha quem levará este pedido antes de marcar como saiu para entrega.</p>{ativos.length ? <select value={entregadorId} onChange={(evento) => setEntregadorId(evento.target.value)} className="of-field"><option value="">Selecione o entregador</option>{ativos.map((entregador) => <option key={entregador.id} value={entregador.id}>{entregador.nome}{entregador.cargaAtiva ? ` · ${entregador.cargaAtiva} em rota` : ""}{entregador.veiculo ? ` · ${entregador.veiculo}` : ""}</option>)}</select> : <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-800">Não há entregador ativo. Cadastre ou ative um na área Delivery.</p>}{erro && <p className="mt-3 rounded-xl bg-danger-050 px-3 py-2 text-xs font-medium text-danger-700">{erro}</p>}<button onClick={() => void confirmar()} disabled={enviando || !ativos.length} className="of-btn-primary mt-5 w-full">{enviando ? "Despachando..." : "Confirmar saída para entrega"}</button></section></div>;
 }

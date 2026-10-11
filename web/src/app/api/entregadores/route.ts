@@ -5,7 +5,8 @@ import { comEstabelecimento } from "@/lib/db";
 export async function GET(request: NextRequest) {
   const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
-  if (!sessaoPodeAcessarModulo(sessao, "delivery")) return respostaAcessoNegado();
+  const podeConsultar = sessao.role === "admin" || sessao.role === "balcao" || sessaoPodeAcessarModulo(sessao, "delivery");
+  if (!podeConsultar) return respostaAcessoNegado();
 
   const entregadores = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     const { rows } = await client.query(

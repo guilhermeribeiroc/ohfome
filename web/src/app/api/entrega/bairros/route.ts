@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { autenticarRequisicao, respostaNaoAutenticado } from "@/lib/api-auth";
+import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, sessaoPodeGerirClientes } from "@/lib/api-auth";
 import { comEstabelecimento } from "@/lib/db";
 import { respostaAdministradorObrigatorio, sessaoEhAdministrador } from "@/lib/admin-auth";
 
@@ -10,14 +10,15 @@ async function autenticarAdministrador(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const { sessao, autorizado } = await autenticarAdministrador(request);
+  const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
-  if (!autorizado) return respostaAdministradorObrigatorio();
+  if (!sessaoPodeGerirClientes(sessao)) return respostaAcessoNegado();
+  const administrador = await sessaoEhAdministrador(sessao);
 
   const bairros = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     const { rows } = await client.query(
-      `select id, nome, taxa, ativo from bairros_entrega where estabelecimento_id = $1 order by nome`,
-      [sessao.estabelecimentoId]
+      `select id, nome, taxa, ativo from bairros_entrega where estabelecimento_id = $1 and ($2 or ativo) order by nome`,
+      [sessao.estabelecimentoId, administrador]
     );
     return rows;
   });

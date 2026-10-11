@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { modulosPermitidos } from "@/lib/tenant-types";
 import { useTenant } from "@/lib/tenant-context";
 import { ModuleIcon } from "@/components/ui/AppIcons";
-import { Settings2, UsersRound } from "lucide-react";
+import { ContactRound, Settings2, UsersRound } from "lucide-react";
 
 export function MobileNav() {
   const pathname = usePathname();
@@ -23,6 +23,7 @@ export function MobileNav() {
           </Link>
         );
       })}
+      {["admin", "balcao", "delivery"].includes(usuarioAtual?.role ?? "") && <Link href="/clientes" aria-current={pathname?.startsWith("/clientes") ? "page" : undefined} className={`relative flex min-h-[52px] min-w-[62px] flex-1 flex-col items-center justify-center gap-1 rounded-[1rem] px-2 text-[9px] font-medium transition-all duration-200 ${pathname?.startsWith("/clientes") ? "bg-white text-ink-900 shadow-sm" : "text-white/55 active:bg-white/10"}`}><ContactRound size={19} strokeWidth={pathname?.startsWith("/clientes") ? 2 : 1.7} className={pathname?.startsWith("/clientes") ? "text-coral-500" : ""} /><span>Clientes</span></Link>}
       {usuarioAtual?.role === "admin" && <Link href="/equipe" aria-current={pathname?.startsWith("/equipe") ? "page" : undefined} className={`relative flex min-h-[52px] min-w-[62px] flex-1 flex-col items-center justify-center gap-1 rounded-[1rem] px-2 text-[9px] font-medium transition-all duration-200 ${pathname?.startsWith("/equipe") ? "bg-white text-ink-900 shadow-sm" : "text-white/55 active:bg-white/10"}`}><UsersRound size={19} strokeWidth={pathname?.startsWith("/equipe") ? 2 : 1.7} className={pathname?.startsWith("/equipe") ? "text-coral-500" : ""} /><span>Equipe</span></Link>}
       {usuarioAtual?.role === "admin" && <Link href="/configuracoes" aria-current={pathname?.startsWith("/configuracoes") ? "page" : undefined} className={`relative flex min-h-[52px] min-w-[62px] flex-1 flex-col items-center justify-center gap-1 rounded-[1rem] px-2 text-[9px] font-medium transition-all duration-200 ${pathname?.startsWith("/configuracoes") ? "bg-white text-ink-900 shadow-sm" : "text-white/55 active:bg-white/10"}`}><Settings2 size={19} strokeWidth={pathname?.startsWith("/configuracoes") ? 2 : 1.7} className={pathname?.startsWith("/configuracoes") ? "text-coral-500" : ""} /><span>Ajustes</span></Link>}
     </nav>
