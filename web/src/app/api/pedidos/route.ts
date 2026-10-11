@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { createHash, randomUUID } from "crypto";
 import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, sessaoPodeAcessarModulo } from "@/lib/api-auth";
 import { comEstabelecimento } from "@/lib/db";
 
@@ -79,12 +80,18 @@ export async function POST(request: NextRequest) {
   const tipo = body?.tipo;
   const mesaId = body?.mesaId;
   const clienteNome = typeof body?.clienteNome === "string" ? body.clienteNome.trim() : undefined;
+  const clienteIdInformado = typeof body?.clienteId === "string" ? body.clienteId : undefined;
+  const clienteTelefone = typeof body?.clienteTelefone === "string" ? body.clienteTelefone.replace(/\D/g, "") || null : null;
   const endereco = typeof body?.endereco === "string" ? body.endereco.trim() : undefined;
   const bairroId = typeof body?.bairroId === "string" ? body.bairroId : undefined;
   const itensInput: ItemInput[] = Array.isArray(body?.itens) ? body.itens : [];
   const formaPagamento = body?.formaPagamento;
   const tipoCartao = body?.tipoCartao;
   const trocoPara = Number(body?.trocoPara);
+  const modalidade = body?.modalidade === "imediata" ? "imediata" : "preparo";
+  const confirmarRecebimento = body?.confirmarRecebimento === true;
+  const atualizarCliente = body?.atualizarCliente === true;
+  const chaveIdempotencia = request.headers.get("Idempotency-Key") ?? (typeof body?.chaveIdempotencia === "string" ? body.chaveIdempotencia : randomUUID());
 
   if (tipo !== "mesa" && tipo !== "balcao" && tipo !== "delivery") {
     return NextResponse.json({ erro: "Tipo de pedido inválido." }, { status: 400 });
@@ -97,9 +104,14 @@ export async function POST(request: NextRequest) {
   if (tipo === "mesa" && typeof mesaId !== "string") {
     return NextResponse.json({ erro: "Informe a mesa." }, { status: 400 });
   }
-  if (tipo === "delivery" && (!clienteNome || !endereco)) {
-    return NextResponse.json({ erro: "Informe cliente e endereço para delivery." }, { status: 400 });
+  if (tipo === "delivery" && ((!clienteNome && !clienteIdInformado) || !endereco || !bairroId)) {
+    return NextResponse.json({ erro: "Informe cliente, endereço e bairro para delivery." }, { status: 400 });
   }
+  if (modalidade === "imediata" && tipo !== "balcao") return NextResponse.json({ erro: "Venda imediata é exclusiva do balcão." }, { status: 400 });
+  if (modalidade === "imediata" && (!confirmarRecebimento || !formaPagamento)) {
+    return NextResponse.json({ erro: "Confirme a entrega e o recebimento para concluir a venda imediata." }, { status: 400 });
+  }
+  if (chaveIdempotencia.length < 16 || chaveIdempotencia.length > 200) return NextResponse.json({ erro: "Chave de confirmação inválida." }, { status: 400 });
   if (formaPagamento !== undefined) {
     if (!["dinheiro", "cartao", "pix"].includes(formaPagamento)) {
       return NextResponse.json({ erro: "Forma de pagamento inválida." }, { status: 400 });
@@ -116,7 +128,20 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const pedidoId = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
+    const criado = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
+      const hashConteudo = createHash("sha256").update(JSON.stringify({
+        tipo, mesaId, clienteIdInformado, clienteNome, clienteTelefone, endereco, bairroId, itens: itensValidos,
+        formaPagamento, tipoCartao, trocoPara: Number.isFinite(trocoPara) ? trocoPara : null, modalidade,
+      })).digest("hex");
+      const { rows: chaveExistente } = await client.query(
+        `select pedido_id as "pedidoId", hash_conteudo as hash from pedidos_idempotencia
+         where estabelecimento_id = $1 and chave = $2 for update`,
+        [sessao.estabelecimentoId, chaveIdempotencia]
+      );
+      if (chaveExistente[0]) {
+        if (chaveExistente[0].hash !== hashConteudo) throw Object.assign(new Error("Esta confirmação já foi usada para outro pedido."), { status: 409 });
+        return { pedidoId: chaveExistente[0].pedidoId as string, repetido: true };
+      }
       // Preco sempre vem do banco, nunca do cliente.
       const idsProdutos = itensValidos.map((i) => i.produtoId);
       const { rows: produtosRows } = await client.query(
@@ -154,10 +179,24 @@ export async function POST(request: NextRequest) {
       }
 
       let clienteId: string | null = null;
-      if (tipo === "delivery" && clienteNome) {
+      if (clienteIdInformado) {
+        const { rows } = await client.query(`select id from clientes where id = $1`, [clienteIdInformado]);
+        if (!rows[0]) throw Object.assign(new Error("Cliente inválido."), { status: 400 });
+        clienteId = rows[0].id;
+        if (atualizarCliente && (clienteNome || endereco || clienteTelefone)) {
+          await client.query(
+            `update clientes set nome = coalesce($2, nome), telefone = coalesce($3, telefone), endereco = coalesce($4, endereco) where id = $1`,
+            [clienteId, clienteNome || null, clienteTelefone, endereco || null]
+          );
+        }
+      } else if (tipo === "delivery" && clienteNome) {
         const { rows } = await client.query(
-          `insert into clientes (estabelecimento_id, nome, telefone) values ($1, $2, $3) returning id`,
-          [sessao.estabelecimentoId, clienteNome, `sem-telefone-${Date.now()}`]
+          `insert into clientes (estabelecimento_id, nome, telefone, endereco)
+           values ($1, $2, $3, $4)
+           on conflict (estabelecimento_id, telefone) do update
+             set nome = excluded.nome, endereco = coalesce(excluded.endereco, clientes.endereco)
+           returning id`,
+          [sessao.estabelecimentoId, clienteNome, clienteTelefone, endereco ?? null]
         );
         clienteId = rows[0].id;
       }
@@ -166,7 +205,7 @@ export async function POST(request: NextRequest) {
       let taxaEntrega = 0;
       if (tipo === "delivery" && bairroId) {
         const { rows: bairroRows } = await client.query(
-          `select nome, taxa from bairros_entrega where id = $1`,
+        `select nome, taxa from bairros_entrega where id = $1 and ativo`,
           [bairroId]
         );
         if (bairroRows.length === 0) throw Object.assign(new Error("Bairro inválido."), { status: 400 });
@@ -175,14 +214,17 @@ export async function POST(request: NextRequest) {
       }
 
       const { rows: pedidoRows } = await client.query(
-        `insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, comanda_id, cliente_id, usuario_id, taxa_entrega, forma_pagamento, tipo_cartao, troco_para)
-         values ($1, $2, 'presencial', 'novo', true, now(), $3, $4, $5, $6, $7, $8, $9)
+        `insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, comanda_id, cliente_id, usuario_id, taxa_entrega, forma_pagamento, tipo_cartao, troco_para, modalidade_atendimento, pagamento_status)
+         values ($1, $2, 'presencial', $3, $4, case when $4 then now() else null end, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          returning id`,
         [
-          sessao.estabelecimentoId, tipo, comandaId, clienteId, sessao.usuarioId, taxaEntrega,
+          sessao.estabelecimentoId, tipo,
+          modalidade === "imediata" ? "finalizado" : "novo", modalidade !== "imediata",
+          comandaId, clienteId, sessao.usuarioId, taxaEntrega,
           formaPagamento ?? null,
           formaPagamento === "cartao" ? tipoCartao : null,
           formaPagamento === "dinheiro" && trocoPara > 0 ? trocoPara : null,
+          modalidade, modalidade === "imediata" ? "pago" : "pendente",
         ]
       );
       const pedidoId = pedidoRows[0].id;
@@ -199,19 +241,25 @@ export async function POST(request: NextRequest) {
         await client.query(`insert into entregas (pedido_id, endereco, bairro) values ($1, $2, $3)`, [pedidoId, endereco, bairroNome]);
       }
 
-      return pedidoId;
+      await client.query(`select fn_comprometer_estoque_pedido($1, 'comprometido')`, [pedidoId]);
+      if (modalidade === "imediata") await client.query(`select fn_consumir_estoque_pedido($1)`, [pedidoId]);
+      await client.query(
+        `insert into pedidos_idempotencia (estabelecimento_id, chave, hash_conteudo, pedido_id) values ($1, $2, $3, $4)`,
+        [sessao.estabelecimentoId, chaveIdempotencia, hashConteudo, pedidoId]
+      );
+      return { pedidoId, repetido: false };
     });
 
     const [pedido] = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
-      const { rows } = await client.query(`${PEDIDOS_ATIVOS_QUERY} where p.id = $1`, [pedidoId]);
+      const { rows } = await client.query(`${PEDIDOS_ATIVOS_QUERY} where p.id = $1`, [criado.pedidoId]);
       return rows;
     });
 
-    return NextResponse.json(pedido, { status: 201 });
+    return NextResponse.json(pedido, { status: criado.repetido ? 200 : 201 });
   } catch (erro) {
     const status = (erro as { status?: number }).status ?? 500;
     if (status === 500) console.error("POST /api/pedidos", erro);
-    const mensagem = status === 400 ? (erro as Error).message : "Não foi possível criar o pedido.";
+    const mensagem = status === 400 || status === 409 ? (erro as Error).message : "Não foi possível criar o pedido.";
     return NextResponse.json({ erro: mensagem }, { status });
   }
 }

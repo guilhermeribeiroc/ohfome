@@ -36,7 +36,7 @@ function quebrarLinha(texto: string, largura = LARGURA_TICKET) {
   for (const palavra of palavras) {
     if (palavra.length > largura) {
       if (atual) linhas.push(atual);
-      linhas.push(palavra.slice(0, largura));
+      for (let inicio = 0; inicio < palavra.length; inicio += largura) linhas.push(palavra.slice(inicio, inicio + largura));
       atual = "";
     } else if (!atual || atual.length + palavra.length + 1 <= largura) {
       atual = atual ? `${atual} ${palavra}` : palavra;
@@ -50,7 +50,7 @@ function quebrarLinha(texto: string, largura = LARGURA_TICKET) {
 }
 
 function centralizar(texto: string, largura = LARGURA_TICKET) {
-  const limpo = textoTermico(texto).slice(0, largura);
+  const limpo = textoTermico(texto);
   const espacos = Math.max(0, Math.floor((largura - limpo.length) / 2));
   return `${" ".repeat(espacos)}${limpo}`;
 }
@@ -99,16 +99,18 @@ function exibeClienteNaComanda(pedido: Pedido) {
 
 export function dadosEscPosPedido(pedido: Pedido, largura = LARGURA_TICKET) {
   const cabecalho = cabecalhoTermico(pedido, largura);
-  const contexto = `PEDIDO #${pedido.codigo} - ${modalidadePedido(pedido)}`.slice(0, largura);
-  const linhas = ["\x1B\x40", "\x1B\x61\x01", "\x1B\x45\x01", `${centralizar(cabecalho, largura)}\n`, `${centralizar(contexto, largura)}\n`, "\x1B\x45\x00", "\n", "\x1B\x61\x00", `${"-".repeat(largura)}\n`];
+  const contexto = `PEDIDO #${pedido.codigo} - ${modalidadePedido(pedido)}`;
+  const larguraCabecalho = Math.max(1, Math.floor(largura / 2));
+  const linhas = ["\x1B\x40", "\x1B\x61\x01", "\x1B\x45\x01", "\x1D\x21\x11", ...quebrarLinha(cabecalho, larguraCabecalho).map((linha) => `${centralizar(linha, larguraCabecalho)}\n`), ...quebrarLinha(contexto, larguraCabecalho).map((linha) => `${centralizar(linha, larguraCabecalho)}\n`), "\x1D\x21\x00", "\x1B\x45\x00", "\n", "\x1B\x61\x00", `${"-".repeat(largura)}\n`];
 
   if (exibeClienteNaComanda(pedido) && pedido.clienteNome?.trim()) {
     linhas.push(...quebrarLinha(`CLIENTE: ${pedido.clienteNome.trim()}`, largura).map((linha) => `${linha}\n`), "\n");
   }
 
   for (const item of pedido.itens) {
-    linhas.push(...linhaComValor(`${item.quantidade}X ${item.produtoNome}`, moedaTermica(item.precoUnitario * item.quantidade), largura));
-    if (item.observacoes) linhas.push(...quebrarLinha(`  OBS: ${item.observacoes}`, largura).map((linha) => `${linha}\n`));
+    linhas.push("\x1D\x21\x10", "\x1B\x45\x01", ...linhaComValor(`${item.quantidade}X ${item.produtoNome}`, moedaTermica(item.precoUnitario * item.quantidade), largura), "\x1B\x45\x00");
+    if (item.observacoes) linhas.push("\x1B\x45\x01", ...quebrarLinha(`  OBS: ${item.observacoes}`, largura).map((linha) => `${linha}\n`), "\x1B\x45\x00");
+    linhas.push("\x1D\x21\x00");
   }
 
   if (pedido.formaRecebimento === "entrega") {

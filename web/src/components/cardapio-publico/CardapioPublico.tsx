@@ -39,6 +39,8 @@ interface ProdutoPublico {
   categoriaNome: string;
   precoVenda: number;
   imagemUrl?: string | null;
+  controlaEstoqueUnidades?: boolean;
+  estoqueDisponivel?: number | null;
 }
 
 interface CardapioData {
@@ -214,6 +216,32 @@ export function CardapioPublico({ slug }: { slug: string }) {
     );
     return () => window.clearTimeout(carregar);
   }, [slug]);
+
+  useEffect(() => {
+    const cardapioId = dados?.id;
+    if (!cardapioId) return;
+    let ativo = true;
+    async function atualizarDisponibilidade() {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const resposta = await fetch(`/api/publico/${slug}/disponibilidade`, { cache: "no-store" });
+        if (!resposta.ok) return;
+        const corpo = await resposta.json() as { disponibilidade?: Record<string, number | null> };
+        if (!ativo || !corpo.disponibilidade) return;
+        setDados((atual) => atual ? {
+          ...atual,
+          produtos: atual.produtos.map((produto) => ({
+            ...produto,
+            estoqueDisponivel: produto.controlaEstoqueUnidades ? corpo.disponibilidade?.[produto.id] ?? 0 : produto.estoqueDisponivel,
+          })),
+        } : atual);
+      } catch { /* a validação final permanece no banco ao confirmar */ }
+    }
+    const aoVisivel = () => void atualizarDisponibilidade();
+    const intervalo = window.setInterval(() => void atualizarDisponibilidade(), 10_000);
+    document.addEventListener("visibilitychange", aoVisivel);
+    return () => { ativo = false; window.clearInterval(intervalo); document.removeEventListener("visibilitychange", aoVisivel); };
+  }, [dados?.id, slug]);
 
   useEffect(() => {
     const restaurar = window.setTimeout(() => {
@@ -442,8 +470,13 @@ export function CardapioPublico({ slug }: { slug: string }) {
 
   function ajustar(produtoId: string, delta: number) {
     if (!cardapioDisponivel) return;
+    const produto = dados?.produtos.find((item) => item.id === produtoId);
     navigator.vibrate?.(10);
     setCarrinho((atual) => {
+      if (delta > 0 && produto?.controlaEstoqueUnidades && (produto.estoqueDisponivel ?? 0) <= (atual[produtoId] ?? 0)) {
+        setAvisoCarrinho(`${produto.nome} está esgotado no momento.`);
+        return atual;
+      }
       const quantidade = (atual[produtoId] ?? 0) + delta;
       if (quantidade <= 0)
         return Object.fromEntries(
@@ -458,6 +491,10 @@ export function CardapioPublico({ slug }: { slug: string }) {
       setAvisoCarrinho(
         dados?.disponibilidade?.motivo ?? "O delivery está fechado no momento.",
       );
+      return;
+    }
+    if (produto.controlaEstoqueUnidades && (produto.estoqueDisponivel ?? 0) <= 0) {
+      setAvisoCarrinho(`${produto.nome} está esgotado no momento.`);
       return;
     }
     ajustar(produto.id, 1);
@@ -845,11 +882,12 @@ export function CardapioPublico({ slug }: { slug: string }) {
             <div className="lg:grid lg:grid-cols-2 lg:gap-x-10">
               {categoria.itens.map((produto) => {
                 const quantidade = carrinho[produto.id] ?? 0;
+                const esgotado = produto.controlaEstoqueUnidades && (produto.estoqueDisponivel ?? 0) <= 0;
                 return (
                   <button
                     key={produto.id}
                     onClick={() => abrirProduto(produto)}
-                    className="group grid w-full grid-cols-[112px_1fr] gap-4 border-b border-black/[.09] py-5 text-left transition active:scale-[.99] sm:grid-cols-[148px_1fr] sm:gap-6 sm:py-6 lg:grid-cols-[126px_1fr] lg:gap-5 lg:py-5"
+                    className={`group grid w-full grid-cols-[112px_1fr] gap-4 border-b border-black/[.09] py-5 text-left transition active:scale-[.99] sm:grid-cols-[148px_1fr] sm:gap-6 sm:py-6 lg:grid-cols-[126px_1fr] lg:gap-5 lg:py-5 ${esgotado ? "opacity-60" : ""}`}
                   >
                     <span
                       className="relative aspect-square overflow-hidden rounded-2xl bg-[#d8d0c6] bg-cover transition-transform duration-300 group-hover:scale-[1.015]"
@@ -868,6 +906,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
                       <b className="mt-1.5 block text-sm font-semibold text-[#0e7775] sm:text-base">
                         {moeda(produto.precoVenda)}
                       </b>
+                      {produto.controlaEstoqueUnidades && <span className={`mt-1.5 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[.08em] ${esgotado ? "bg-[#941c42]/10 text-[#941c42]" : "bg-[#0e7775]/10 text-[#0e7775]"}`}>{esgotado ? "Esgotado" : `${produto.estoqueDisponivel ?? 0} disponíveis`}</span>}
                       <small className="mt-2 block overflow-hidden text-[12px] leading-[1.55] text-black/65 sm:max-w-xl sm:text-sm">
                         {descricaoDoProduto(produto)}
                       </small>
@@ -945,8 +984,8 @@ export function CardapioPublico({ slug }: { slug: string }) {
           onFechar={fecharOverlay}
           onAbrirCarrinho={() => abrirOverlay("carrinho")}
           onAdicionarAoPedido={() => adicionarEVoltarAoCardapio(produtoSelecionado)}
-          disponivel={cardapioDisponivel}
-          motivoIndisponivel={dados.disponibilidade?.motivo ?? "O delivery está fechado no momento."}
+          disponivel={cardapioDisponivel && !(produtoSelecionado.controlaEstoqueUnidades && (produtoSelecionado.estoqueDisponivel ?? 0) <= 0)}
+          motivoIndisponivel={produtoSelecionado.controlaEstoqueUnidades && (produtoSelecionado.estoqueDisponivel ?? 0) <= 0 ? "Este item está esgotado no momento." : dados.disponibilidade?.motivo ?? "O delivery está fechado no momento."}
         />
       )}
       {overlay === "carrinho" && (

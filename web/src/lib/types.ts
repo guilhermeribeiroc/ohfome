@@ -183,6 +183,8 @@ export interface Produto {
   margemPercentual: number;
   precoVenda: number;
   ativo: boolean;
+  controlaEstoqueUnidades?: boolean;
+  estoqueDisponivel?: number | null;
 }
 
 export interface Categoria {
@@ -213,6 +215,8 @@ export interface Entregador {
   veiculo?: string;
   telefone?: string;
   disponivel: boolean;
+  ativo?: boolean;
+  cargaAtiva?: number;
 }
 
 export interface Entrega {

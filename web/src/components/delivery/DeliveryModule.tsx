@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, type DragEvent } from "react";
-import { Check, MapPin, MapPinned, Plus, Printer, Send, Trash2, UserRoundPlus, X } from "lucide-react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
+import { Check, MapPin, MapPinned, Plus, Printer, Trash2, UserRoundPlus, X } from "lucide-react";
 import type { BairroEntrega, Entrega, Entregador, EntregaStatus, Produto } from "@/lib/types";
 import { ENTREGA_STATUS_LABEL, nomeProdutoComTamanho } from "@/lib/types";
 import { usePolling } from "@/lib/use-polling";
@@ -36,11 +36,15 @@ export function DeliveryModule() {
   }
 
   async function atribuir(entregaId: string, entregadorId: string) {
-    await fetch(`/api/entregas/${entregaId}`, {
+    const resposta = await fetch(`/api/entregas/${entregaId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ entregadorId }),
     });
+    if (!resposta.ok) {
+      const dados = await resposta.json().catch(() => null);
+      alert(dados?.erro ?? "Não foi possível despachar a entrega.");
+    }
     recarregarEntregas();
     recarregarEntregadores();
   }
@@ -55,18 +59,13 @@ export function DeliveryModule() {
     recarregarEntregadores();
   }
 
-  async function marcarSaiu(entregaId: string) {
-    await fetch(`/api/entregas/${entregaId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "em_rota" }),
-    });
-    recarregarEntregas();
-  }
-
   async function moverEntrega(entregaId: string, status: EntregaStatus) {
     const entregaAtual = (entregas ?? []).find((entrega) => entrega.id === entregaId);
     if (!entregaAtual || entregaAtual.status === status) return;
+    if (entregaAtual.status === "aguardando" && status === "em_rota") {
+      alert("Selecione o entregador no cartão antes de enviar para rota.");
+      return;
+    }
     const resposta = await fetch(`/api/entregas/${entregaId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
     if (!resposta.ok) { recarregarEntregas(); return; }
     recarregarEntregas(); recarregarEntregadores();
@@ -143,7 +142,7 @@ export function DeliveryModule() {
                         <p className="text-xs font-medium text-ink-600">{entrega.clienteNome}</p>
                         <p className="mb-2.5 mt-1 flex items-start gap-1.5 text-xs leading-5 text-ink-400"><MapPin size={13} className="mt-0.5 shrink-0" />{entrega.bairro ? `${entrega.bairro} · ${entrega.endereco}` : entrega.endereco}</p>
 
-                        {status === "aguardando" && <div className="space-y-2"><button onClick={(evento) => { evento.stopPropagation(); void marcarSaiu(entrega.id); }} className="flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-ink-900 px-3 text-[11px] font-semibold text-white transition active:scale-95"><Send size={13} /> Saiu para entrega</button>{(entregadores ?? []).some((e) => e.disponivel) && <select defaultValue="" onClick={(evento) => evento.stopPropagation()} onChange={(e) => e.target.value && atribuir(entrega.id, e.target.value)} className="w-full rounded-lg border border-cream-200 bg-surface px-2 py-2 text-xs text-ink-600 shadow-sm outline-none"><option value="" disabled>Atribuir entregador (opcional)</option>{(entregadores ?? []).filter((e) => e.disponivel).map((e) => <option key={e.id} value={e.id}>{e.nome} · {e.veiculo}</option>)}</select>}</div>}
+                        {status === "aguardando" && <div className="space-y-2">{(entregadores ?? []).some((e) => e.ativo !== false) ? <select defaultValue="" onClick={(evento) => evento.stopPropagation()} onChange={(e) => e.target.value && void atribuir(entrega.id, e.target.value)} className="w-full rounded-lg border border-cream-200 bg-surface px-2 py-2 text-xs text-ink-600 shadow-sm outline-none"><option value="" disabled>Selecionar entregador para sair</option>{(entregadores ?? []).filter((e) => e.ativo !== false).map((e) => <option key={e.id} value={e.id}>{e.nome}{e.cargaAtiva ? ` · ${e.cargaAtiva} em rota` : ""}{e.veiculo ? ` · ${e.veiculo}` : ""}</option>)}</select> : <p className="rounded-lg bg-amber-500/10 px-2.5 py-2 text-xs text-amber-800">Cadastre ou ative um entregador para despachar.</p>}</div>}
 
                         {status === "em_rota" && (
                           <div className="flex items-center justify-between">
@@ -181,15 +180,15 @@ export function DeliveryModule() {
               <li key={entregador.id} className="flex items-center justify-between px-2.5 py-2.5">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-ink-900">{entregador.nome}</p>
-                  <p className="text-xs text-ink-400">{entregador.veiculo || "—"}</p>
+                  <p className="text-xs text-ink-400">{entregador.veiculo || "—"}{entregador.cargaAtiva ? ` · ${entregador.cargaAtiva} em rota` : ""}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <span
                     className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                      entregador.disponivel ? "bg-basil-050 text-basil-600" : "bg-cream-200 text-ink-400"
+                      entregador.ativo === false ? "bg-cream-200 text-ink-400" : entregador.disponivel ? "bg-basil-050 text-basil-600" : "bg-amber-500/10 text-amber-800"
                     }`}
                   >
-                    {entregador.disponivel ? "Disponível" : "Em rota"}
+                    {entregador.ativo === false ? "Inativo" : entregador.disponivel ? "Disponível" : "Em rota"}
                   </span>
                   <button
                     onClick={() => excluirEntregador(entregador.id, entregador.nome)}
@@ -349,11 +348,26 @@ function NovoPedidoDeliveryModal({ onFechar, onCriado }: { onFechar: () => void;
   const { dados: produtos } = usePolling<Produto[]>("/api/produtos", 60000);
   const { dados: bairros } = usePolling<BairroEntrega[]>("/api/entrega/bairros", 60000);
   const [clienteNome, setClienteNome] = useState("");
+  const [clienteId, setClienteId] = useState("");
+  const [clientesEncontrados, setClientesEncontrados] = useState<{ id: string; nome: string; telefone?: string | null; endereco?: string | null }[]>([]);
   const [endereco, setEndereco] = useState("");
   const [bairroId, setBairroId] = useState("");
   const [itens, setItens] = useState<Record<string, number>>({});
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
+  const [chaveIdempotencia] = useState(() => crypto.randomUUID());
+
+  useEffect(() => {
+    if (clienteNome.trim().length < 2 || clienteId) return;
+    const controlador = new AbortController();
+    const temporizador = window.setTimeout(async () => {
+      try {
+        const resposta = await fetch(`/api/clientes/busca?q=${encodeURIComponent(clienteNome)}`, { signal: controlador.signal });
+        if (resposta.ok) setClientesEncontrados(await resposta.json());
+      } catch { /* busca é opcional; não interrompe o novo atendimento */ }
+    }, 250);
+    return () => { controlador.abort(); window.clearTimeout(temporizador); };
+  }, [clienteNome, clienteId]);
 
   const bairrosAtivos = useMemo(() => (bairros ?? []).filter((b) => b.ativo), [bairros]);
   const taxaEntrega = bairrosAtivos.find((b) => b.id === bairroId)?.taxa ?? 0;
@@ -369,6 +383,11 @@ function NovoPedidoDeliveryModal({ onFechar, onCriado }: { onFechar: () => void;
   function ajustar(produtoId: string, delta: number) {
     setItens((atual) => {
       const novaQtd = (atual[produtoId] ?? 0) + delta;
+      const produto = (produtos ?? []).find((item) => item.id === produtoId);
+      if (delta > 0 && produto?.controlaEstoqueUnidades && novaQtd > (produto.estoqueDisponivel ?? 0)) {
+        setErro(`${nomeProdutoComTamanho(produto)} está esgotado ou sem saldo suficiente.`);
+        return atual;
+      }
       if (novaQtd <= 0) {
         return Object.fromEntries(Object.entries(atual).filter(([chave]) => chave !== produtoId));
       }
@@ -377,14 +396,18 @@ function NovoPedidoDeliveryModal({ onFechar, onCriado }: { onFechar: () => void;
   }
 
   async function criar() {
-    if (!clienteNome.trim() || !endereco.trim() || Object.keys(itens).length === 0) return;
+    if (!clienteNome.trim() || !endereco.trim() || !bairroId || Object.keys(itens).length === 0) {
+      setErro("Informe cliente, bairro, endereço e ao menos um item.");
+      return;
+    }
     setEnviando(true);
     setErro("");
     const res = await fetch("/api/pedidos", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Idempotency-Key": chaveIdempotencia },
       body: JSON.stringify({
         tipo: "delivery",
+        clienteId: clienteId || undefined,
         clienteNome,
         endereco,
         bairroId: bairroId || undefined,
@@ -410,9 +433,10 @@ function NovoPedidoDeliveryModal({ onFechar, onCriado }: { onFechar: () => void;
 
         <div className="flex-1 overflow-y-auto px-5">
           <div className="mb-4 space-y-2">
-            <input value={clienteNome} onChange={(e) => setClienteNome(e.target.value)} placeholder="Nome do cliente" className={CAMPO_CLASSE} />
+            <input value={clienteNome} onChange={(e) => { setClienteNome(e.target.value); setClienteId(""); setClientesEncontrados([]); }} placeholder="Buscar ou informar cliente" className={CAMPO_CLASSE} />
+            {clientesEncontrados.length > 0 && <div className="max-h-36 overflow-y-auto rounded-xl border border-cream-200 bg-surface p-1">{clientesEncontrados.map((cliente) => <button type="button" key={cliente.id} onClick={() => { setClienteId(cliente.id); setClienteNome(cliente.nome); setEndereco(cliente.endereco ?? ""); setClientesEncontrados([]); }} className="block w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-cream-50"><b>{cliente.nome}</b><span className="ml-2 text-ink-400">{cliente.telefone || "sem telefone"}{cliente.endereco ? ` · ${cliente.endereco}` : ""}</span></button>)}</div>}
             <select value={bairroId} onChange={(e) => setBairroId(e.target.value)} className={CAMPO_CLASSE}>
-              <option value="">Bairro (opcional, calcula a taxa)</option>
+              <option value="">Bairro de entrega</option>
               {bairrosAtivos.map((b) => <option key={b.id} value={b.id}>{b.nome} · R$ {b.taxa.toFixed(2).replace(".", ",")}</option>)}
             </select>
             <input value={endereco} onChange={(e) => setEndereco(e.target.value)} placeholder="Endereço de entrega" className={CAMPO_CLASSE} />
@@ -426,7 +450,7 @@ function NovoPedidoDeliveryModal({ onFechar, onCriado }: { onFechar: () => void;
                 <div key={produto.id} className="flex items-center justify-between rounded-2xl bg-cream-50 p-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-ink-900">{nomeProdutoComTamanho(produto)}</p>
-                    <p className="text-xs text-ink-400">R$ {produto.precoVenda.toFixed(2).replace(".", ",")}</p>
+                    <p className="text-xs text-ink-400">R$ {produto.precoVenda.toFixed(2).replace(".", ",")}{produto.controlaEstoqueUnidades ? ` · ${(produto.estoqueDisponivel ?? 0) > 0 ? `${produto.estoqueDisponivel} disponíveis` : "esgotado"}` : ""}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <button
@@ -438,7 +462,8 @@ function NovoPedidoDeliveryModal({ onFechar, onCriado }: { onFechar: () => void;
                     <span className="w-4 text-center text-sm font-bold text-ink-900">{qtd}</span>
                     <button
                       onClick={() => ajustar(produto.id, 1)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full text-white shadow-sm active:scale-90"
+                      disabled={produto.controlaEstoqueUnidades && (produto.estoqueDisponivel ?? 0) <= qtd}
+                      className="flex h-8 w-8 items-center justify-center rounded-full text-white shadow-sm active:scale-90 disabled:opacity-35"
                       style={{ background: GRADIENTE_CORAL }}
                     >
                       +

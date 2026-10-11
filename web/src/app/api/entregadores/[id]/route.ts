@@ -25,6 +25,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (typeof body.veiculo === "string") set("veiculo", body.veiculo.trim() || null);
   if (typeof body.telefone === "string") set("telefone", body.telefone.trim() || null);
   if (typeof body.disponivel === "boolean") set("disponivel", body.disponivel);
+  if (typeof body.ativo === "boolean") set("ativo", body.ativo);
 
   if (colunas.length === 0) return NextResponse.json({ erro: "Nada para atualizar." }, { status: 400 });
 
@@ -32,7 +33,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const entregador = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     const { rows } = await client.query(
       `update entregadores set ${colunas.join(", ")} where id = $${valores.length}
-       returning id, nome, veiculo, telefone, disponivel`,
+       returning id, nome, veiculo, telefone, ativo, disponivel`,
       valores
     );
     return rows[0] ?? null;

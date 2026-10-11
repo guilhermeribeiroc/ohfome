@@ -137,6 +137,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       await comEstabelecimento(pedido.estabelecimentoId, async (client) => {
         await client.query(`update pedidos set pagamento_status = 'falhou'
           where id = $1 and enviado_cozinha = false and pagamento_status = 'pendente'`, [pedido.id]);
+        await client.query(`select fn_liberar_estoque_pedido($1::uuid)`, [pedido.id]);
       }).catch(() => undefined);
       const status = erro instanceof MercadoPagoErro ? erro.status : 502;
       return NextResponse.json({ erro: erro instanceof MercadoPagoErro ? erro.message : "Não foi possível gerar o Pix. Tente novamente." }, { status });

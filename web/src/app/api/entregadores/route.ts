@@ -9,7 +9,13 @@ export async function GET(request: NextRequest) {
 
   const entregadores = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     const { rows } = await client.query(
-      `select id, nome, veiculo, telefone, disponivel from entregadores order by nome`
+      `select e.id, e.nome, e.veiculo, e.telefone, e.ativo,
+              count(en.id) filter (where en.status = 'em_rota')::integer as "cargaAtiva",
+              (e.ativo and count(en.id) filter (where en.status = 'em_rota') = 0) as disponivel
+       from entregadores e
+       left join entregas en on en.entregador_id = e.id and en.status = 'em_rota'
+       group by e.id
+       order by e.nome`
     );
     return rows;
   });
@@ -33,7 +39,7 @@ export async function POST(request: NextRequest) {
     const { rows } = await client.query(
       `insert into entregadores (estabelecimento_id, nome, veiculo, telefone)
        values ($1, $2, $3, $4)
-       returning id, nome, veiculo, telefone, disponivel`,
+       returning id, nome, veiculo, telefone, ativo, true as disponivel, 0::integer as "cargaAtiva"`,
       [sessao.estabelecimentoId, nome, veiculo, telefone]
     );
     return rows[0];

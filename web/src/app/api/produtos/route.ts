@@ -19,7 +19,9 @@ export async function GET(request: NextRequest) {
          case when $2 then p.preco_custo end as "precoCusto",
          case when $2 then p.margem_percentual end as "margemPercentual",
          p.preco_venda as "precoVenda",
-         p.ativo
+         p.ativo,
+         p.controla_estoque_unidades as "controlaEstoqueUnidades",
+         case when p.controla_estoque_unidades then fn_disponibilidade_produto(p.estabelecimento_id, p.id) else null end as "estoqueDisponivel"
        from produtos p
        left join categorias_produto c on c.id = p.categoria_id
        where ($1 or p.ativo)

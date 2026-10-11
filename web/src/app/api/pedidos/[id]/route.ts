@@ -20,6 +20,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const { id } = await params;
   const body = await request.json().catch(() => null);
   const status = body?.status;
+  const entregadorId = typeof body?.entregadorId === "string" ? body.entregadorId : null;
 
   if (!STATUS_VALIDOS.includes(status)) {
     return NextResponse.json({ erro: "Status inválido." }, { status: 400 });
@@ -32,13 +33,30 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const pedido = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     const { rows: existentes } = await client.query(
-      `select status from pedidos where id = $1 for update`,
+      `select status, tipo from pedidos where id = $1 for update`,
       [id]
     );
     const statusAnterior = existentes[0]?.status as string | undefined;
     if (!statusAnterior) return null;
     if (!TRANSICOES[statusAnterior]?.includes(status)) {
       return { conflito: true as const, id, status: statusAnterior };
+    }
+
+    if (status === "saiu_para_entrega") {
+      if (existentes[0].tipo !== "delivery" || !entregadorId) {
+        throw Object.assign(new Error("Selecione um entregador ativo antes de enviar o pedido."), { status: 400 });
+      }
+      const { rows: entregadorRows } = await client.query(
+        `select id from entregadores where id = $1 and ativo for update`, [entregadorId]
+      );
+      if (!entregadorRows[0]) throw Object.assign(new Error("Entregador inválido ou inativo."), { status: 409 });
+      const { rows: entregaRows } = await client.query(
+        `update entregas set entregador_id = $1, status = 'em_rota', saiu_em = coalesce(saiu_em, now())
+         where pedido_id = $2 and status = 'aguardando'
+         returning id`,
+        [entregadorId, id]
+      );
+      if (!entregaRows[0]) throw Object.assign(new Error("A entrega não está aguardando despacho."), { status: 409 });
     }
     const { rows } = await client.query(
       `update pedidos set status = $1 where id = $2 and status = $3 returning id, status`,
@@ -47,26 +65,20 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const atualizado = rows[0] ?? null;
     if (!atualizado) return null;
 
-    if (status === "saiu_para_entrega") {
-      await client.query(
-        `update entregas set status = 'em_rota', saiu_em = coalesce(saiu_em, now())
-         where pedido_id = $1 and status = 'aguardando'`,
-        [id]
-      );
-    }
-
     if (status === "finalizado") {
+      await client.query(`select fn_consumir_estoque_pedido($1)`, [id]);
       const { rows: entregas } = await client.query(
         `update entregas set status = 'entregue', entregue_em = coalesce(entregue_em, now())
          where pedido_id = $1 and status not in ('entregue', 'cancelada')
          returning entregador_id`,
         [id]
       );
-      const entregadoresIds = entregas.map((entrega) => entrega.entregador_id).filter((entregadorId): entregadorId is string => typeof entregadorId === "string");
-      if (entregadoresIds.length) await client.query("update entregadores set disponivel = true where id = any($1::uuid[])", [entregadoresIds]);
+      void entregas;
     }
 
     if (status === "cancelado") {
+      if (statusAnterior === "novo") await client.query(`select fn_liberar_estoque_pedido($1)`, [id]);
+      else await client.query(`select fn_consumir_estoque_pedido($1)`, [id]);
       // Sem isso a entrega ficava orfa: sumia do Kanban mas continuava
       // "aguardando"/"em_rota" no Delivery, deixando a equipe marcar como
       // entregue um pedido que ja tinha sido cancelado (e essa venda nunca
@@ -77,8 +89,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
          returning entregador_id`,
         [id]
       );
-      const entregadoresIds = entregas.map((entrega) => entrega.entregador_id).filter((entregadorId): entregadorId is string => typeof entregadorId === "string");
-      if (entregadoresIds.length) await client.query("update entregadores set disponivel = true where id = any($1::uuid[])", [entregadoresIds]);
+      void entregas;
     }
 
     if (status === "finalizado" || status === "cancelado") {

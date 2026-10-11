@@ -267,6 +267,7 @@ export async function sincronizarCobrancaPixMercadoPago(
         where id = $1 and enviado_cozinha = false`,
       [local.pedidoId],
     );
+    await client.query("select fn_liberar_estoque_pedido($1::uuid)", [local.pedidoId]);
     return { status: statusRemoto === "expired" ? "expirado" : "falhou", pedidoId: local.pedidoId };
   }
 
