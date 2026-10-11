@@ -7,6 +7,7 @@ import { usePolling } from "@/lib/use-polling";
 import { mascararMoeda, moedaComCentavos, numeroDaMoeda } from "@/lib/moeda";
 import { FichaTecnica } from "./FichaTecnica";
 import { OpcoesProduto } from "./OpcoesProduto";
+import { PizzaConfiguracao } from "./PizzaConfiguracao";
 
 const GRADIENTE_CORAL = "linear-gradient(120deg, var(--color-coral-600), var(--color-coral-500), var(--color-mango-500))";
 const CAMPO_CLASSE =
@@ -245,6 +246,7 @@ export function PrecificacaoCalculadora() {
 
             <FichaTecnica produtoId={selecionado.id} />
             <OpcoesProduto produtoId={selecionado.id} />
+            <PizzaConfiguracao produtoId={selecionado.id} tipoProduto={selecionado.tipoProduto} onSalvo={recarregar} />
           </div>
         </div>
       )}

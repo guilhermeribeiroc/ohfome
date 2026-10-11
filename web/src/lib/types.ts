@@ -121,6 +121,7 @@ export interface ItemPedido {
   observacoes?: string;
   status: ItemPedidoStatus;
   opcoes?: { grupoNome: string; opcaoNome: string; acrescimo: number }[];
+  pizza?: { tamanhoNome: string; saborUmNome: string; saborDoisNome?: string | null; regraMeioAMeio?: "maior_valor" | "media" | "preco_fixo" | null } | null;
 }
 
 export interface Pedido {
@@ -186,6 +187,7 @@ export interface Produto {
   ativo: boolean;
   controlaEstoqueUnidades?: boolean;
   estoqueDisponivel?: number | null;
+  tipoProduto?: "padrao" | "pizza";
 }
 
 export interface Categoria {

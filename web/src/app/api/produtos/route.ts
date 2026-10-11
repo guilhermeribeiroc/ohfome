@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
     const { rows } = await client.query(
       `select
          p.id, p.nome, p.tamanho, p.descricao, p.imagem_url as "imagemUrl",
+         p.tipo_produto as "tipoProduto",
          p.categoria_id as "categoriaId",
          coalesce(c.nome, 'Geral') as "categoriaNome",
          case when $2 then p.modo_precificacao end as "modoPrecificacao",

@@ -271,6 +271,7 @@ create table produtos (
   preco_custo numeric(10, 2) not null default 0 check (preco_custo >= 0),
   margem_percentual numeric(7, 2) not null default 0 check (margem_percentual >= -100 and margem_percentual <= 99999.99),
   preco_venda numeric(10, 2) not null default 0 check (preco_venda >= 0),
+  tipo_produto text not null default 'padrao' check (tipo_produto in ('padrao', 'pizza')),
   ativo boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -279,6 +280,28 @@ create table produtos (
 
 create index idx_produtos_estabelecimento on produtos(estabelecimento_id);
 create index idx_produtos_categoria on produtos(categoria_id);
+
+-- Uma pizza é um produto-base com seus próprios tamanhos e sabores. Isso
+-- evita replicar o mesmo sabor uma vez para cada tamanho do cardápio.
+create table produto_configuracoes_pizza (
+  produto_id uuid primary key references produtos(id) on delete cascade,
+  estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade,
+  regra_meio_a_meio text not null default 'maior_valor' check (regra_meio_a_meio in ('maior_valor', 'media', 'preco_fixo')),
+  created_at timestamptz not null default now(), updated_at timestamptz not null default now(), unique (produto_id, estabelecimento_id)
+);
+create table pizza_tamanhos (
+  id uuid primary key default gen_random_uuid(), produto_id uuid not null references produto_configuracoes_pizza(produto_id) on delete cascade,
+  estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade, nome text not null,
+  preco_sabor_unico numeric(10,2) not null check (preco_sabor_unico >= 0), preco_meio_a_meio numeric(10,2) check (preco_meio_a_meio >= 0),
+  ativo boolean not null default true, ordem integer not null default 0, unique (id, estabelecimento_id)
+);
+create table pizza_sabores (
+  id uuid primary key default gen_random_uuid(), produto_id uuid not null references produto_configuracoes_pizza(produto_id) on delete cascade,
+  estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade, nome text not null, descricao text,
+  acrescimo numeric(10,2) not null default 0 check (acrescimo >= 0), ativo boolean not null default true, ordem integer not null default 0, unique (id, estabelecimento_id)
+);
+create index idx_pizza_tamanhos_produto on pizza_tamanhos(produto_id, ordem);
+create index idx_pizza_sabores_produto on pizza_sabores(produto_id, ordem);
 
 -- Escolhas adicionais do produto (ex.: pão e adicionais de um sanduíche).
 create table produto_grupos_opcoes (
@@ -636,6 +659,13 @@ create table itens_pedido_opcoes (
 );
 create index idx_itens_pedido_opcoes_item on itens_pedido_opcoes(item_pedido_id);
 
+create table itens_pedido_pizza (
+  item_pedido_id uuid primary key references itens_pedido(id) on delete cascade, estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade,
+  tamanho_nome text not null, sabor_um_nome text not null, sabor_dois_nome text,
+  regra_meio_a_meio text check (regra_meio_a_meio in ('maior_valor', 'media', 'preco_fixo')),
+  preco_calculado numeric(10,2) not null check (preco_calculado >= 0), created_at timestamptz not null default now()
+);
+
 create function copiar_tamanho_produto_no_item() returns trigger as $$
 begin
   if new.tamanho is null then
@@ -885,8 +915,9 @@ begin
     'usuarios', 'mesas', 'categorias_produto', 'produtos', 'insumos',
     'clientes', 'pedidos', 'entregadores', 'movimentacoes_financeiras',
     'custos_fixos', 'whatsapp_mensagens', 'estado_aplicacao', 'estabelecimento_modulos',
-    'impressao_jobs', 'bairros_entrega', 'banners_cardapio'
-    , 'produto_grupos_opcoes', 'produto_opcoes', 'itens_pedido_opcoes'
+    'impressao_jobs', 'bairros_entrega', 'banners_cardapio',
+    'produto_grupos_opcoes', 'produto_opcoes', 'itens_pedido_opcoes',
+    'produto_configuracoes_pizza', 'pizza_tamanhos', 'pizza_sabores', 'itens_pedido_pizza'
   ]
   loop
     execute format('alter table %I enable row level security', tabela);
@@ -1711,7 +1742,8 @@ grant select, insert, update, delete on
   estabelecimento_modulos, impressao_jobs, bairros_entrega,
   configuracoes_pix, mercado_pago_conexoes, mercado_pago_oauth_states, pagamentos_pix,
   demonstracao_referencias, pedidos_idempotencia
-  , produto_grupos_opcoes, produto_opcoes, itens_pedido_opcoes
+  , produto_grupos_opcoes, produto_opcoes, itens_pedido_opcoes,
+  produto_configuracoes_pizza, pizza_tamanhos, pizza_sabores, itens_pedido_pizza
 to ohfome_app;
 
 -- estabelecimentos: sem insert/delete direto (so via fn_registrar_estabelecimento);

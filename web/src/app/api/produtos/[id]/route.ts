@@ -3,7 +3,7 @@ import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, ses
 import { comEstabelecimento } from "@/lib/db";
 
 const RETORNO = `
-  id, nome, tamanho, descricao, imagem_url as "imagemUrl",
+  id, nome, tamanho, descricao, imagem_url as "imagemUrl", tipo_produto as "tipoProduto",
   coalesce((select nome from categorias_produto where id = produtos.categoria_id), 'Geral') as "categoriaNome",
   modo_precificacao as "modoPrecificacao",
   preco_custo as "precoCusto",

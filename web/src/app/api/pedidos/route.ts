@@ -23,6 +23,12 @@ const PEDIDOS_ATIVOS_QUERY = `
           'precoUnitario', ip.preco_unitario,
           'observacoes', ip.observacoes,
           'status', ip.status,
+          'pizza', (select json_build_object(
+            'tamanhoNome', ipp.tamanho_nome,
+            'saborUmNome', ipp.sabor_um_nome,
+            'saborDoisNome', ipp.sabor_dois_nome,
+            'regraMeioAMeio', ipp.regra_meio_a_meio
+          ) from itens_pedido_pizza ipp where ipp.item_pedido_id = ip.id),
           'opcoes', coalesce((
             select json_agg(json_build_object(
               'grupoNome', ipo.grupo_nome,
@@ -80,6 +86,7 @@ interface ItemInput {
   quantidade?: number;
   observacoes?: string;
   opcoes?: { grupoId?: string; opcaoId?: string }[];
+  pizza?: { tamanhoId?: string; saborUmId?: string; saborDoisId?: string };
 }
 
 export async function POST(request: NextRequest) {
@@ -155,11 +162,11 @@ export async function POST(request: NextRequest) {
       // Preco sempre vem do banco, nunca do cliente.
       const idsProdutos = itensValidos.map((i) => i.produtoId);
       const { rows: produtosRows } = await client.query(
-        `select id, preco_venda from produtos where id = any($1::uuid[]) and ativo`,
+        `select id, preco_venda, tipo_produto as "tipoProduto" from produtos where id = any($1::uuid[]) and ativo`,
         [idsProdutos]
       );
-      const precoPorProduto = new Map<string, number>(produtosRows.map((r) => [r.id, Number(r.preco_venda)]));
-      if (precoPorProduto.size !== new Set(idsProdutos).size) {
+      const produtoPorId = new Map<string, { preco: number; tipoProduto: string }>(produtosRows.map((r) => [r.id, { preco: Number(r.preco_venda), tipoProduto: r.tipoProduto }]));
+      if (produtoPorId.size !== new Set(idsProdutos).size) {
         throw Object.assign(new Error("Produto inválido ou inexistente."), { status: 400 });
       }
 
@@ -240,6 +247,27 @@ export async function POST(request: NextRequest) {
       const pedidoId = pedidoRows[0].id;
 
       for (const item of itensValidos) {
+        const produto = produtoPorId.get(item.produtoId);
+        if (!produto) throw Object.assign(new Error("Produto inválido ou inexistente."), { status: 400 });
+        let precoPizza = produto.preco;
+        let pizzaSnapshot: { tamanhoNome: string; saborUmNome: string; saborDoisNome: string | null; regraMeioAMeio: string | null } | null = null;
+        if (produto.tipoProduto === "pizza") {
+          const pizza = item.pizza;
+          if (!pizza || typeof pizza.tamanhoId !== "string" || typeof pizza.saborUmId !== "string" || (pizza.saborDoisId !== undefined && typeof pizza.saborDoisId !== "string")) throw Object.assign(new Error("Escolha tamanho e sabor da pizza."), { status: 400 });
+          const { rows: configuracao } = await client.query(`select regra_meio_a_meio as "regraMeioAMeio" from produto_configuracoes_pizza where produto_id = $1`, [item.produtoId]);
+          const { rows: tamanhos } = await client.query(`select id, nome, preco_sabor_unico as "precoSaborUnico", preco_meio_a_meio as "precoMeioAMeio" from pizza_tamanhos where id = $1 and produto_id = $2 and ativo`, [pizza.tamanhoId, item.produtoId]);
+          const idsSabores = [pizza.saborUmId, pizza.saborDoisId].filter((valor): valor is string => typeof valor === "string");
+          if (!configuracao[0] || !tamanhos[0] || new Set(idsSabores).size !== idsSabores.length) throw Object.assign(new Error("Configuração de pizza inválida."), { status: 400 });
+          const { rows: sabores } = await client.query(`select id, nome, acrescimo from pizza_sabores where id = any($1::uuid[]) and produto_id = $2 and ativo`, [idsSabores, item.produtoId]);
+          if (sabores.length !== idsSabores.length) throw Object.assign(new Error("Sabor de pizza inválido."), { status: 400 });
+          const saborUm = sabores.find((sabor) => sabor.id === pizza.saborUmId)!;
+          const saborDois = pizza.saborDoisId ? sabores.find((sabor) => sabor.id === pizza.saborDoisId)! : null;
+          const tamanho = tamanhos[0]; const regra = configuracao[0].regraMeioAMeio as string;
+          const valorUm = Number(tamanho.precoSaborUnico) + Number(saborUm.acrescimo);
+          const valorDois = saborDois ? Number(tamanho.precoSaborUnico) + Number(saborDois.acrescimo) : null;
+          precoPizza = !saborDois ? valorUm : regra === "maior_valor" ? Math.max(valorUm, valorDois!) : regra === "media" ? (valorUm + valorDois!) / 2 : Number(tamanho.precoMeioAMeio);
+          pizzaSnapshot = { tamanhoNome: tamanho.nome, saborUmNome: saborUm.nome, saborDoisNome: saborDois?.nome ?? null, regraMeioAMeio: saborDois ? regra : null };
+        } else if (item.pizza !== undefined) throw Object.assign(new Error("Este produto não é uma pizza configurável."), { status: 400 });
         // Apps/estações que ainda não exibem o configurador enviam o campo
         // ausente e continuam compatíveis. Quando o campo vem (inclusive []),
         // todas as regras de mínimo/máximo passam a ser obrigatórias.
@@ -277,8 +305,9 @@ export async function POST(request: NextRequest) {
         const { rows: itensCriados } = await client.query(
           `insert into itens_pedido (pedido_id, produto_id, quantidade, preco_unitario, observacoes)
            values ($1, $2, $3, $4, $5) returning id`,
-          [pedidoId, item.produtoId, item.quantidade, (precoPorProduto.get(item.produtoId) ?? 0) + acrescimo, item.observacoes ?? null]
+          [pedidoId, item.produtoId, item.quantidade, precoPizza + acrescimo, item.observacoes ?? null]
         );
+        if (pizzaSnapshot) await client.query(`insert into itens_pedido_pizza (item_pedido_id, estabelecimento_id, tamanho_nome, sabor_um_nome, sabor_dois_nome, regra_meio_a_meio, preco_calculado) values ($1,$2,$3,$4,$5,$6,$7)`, [itensCriados[0].id, sessao.estabelecimentoId, pizzaSnapshot.tamanhoNome, pizzaSnapshot.saborUmNome, pizzaSnapshot.saborDoisNome, pizzaSnapshot.regraMeioAMeio, precoPizza]);
         for (const opcao of opcoes) {
           await client.query(
             `insert into itens_pedido_opcoes (estabelecimento_id, item_pedido_id, grupo_nome, opcao_nome, acrescimo)
