@@ -1358,6 +1358,7 @@ as $$
         'imagemUrl', p.imagem_url,
         'categoriaNome', coalesce(c.nome, 'Geral'),
         'precoVenda', p.preco_venda,
+        'tipoProduto', p.tipo_produto,
         'grupoOpcoes', coalesce((
           select jsonb_agg(jsonb_build_object(
             'id', g.id,
@@ -1371,7 +1372,21 @@ as $$
           ) order by g.ordem, g.nome)
           from produto_grupos_opcoes g
           where g.produto_id = p.id and g.ativo
-        ), '[]'::jsonb)
+        ), '[]'::jsonb),
+        'pizza', case when p.tipo_produto = 'pizza' then (
+          select jsonb_build_object(
+            'regraMeioAMeio', pcp.regra_meio_a_meio,
+            'tamanhos', coalesce((
+              select jsonb_agg(jsonb_build_object('id', pt.id, 'nome', pt.nome, 'precoSaborUnico', pt.preco_sabor_unico, 'precoMeioAMeio', pt.preco_meio_a_meio) order by pt.ordem)
+              from pizza_tamanhos pt where pt.produto_id = p.id and pt.ativo
+            ), '[]'::jsonb),
+            'sabores', coalesce((
+              select jsonb_agg(jsonb_build_object('id', ps.id, 'nome', ps.nome, 'descricao', ps.descricao, 'acrescimo', ps.acrescimo) order by ps.ordem, ps.nome)
+              from pizza_sabores ps where ps.produto_id = p.id and ps.ativo
+            ), '[]'::jsonb)
+          )
+          from produto_configuracoes_pizza pcp where pcp.produto_id = p.id
+        ) else null end
       ) order by coalesce(c.ordem_exibicao, 0), p.nome, p.tamanho)
       from produtos p
       left join categorias_produto c on c.id = p.categoria_id
@@ -1417,6 +1432,7 @@ declare
   v_codigo int;
   v_item jsonb;
   v_produto_id uuid;
+  v_tipo_produto text;
   v_quantidade int;
   v_preco numeric(10,2);
   v_item_observacoes text;
@@ -1424,6 +1440,20 @@ declare
   v_opcoes_fornecidas boolean;
   v_acrescimo numeric(10,2);
   v_item_pedido_id uuid;
+  v_pizza jsonb;
+  v_pizza_tamanho_id uuid;
+  v_pizza_sabor_um_id uuid;
+  v_pizza_sabor_dois_id uuid;
+  v_pizza_regra text;
+  v_pizza_tamanho_nome text;
+  v_pizza_preco_sabor_unico numeric(10,2);
+  v_pizza_preco_meio_a_meio numeric(10,2);
+  v_pizza_sabor_um_nome text;
+  v_pizza_sabor_um_acrescimo numeric(10,2);
+  v_pizza_sabor_dois_nome text;
+  v_pizza_sabor_dois_acrescimo numeric(10,2);
+  v_pizza_valor_um numeric(10,2);
+  v_pizza_valor_dois numeric(10,2);
   v_endereco text := nullif(btrim(coalesce(p_endereco, '')), '');
   v_observacoes text := nullif(btrim(coalesce(p_observacoes, '')), '');
   v_cpf text := nullif(btrim(coalesce(p_cpf, '')), '');
@@ -1554,12 +1584,64 @@ begin
       raise exception 'A observação do item pode ter até 1.000 caracteres' using errcode = '22023';
     end if;
 
-    select preco_venda into v_preco
+    select preco_venda, tipo_produto into v_preco, v_tipo_produto
     from produtos
     where id = v_produto_id and estabelecimento_id = v_estabelecimento_id and ativo;
 
     if v_preco is null then
       raise exception 'Produto inválido' using errcode = '22023';
+    end if;
+
+    v_pizza_tamanho_id := null; v_pizza_sabor_um_id := null; v_pizza_sabor_dois_id := null;
+    v_pizza_tamanho_nome := null; v_pizza_sabor_um_nome := null; v_pizza_sabor_dois_nome := null; v_pizza_regra := null;
+
+    if v_tipo_produto = 'pizza' then
+      v_pizza := v_item->'pizza';
+      if v_pizza is null then
+        raise exception 'Escolha tamanho e sabor da pizza' using errcode = '22023';
+      end if;
+      v_pizza_tamanho_id := nullif(v_pizza->>'tamanhoId', '')::uuid;
+      v_pizza_sabor_um_id := nullif(v_pizza->>'saborUmId', '')::uuid;
+      v_pizza_sabor_dois_id := nullif(v_pizza->>'saborDoisId', '')::uuid;
+      if v_pizza_tamanho_id is null or v_pizza_sabor_um_id is null then
+        raise exception 'Escolha tamanho e sabor da pizza' using errcode = '22023';
+      end if;
+      if v_pizza_sabor_dois_id is not null and v_pizza_sabor_dois_id = v_pizza_sabor_um_id then
+        raise exception 'Escolha sabores diferentes para meio a meio' using errcode = '22023';
+      end if;
+
+      select regra_meio_a_meio into v_pizza_regra
+      from produto_configuracoes_pizza where produto_id = v_produto_id;
+
+      select nome, preco_sabor_unico, preco_meio_a_meio into v_pizza_tamanho_nome, v_pizza_preco_sabor_unico, v_pizza_preco_meio_a_meio
+      from pizza_tamanhos where id = v_pizza_tamanho_id and produto_id = v_produto_id and ativo;
+      if v_pizza_tamanho_nome is null then
+        raise exception 'Tamanho de pizza inválido' using errcode = '22023';
+      end if;
+
+      select nome, acrescimo into v_pizza_sabor_um_nome, v_pizza_sabor_um_acrescimo
+      from pizza_sabores where id = v_pizza_sabor_um_id and produto_id = v_produto_id and ativo;
+      if v_pizza_sabor_um_nome is null then
+        raise exception 'Sabor de pizza inválido' using errcode = '22023';
+      end if;
+
+      v_pizza_valor_um := v_pizza_preco_sabor_unico + v_pizza_sabor_um_acrescimo;
+
+      if v_pizza_sabor_dois_id is not null then
+        select nome, acrescimo into v_pizza_sabor_dois_nome, v_pizza_sabor_dois_acrescimo
+        from pizza_sabores where id = v_pizza_sabor_dois_id and produto_id = v_produto_id and ativo;
+        if v_pizza_sabor_dois_nome is null then
+          raise exception 'Sabor de pizza inválido' using errcode = '22023';
+        end if;
+        v_pizza_valor_dois := v_pizza_preco_sabor_unico + v_pizza_sabor_dois_acrescimo;
+        v_preco := case v_pizza_regra
+          when 'media' then (v_pizza_valor_um + v_pizza_valor_dois) / 2
+          when 'preco_fixo' then coalesce(v_pizza_preco_meio_a_meio, greatest(v_pizza_valor_um, v_pizza_valor_dois))
+          else greatest(v_pizza_valor_um, v_pizza_valor_dois)
+        end;
+      else
+        v_preco := v_pizza_valor_um;
+      end if;
     end if;
 
     -- Opcoes do item (ex.: pao, tamanho). Compativel com clientes antigos
@@ -1599,6 +1681,11 @@ begin
     values (v_pedido_id, v_produto_id, v_quantidade, v_preco + v_acrescimo, v_item_observacoes)
     returning id into v_item_pedido_id;
 
+    if v_tipo_produto = 'pizza' then
+      insert into itens_pedido_pizza (item_pedido_id, estabelecimento_id, tamanho_nome, sabor_um_nome, sabor_dois_nome, regra_meio_a_meio, preco_calculado)
+      values (v_item_pedido_id, v_estabelecimento_id, v_pizza_tamanho_nome, v_pizza_sabor_um_nome, v_pizza_sabor_dois_nome, case when v_pizza_sabor_dois_id is not null then v_pizza_regra else null end, v_preco);
+    end if;
+
     insert into itens_pedido_opcoes (estabelecimento_id, item_pedido_id, grupo_nome, opcao_nome, acrescimo)
     select v_estabelecimento_id, v_item_pedido_id, g.nome, o.nome, o.acrescimo
     from jsonb_array_elements(v_item_opcoes) elem
@@ -1618,13 +1705,7 @@ begin
   return jsonb_build_object(
     'id', v_pedido_id,
     'codigo', v_codigo,
-    'estabelecimentoId', v_estabelecimento_id,
-    'notificar', p_notificar_pedido,
-    'taxaEntrega', v_taxa_entrega,
-    'total', v_total,
-    'pixModo', case when p_forma_pagamento = 'pix' or v_valor_pix is not null then v_pix_modo else null end,
-    'valorPix', v_valor_pix,
-    'aguardandoPagamento', not v_enviar_cozinha
+    'total', v_total
   );
 end;
 $$;
@@ -1775,6 +1856,7 @@ declare
   v_codigo int;
   v_item jsonb;
   v_produto_id uuid;
+  v_tipo_produto text;
   v_quantidade int;
   v_preco numeric(10,2);
   v_item_observacoes text;
@@ -1829,11 +1911,14 @@ begin
     if length(coalesce(v_item_observacoes, '')) > 1000 then
       raise exception 'A observação do item pode ter até 1.000 caracteres' using errcode = '22023';
     end if;
-    select preco_venda into v_preco
+    select preco_venda, tipo_produto into v_preco, v_tipo_produto
     from produtos
     where id = v_produto_id and estabelecimento_id = v_estabelecimento_id and ativo;
     if v_preco is null then
       raise exception 'Produto inválido' using errcode = '22023';
+    end if;
+    if v_tipo_produto = 'pizza' then
+      raise exception 'Pizza ainda não pode ser adicionada por aqui — peça direto no cardápio.' using errcode = '22023';
     end if;
 
     v_opcoes_fornecidas := (v_item ? 'opcoes');

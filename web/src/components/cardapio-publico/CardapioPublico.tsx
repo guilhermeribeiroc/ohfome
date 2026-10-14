@@ -51,6 +51,33 @@ interface OpcaoEscolhida {
   acrescimo: number;
 }
 
+interface PizzaTamanhoPublico {
+  id: string;
+  nome: string;
+  precoSaborUnico: number;
+  precoMeioAMeio: number | null;
+}
+interface PizzaSaborPublico {
+  id: string;
+  nome: string;
+  descricao: string;
+  acrescimo: number;
+}
+interface PizzaConfigPublica {
+  regraMeioAMeio: "maior_valor" | "media" | "preco_fixo";
+  tamanhos: PizzaTamanhoPublico[];
+  sabores: PizzaSaborPublico[];
+}
+interface PizzaEscolhida {
+  tamanhoId: string;
+  tamanhoNome: string;
+  saborUmId: string;
+  saborUmNome: string;
+  saborDoisId?: string;
+  saborDoisNome?: string;
+  preco: number;
+}
+
 interface ProdutoPublico {
   id: string;
   nome: string;
@@ -62,6 +89,8 @@ interface ProdutoPublico {
   controlaEstoqueUnidades?: boolean;
   estoqueDisponivel?: number | null;
   grupoOpcoes?: GrupoOpcoesPublico[];
+  tipoProduto?: "padrao" | "pizza";
+  pizza?: PizzaConfigPublica;
 }
 
 interface ItemCarrinho {
@@ -69,12 +98,14 @@ interface ItemCarrinho {
   produtoId: string;
   quantidade: number;
   opcoes: OpcaoEscolhida[];
+  pizza?: PizzaEscolhida;
   observacao: string;
 }
 
-function chaveItemCarrinho(produtoId: string, opcoes: OpcaoEscolhida[]) {
-  const assinatura = opcoes.map((opcao) => opcao.opcaoId).sort().join(",");
-  return `${produtoId}::${assinatura}`;
+function chaveItemCarrinho(produtoId: string, opcoes: OpcaoEscolhida[], pizza?: PizzaEscolhida) {
+  const assinaturaOpcoes = opcoes.map((opcao) => opcao.opcaoId).sort().join(",");
+  const assinaturaPizza = pizza ? `${pizza.tamanhoId}:${[pizza.saborUmId, pizza.saborDoisId].filter(Boolean).sort().join("+")}` : "";
+  return `${produtoId}::${assinaturaOpcoes}::${assinaturaPizza}`;
 }
 
 interface CardapioData {
@@ -188,12 +219,27 @@ function fotoDoProduto(produto: ProdutoPublico): CSSProperties {
   };
 }
 
+function detalhesItemTexto(item: { opcoes: OpcaoEscolhida[]; pizza?: PizzaEscolhida }) {
+  if (item.pizza) {
+    const sabor = item.pizza.saborDoisId ? `½ ${item.pizza.saborUmNome} / ½ ${item.pizza.saborDoisNome}` : item.pizza.saborUmNome;
+    return `${item.pizza.tamanhoNome} · ${sabor}`;
+  }
+  return item.opcoes.map((opcao) => opcao.opcaoNome).join(", ");
+}
+
 function moeda(valor: number) {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 function nomeProdutoExibicao(produto: ProdutoPublico) {
   return produto.tamanho ? `${produto.nome} (${produto.tamanho})` : produto.nome;
+}
+
+function precoBaseProduto(produto: ProdutoPublico) {
+  if (produto.tipoProduto === "pizza" && produto.pizza?.tamanhos.length) {
+    return Math.min(...produto.pizza.tamanhos.map((tamanho) => tamanho.precoSaborUnico));
+  }
+  return produto.precoVenda;
 }
 
 function grupoDaCategoria(nome: string): GrupoMenu {
@@ -478,6 +524,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
   }, [busca, dados]);
 
   function precoDoItem(item: ItemCarrinho) {
+    if (item.pizza) return item.pizza.preco;
     const base = dados?.produtos.find((produto) => produto.id === item.produtoId)?.precoVenda ?? 0;
     return base + item.opcoes.reduce((total, opcao) => total + opcao.acrescimo, 0);
   }
@@ -534,7 +581,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
     });
   }
 
-  function adicionarAoCarrinho(produto: ProdutoPublico, args: { quantidade: number; opcoes: OpcaoEscolhida[]; observacao: string }) {
+  function adicionarAoCarrinho(produto: ProdutoPublico, args: { quantidade: number; opcoes: OpcaoEscolhida[]; pizza?: PizzaEscolhida; observacao: string }) {
     if (!cardapioDisponivel) {
       setAvisoCarrinho(
         dados?.disponibilidade?.motivo ?? "O delivery está fechado no momento.",
@@ -547,14 +594,14 @@ export function CardapioPublico({ slug }: { slug: string }) {
       return;
     }
     const quantidade = Math.min(args.quantidade, Math.max(1, disponivel));
-    const chave = chaveItemCarrinho(produto.id, args.opcoes);
+    const chave = chaveItemCarrinho(produto.id, args.opcoes, args.pizza);
     navigator.vibrate?.(10);
     setCarrinho((atual) => {
       const existente = atual[chave];
       if (existente) {
         return { ...atual, [chave]: { ...existente, quantidade: existente.quantidade + quantidade } };
       }
-      return { ...atual, [chave]: { chave, produtoId: produto.id, quantidade, opcoes: args.opcoes, observacao: args.observacao.trim() } };
+      return { ...atual, [chave]: { chave, produtoId: produto.id, quantidade, opcoes: args.opcoes, pizza: args.pizza, observacao: args.observacao.trim() } };
     });
     setAvisoCarrinho(`${produto.nome} foi adicionado ao pedido.`);
     fecharOverlay();
@@ -731,7 +778,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
                         {nomeProdutoExibicao(produto)}
                       </strong>
                       <small className="text-[#0e7775]">
-                        {moeda(produto.precoVenda)}
+                        {produto.tipoProduto === "pizza" ? `A partir de ${moeda(precoBaseProduto(produto))}` : moeda(produto.precoVenda)}
                       </small>
                     </span>
                     <ArrowRight size={15} className="text-black/30" />
@@ -954,7 +1001,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
                         {nomeProdutoExibicao(produto)}
                       </strong>
                       <b className="mt-1.5 block text-sm font-semibold text-[#0e7775] sm:text-base">
-                        {moeda(produto.precoVenda)}
+                        {produto.tipoProduto === "pizza" ? `A partir de ${moeda(precoBaseProduto(produto))}` : moeda(produto.precoVenda)}
                       </b>
                       {produto.controlaEstoqueUnidades && <span className={`mt-1.5 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[.08em] ${esgotado ? "bg-[#941c42]/10 text-[#941c42]" : "bg-[#0e7775]/10 text-[#0e7775]"}`}>{esgotado ? "Esgotado" : `${produto.estoqueDisponivel ?? 0} disponíveis`}</span>}
                       <small className="mt-2 block overflow-hidden text-[12px] leading-[1.55] text-black/65 sm:max-w-xl sm:text-sm">
@@ -1426,7 +1473,7 @@ function ProdutoDetalhe({
 }: {
   produto: ProdutoPublico;
   onFechar: () => void;
-  onAdicionar: (args: { quantidade: number; opcoes: OpcaoEscolhida[]; observacao: string }) => void;
+  onAdicionar: (args: { quantidade: number; opcoes: OpcaoEscolhida[]; pizza?: PizzaEscolhida; observacao: string }) => void;
   disponivel: boolean;
   motivoIndisponivel: string;
 }) {
@@ -1435,6 +1482,25 @@ function ProdutoDetalhe({
   const [observacao, setObservacao] = useState("");
   const [selecionadas, setSelecionadas] = useState<Record<string, string[]>>({});
   const grupos = produto.grupoOpcoes ?? [];
+  const ehPizza = produto.tipoProduto === "pizza" && Boolean(produto.pizza);
+  const [pizzaTamanhoId, setPizzaTamanhoId] = useState("");
+  const [pizzaSaborUmId, setPizzaSaborUmId] = useState("");
+  const [pizzaSaborDoisId, setPizzaSaborDoisId] = useState("");
+  const pizzaTamanhos = produto.pizza?.tamanhos ?? [];
+  const pizzaSabores = produto.pizza?.sabores ?? [];
+  const pizzaEscolhida: PizzaEscolhida | null = (() => {
+    if (!ehPizza) return null;
+    const tamanho = pizzaTamanhos.find((item) => item.id === pizzaTamanhoId);
+    const saborUm = pizzaSabores.find((item) => item.id === pizzaSaborUmId);
+    const saborDois = pizzaSaborDoisId ? pizzaSabores.find((item) => item.id === pizzaSaborDoisId) : null;
+    if (!tamanho || !saborUm) return null;
+    const valorUm = tamanho.precoSaborUnico + saborUm.acrescimo;
+    const valorDois = saborDois ? tamanho.precoSaborUnico + saborDois.acrescimo : null;
+    const regra = produto.pizza?.regraMeioAMeio ?? "maior_valor";
+    const preco = !saborDois ? valorUm : regra === "maior_valor" ? Math.max(valorUm, valorDois!) : regra === "media" ? (valorUm + valorDois!) / 2 : (tamanho.precoMeioAMeio ?? Math.max(valorUm, valorDois!));
+    return { tamanhoId: tamanho.id, tamanhoNome: tamanho.nome, saborUmId: saborUm.id, saborUmNome: saborUm.nome, saborDoisId: saborDois?.id, saborDoisNome: saborDois?.nome, preco };
+  })();
+  const pizzaValida = !ehPizza || pizzaEscolhida !== null;
 
   function alternarOpcao(grupo: GrupoOpcoesPublico, opcaoId: string) {
     setSelecionadas((atual) => {
@@ -1457,12 +1523,14 @@ function ProdutoDetalhe({
       .map((opcao) => ({ grupoId: grupo.id, grupoNome: grupo.nome, opcaoId: opcao.id, opcaoNome: opcao.nome, acrescimo: opcao.acrescimo })),
   );
   const gruposPendentes = grupos.filter((grupo) => (selecionadas[grupo.id] ?? []).length < grupo.minimoSelecoes);
-  const opcoesValidas = gruposPendentes.length === 0;
-  const precoUnitario = produto.precoVenda + opcoesEscolhidas.reduce((total, opcao) => total + opcao.acrescimo, 0);
+  const opcoesValidas = gruposPendentes.length === 0 && pizzaValida;
+  const precoUnitario = ehPizza
+    ? pizzaEscolhida?.preco ?? precoBaseProduto(produto)
+    : produto.precoVenda + opcoesEscolhidas.reduce((total, opcao) => total + opcao.acrescimo, 0);
 
   function confirmar() {
     if (!opcoesValidas) return;
-    onAdicionar({ quantidade, opcoes: opcoesEscolhidas, observacao });
+    onAdicionar({ quantidade, opcoes: opcoesEscolhidas, pizza: pizzaEscolhida ?? undefined, observacao });
   }
 
   return (
@@ -1510,6 +1578,67 @@ function ProdutoDetalhe({
             <div className="mt-6 rounded-2xl border border-[#941c42]/15 bg-[#941c42]/[.07] p-4 text-sm leading-5 text-[#941c42]">
               <b className="block">Delivery fechado</b>
               <span>{motivoIndisponivel} Consulte os horários no início do cardápio.</span>
+            </div>
+          )}
+          {ehPizza && (
+            <div className="mt-7 space-y-4 rounded-2xl border border-black/[.08] bg-white/55 p-4">
+              <div>
+                <span className="text-sm font-semibold text-[#181714]">Tamanho</span>
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {pizzaTamanhos.map((tamanho) => (
+                    <button
+                      key={tamanho.id}
+                      type="button"
+                      onClick={() => setPizzaTamanhoId(tamanho.id)}
+                      className={`rounded-xl border px-2 py-3 text-center text-sm font-semibold transition ${pizzaTamanhoId === tamanho.id ? "border-[#0e7775] bg-[#0e7775]/[.07] text-[#0e7775]" : "border-black/[.08] bg-white text-[#181714]"}`}
+                    >
+                      {tamanho.nome}
+                      <span className="mt-0.5 block text-[11px] font-medium text-black/45">{moeda(tamanho.precoSaborUnico)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <span className="text-sm font-semibold text-[#181714]">Sabor</span>
+                <div className="mt-2 space-y-2">
+                  {pizzaSabores.map((sabor) => {
+                    const marcado = pizzaSaborUmId === sabor.id;
+                    return (
+                      <button
+                        key={sabor.id}
+                        type="button"
+                        onClick={() => { setPizzaSaborUmId(sabor.id); if (pizzaSaborDoisId === sabor.id) setPizzaSaborDoisId(""); }}
+                        className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-3 text-left text-sm transition ${marcado ? "border-[#0e7775] bg-[#0e7775]/[.07]" : "border-black/[.08] bg-white"}`}
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <i className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${marcado ? "border-[#0e7775] bg-[#0e7775] text-white" : "border-black/20"}`}>
+                            {marcado && <Check size={12} strokeWidth={3} />}
+                          </i>
+                          <span>
+                            {sabor.nome}
+                            {sabor.descricao && <span className="block text-[11px] font-normal text-black/45">{sabor.descricao}</span>}
+                          </span>
+                        </span>
+                        {sabor.acrescimo > 0 && <span className="shrink-0 text-xs font-semibold text-black/50">+{moeda(sabor.acrescimo)}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <span className="text-sm font-semibold text-[#181714]">Segundo sabor <span className="text-xs font-medium text-black/40">(opcional, meio a meio)</span></span>
+                <select
+                  value={pizzaSaborDoisId}
+                  onChange={(evento) => setPizzaSaborDoisId(evento.target.value)}
+                  disabled={!pizzaSaborUmId}
+                  className="mt-2 w-full rounded-xl border border-black/[.08] bg-white px-3.5 py-3 text-sm outline-none disabled:opacity-50"
+                >
+                  <option value="">Pizza de um sabor só</option>
+                  {pizzaSabores.filter((sabor) => sabor.id !== pizzaSaborUmId).map((sabor) => (
+                    <option key={sabor.id} value={sabor.id}>{sabor.nome}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           )}
           {grupos.map((grupo) => (
@@ -1605,7 +1734,7 @@ function ProdutoDetalhe({
               disabled={!disponivel || !opcoesValidas}
               className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-full bg-[#0e7775] px-5 text-sm font-semibold text-white shadow-lg shadow-[#0e7775]/20 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {!disponivel ? "Delivery fechado" : !opcoesValidas ? `Escolha ${gruposPendentes[0]?.nome.toLowerCase()}` : "Adicionar ao pedido"}
+              {!disponivel ? "Delivery fechado" : !pizzaValida ? "Escolha tamanho e sabor" : !opcoesValidas ? `Escolha ${gruposPendentes[0]?.nome.toLowerCase()}` : "Adicionar ao pedido"}
               <ArrowRight size={16} />
             </button>
           </div>
@@ -1706,8 +1835,9 @@ function CarrinhoSheet({
       produto: dados.produtos.find((produto) => produto.id === item.produtoId),
       quantidade: item.quantidade,
       opcoes: item.opcoes,
+      pizza: item.pizza,
       observacoes: item.observacao.trim(),
-      precoUnitario: (dados.produtos.find((produto) => produto.id === item.produtoId)?.precoVenda ?? 0) + item.opcoes.reduce((total, opcao) => total + opcao.acrescimo, 0),
+      precoUnitario: item.pizza ? item.pizza.preco : (dados.produtos.find((produto) => produto.id === item.produtoId)?.precoVenda ?? 0) + item.opcoes.reduce((total, opcao) => total + opcao.acrescimo, 0),
     }))
     .filter(
       (
@@ -1717,6 +1847,7 @@ function CarrinhoSheet({
         produto: ProdutoPublico;
         quantidade: number;
         opcoes: OpcaoEscolhida[];
+        pizza: PizzaEscolhida | undefined;
         observacoes: string;
         precoUnitario: number;
       } => Boolean(item.produto),
@@ -1845,6 +1976,7 @@ function CarrinhoSheet({
           quantidade: item.quantidade,
           observacoes: item.observacoes || undefined,
           opcoes: item.opcoes.map((opcao) => ({ grupoId: opcao.grupoId, opcaoId: opcao.opcaoId })),
+          pizza: item.pizza ? { tamanhoId: item.pizza.tamanhoId, saborUmId: item.pizza.saborUmId, saborDoisId: item.pizza.saborDoisId } : undefined,
         })),
       }),
     });
@@ -1898,7 +2030,7 @@ function CarrinhoSheet({
       "*Itens:*",
       ...itens.map(
         (item) =>
-          `${item.quantidade}× ${nomeProdutoExibicao(item.produto)}${item.opcoes.length ? ` (${item.opcoes.map((opcao) => opcao.opcaoNome).join(", ")})` : ""} — ${moeda(item.precoUnitario * item.quantidade)}${item.observacoes ? `\n   Obs.: ${item.observacoes}` : ""}`,
+          `${item.quantidade}× ${nomeProdutoExibicao(item.produto)}${detalhesItemTexto(item) ? ` (${detalhesItemTexto(item)})` : ""} — ${moeda(item.precoUnitario * item.quantidade)}${item.observacoes ? `\n   Obs.: ${item.observacoes}` : ""}`,
       ),
       "",
       `*Total:* ${moeda(totalComTaxa)}`,
@@ -1965,7 +2097,7 @@ function CarrinhoSheet({
               ) : (
                 <div>
                   {itens.map(
-                    ({ chave, produto, quantidade, opcoes, observacoes: observacao, precoUnitario }) => (
+                    ({ chave, produto, quantidade, opcoes, pizza, observacoes: observacao, precoUnitario }) => (
                       <div
                         key={chave}
                         className="grid grid-cols-[76px_1fr_auto] items-start gap-3 border-b border-black/[.08] py-4"
@@ -1981,9 +2113,9 @@ function CarrinhoSheet({
                           <small className="text-[#0e7775]">
                             {moeda(precoUnitario)}
                           </small>
-                          {opcoes.length > 0 && (
+                          {(pizza || opcoes.length > 0) && (
                             <p className="mt-1 text-xs leading-5 text-black/55">
-                              {opcoes.map((opcao) => opcao.opcaoNome).join(" · ")}
+                              {pizza ? detalhesItemTexto({ opcoes, pizza }) : opcoes.map((opcao) => opcao.opcaoNome).join(" · ")}
                             </p>
                           )}
                           <label className="mt-2 block">
@@ -2358,7 +2490,7 @@ function CarrinhoSheet({
                   </Campo>
                   <div className="rounded-2xl border border-black/[.08] bg-white/55 p-4">
                     <div className="flex items-center justify-between"><b className="text-sm">Resumo do pedido</b><span className="text-xs text-black/45">{itens.reduce((soma, item) => soma + item.quantidade, 0)} item(ns)</span></div>
-                    <div className="mt-3 space-y-2 text-xs text-black/60">{itens.map((item) => <div key={item.chave} className="flex justify-between gap-3"><span className="min-w-0 truncate">{item.quantidade}× {item.produto.nome}{item.opcoes.length ? ` (${item.opcoes.map((opcao) => opcao.opcaoNome).join(", ")})` : ""}</span><span>{moeda(item.precoUnitario * item.quantidade)}</span></div>)}</div>
+                    <div className="mt-3 space-y-2 text-xs text-black/60">{itens.map((item) => <div key={item.chave} className="flex justify-between gap-3"><span className="min-w-0 truncate">{item.quantidade}× {item.produto.nome}{detalhesItemTexto(item) ? ` (${detalhesItemTexto(item)})` : ""}</span><span>{moeda(item.precoUnitario * item.quantidade)}</span></div>)}</div>
                   </div>
                   {erro && <p role="alert" className="rounded-xl bg-red-500/10 p-3 text-xs text-red-700">{erro}</p>}
                 </>
@@ -3147,7 +3279,7 @@ function montarMensagemAcompanhamento(pedido: PedidoStatusPublico) {
                       </div>
                       <div className="max-h-56 space-y-2 overflow-y-auto">
                         {produtos
-                          .filter((produto) => nomeProdutoExibicao(produto).toLowerCase().includes(buscaAdicional.toLowerCase()))
+                          .filter((produto) => produto.tipoProduto !== "pizza" && nomeProdutoExibicao(produto).toLowerCase().includes(buscaAdicional.toLowerCase()))
                           .slice(0, 20)
                           .map((produto) => {
                             const qtd = itensAdicionar[produto.id] ?? 0;
