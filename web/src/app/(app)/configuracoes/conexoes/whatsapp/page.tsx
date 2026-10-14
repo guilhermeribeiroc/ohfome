@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 import {
   ArrowLeft, Check, CheckCircle2, CircleAlert, Clock3, LoaderCircle,
-  MessageCircle, QrCode, RefreshCw, ShieldCheck, Smartphone, Unplug,
+  MessageCircle, QrCode, RefreshCw, ShieldCheck, Smartphone, Unplug, X,
 } from "lucide-react";
 import {
   atualizarAutomacaoWhatsApp, buscarConexaoWhatsApp, desconectarWhatsApp,
@@ -59,12 +59,14 @@ export default function WhatsAppConexoesPage() {
   const [operacao, setOperacao] = useState<"connect" | "disconnect" | "toggle" | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [qrModalAberto, setQrModalAberto] = useState(false);
 
   const carregar = useCallback(async (mostrarCarregamento = false) => {
     if (mostrarCarregamento) setCarregando(true);
     try {
       const dados = await buscarConexaoWhatsApp();
       setConexao(dados);
+      if (dados.status !== "connecting") setQrModalAberto(false);
       setErro(null);
       try {
         const historico = await listarEventosWhatsApp();
@@ -91,11 +93,12 @@ export default function WhatsAppConexoesPage() {
     return () => window.clearInterval(timer);
   }, [conexao?.status, carregar]);
 
+
   async function conectar() {
     setOperacao("connect"); setErro(null); setAviso(null);
     try {
       setConexao(await iniciarConexaoWhatsApp());
-      setAviso("QR Code gerado. Escaneie-o pelo WhatsApp do restaurante.");
+      setQrModalAberto(true);
     } catch (causa) { setErro(mensagemDeErro(causa)); }
     finally { setOperacao(null); }
   }
@@ -157,12 +160,27 @@ export default function WhatsAppConexoesPage() {
       </div>
     </section>
 
-    {conexao && qrValido && <section className="of-panel mb-5 overflow-hidden" aria-labelledby="qr-title">
-      <div className="grid gap-6 p-5 sm:p-7 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-        <div><p className="of-eyebrow">Vincular aparelho</p><h2 id="qr-title" className="mt-1 font-display text-xl font-semibold text-ink-900">Escaneie o QR Code</h2><ol className="mt-4 space-y-3 text-sm leading-6 text-ink-600"><li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-coral-050 text-xs font-bold text-coral-700">1</span>Abra o WhatsApp no celular do restaurante.</li><li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-coral-050 text-xs font-bold text-coral-700">2</span>Acesse <b>Dispositivos conectados → Conectar dispositivo</b>.</li><li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-coral-050 text-xs font-bold text-coral-700">3</span>Aponte a câmera para o código exibido aqui.</li></ol>{conexao.qrExpiresAt && <p className="mt-4 flex items-center gap-1.5 text-xs text-ink-400"><Clock3 size={14} /> Código temporário · expira {dataHora(conexao.qrExpiresAt)}</p>}</div>
-        <div className="mx-auto rounded-2xl border border-cream-200 bg-white p-3 shadow-sm"><Image src={conexao.qrCodeDataUrl ?? ""} alt="QR Code temporário para conectar o WhatsApp do restaurante" width={208} height={208} unoptimized className="h-52 w-52 object-contain" /><p className="mt-2 text-center text-[11px] font-medium text-ink-500">Aguardando leitura…</p></div>
-      </div>
-    </section>}
+    {qrModalAberto && conexao?.status === "connecting" && <div className="of-modal-backdrop z-[70]" role="dialog" aria-modal="true" aria-label="Escanear QR Code do WhatsApp">
+      <section className="of-modal-panel flex max-h-[90dvh] max-w-md flex-col">
+        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-cream-200 p-5">
+          <div><p className="of-eyebrow">Vincular aparelho</p><h2 className="font-display text-xl font-bold tracking-tight text-ink-900">Escaneie o QR Code</h2></div>
+          <button type="button" onClick={() => setQrModalAberto(false)} className="of-icon-btn" aria-label="Fechar"><X size={17} /></button>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-7">
+          <ol className="space-y-3 text-sm leading-6 text-ink-600">
+            <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-coral-050 text-xs font-bold text-coral-700">1</span>Abra o WhatsApp no celular do restaurante.</li>
+            <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-coral-050 text-xs font-bold text-coral-700">2</span>Acesse <b>Dispositivos conectados → Conectar dispositivo</b>.</li>
+            <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-coral-050 text-xs font-bold text-coral-700">3</span>Aponte a câmera para o código abaixo.</li>
+          </ol>
+          <div className="mx-auto mt-5 w-fit rounded-2xl border border-cream-200 bg-white p-3 shadow-sm">
+            {qrValido ? <Image src={conexao.qrCodeDataUrl ?? ""} alt="QR Code temporário para conectar o WhatsApp do restaurante" width={208} height={208} unoptimized className="h-52 w-52 object-contain" /> : <div className="flex h-52 w-52 items-center justify-center"><LoaderCircle size={28} className="animate-spin text-ink-400" /></div>}
+            <p className="mt-2 text-center text-[11px] font-medium text-ink-500">Aguardando leitura…</p>
+          </div>
+          {conexao.qrExpiresAt && <p className="mt-4 flex items-center justify-center gap-1.5 text-xs text-ink-400"><Clock3 size={14} /> Código temporário · expira {dataHora(conexao.qrExpiresAt)}</p>}
+        </div>
+        <footer className="shrink-0 border-t border-cream-200 bg-surface p-5"><button type="button" onClick={() => void conectar()} disabled={Boolean(operacao)} className="of-btn-secondary w-full">{operacao === "connect" ? <LoaderCircle size={17} className="animate-spin" /> : <RefreshCw size={17} />} Gerar novo QR</button></footer>
+      </section>
+    </div>}
 
     <div className="grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
       <section className="of-panel overflow-hidden">
