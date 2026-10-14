@@ -2,7 +2,7 @@
 
 **Data:** 2026-10-13  
 **Status:** proposta aprovada em conversa para revisão escrita antes da implementação  
-**Escopo:** conexão de WhatsApp por restaurante e notificações automáticas de status; não inclui atendimento conversacional, importação de mensagens recebidas nem deploy em produção.
+**Escopo:** esta etapa do OhFome cobre somente a interface administrativa de WhatsApp e seu contrato de integração. Backend da integração, Evolution API e deploy/configuração na VPS ficam a cargo do Cláudio; este documento fornece requisitos e sequência de handoff. Não inclui atendimento conversacional nem importação de mensagens recebidas.
 
 ## Objetivo
 
@@ -66,11 +66,33 @@ Permitir que cada restaurante conecte seu próprio número de WhatsApp por QR Co
 
 ## Escopo de implementação
 
-- Página `/configuracoes/conexoes` e APIs administrativas para estado, criar/reconectar QR, desconectar, ativar/desativar automação, listar histórico e reprocessar falhas seguras.
-- Adaptador Evolution com timeouts, tratamento de respostas e teste via mock HTTP. Não há instância Evolution ou credenciais fornecidas nesta conversa, portanto não será feita conexão/QR ou envio real durante o desenvolvimento local.
-- Migration PostgreSQL para configuração e outbox; evento transacional para os cinco status; worker de envio e retentativa.
-- Checkout: consentimento desmarcado por padrão; garantir persistência do aceite associado ao pedido e cliente. Não alterar dados preexistentes nem presumir consentimento para clientes já cadastrados.
-- Testes de tenant isolation, autorização admin, consentimento, trigger de eventos, dedupe, ordem dos eventos, falhas retryable/permanentes/ambíguas, desativação, adaptação de conexão/QR e rendering responsivo.
+- **Nesta etapa (Dimitre/Codex):** página `/configuracoes/conexoes` com seção WhatsApp; estados de desconectado/conectando/conectado/erro; apresentação de QR temporário, instrução de escaneamento, número conectado, ação de desconectar/reconectar, toggle de automação e histórico/erros que o backend disponibilizar. A interface deve funcionar em desktop e celular, ter estados de carregamento/vazio/erro e não simular sucesso se o backend ainda não estiver instalado.
+- **Contrato para a UI:** a tela dependerá de endpoints autenticados do OhFome para consultar estado/configuração, iniciar conexão e receber QR, desconectar, atualizar o toggle e consultar histórico. Respostas terão formato estável e sanitizado; segredos globais e URL administrativa da Evolution nunca serão enviados ao browser. O backend deverá impor autorização de administrador e escopo do tenant. A interface poderá ser desenvolvida com dados mockados, mas só será integrada/testada de ponta a ponta quando o Cláudio disponibilizar esses endpoints.
+- **A cargo do Cláudio (backend OhFome + VPS):** implementar os endpoints e persistência/worker/outbox descritos na arquitetura; provisionar Evolution API em serviço Docker separado do contêiner Next; configurar persistência, banco/Redis exigidos pela versão escolhida, domínio HTTPS, firewall/rede privada, chave mestra como segredo no servidor e backup/monitoramento; aplicar migrations; testar conexão por QR e envio em homologação antes de habilitar produção.
+- **Consentimento e status:** checkout deve manter opt-in desmarcado por padrão e persistir o consentimento explícito ligado ao pedido. A automação só envia os cinco estados definidos neste design. Não presumir consentimento de clientes/pedidos existentes.
+- **Testes desta etapa:** componentes da tela com estados de carregamento, QR, conexão, falha e automação; autorização/isolamento e segurança do backend, consentimento, eventos/outbox, retentativas e Evolution real ficam no checklist de entrega do Cláudio. Nenhum teste local com mock será descrito como certificação do envio real.
+
+## Plano de execução e handoff
+
+1. **Interface OhFome:** criar a seção Configurações → Conexões → WhatsApp e os estados visuais/responsivos; usar o contrato de API acordado abaixo e fixtures apenas durante desenvolvimento.
+2. **Integração backend:** Cláudio cria endpoints autenticados multi-tenant, persistência e outbox/worker, respeitando consentimento, deduplicação, sanitização e a política de falhas deste design.
+3. **Serviço VPS:** Cláudio provisiona Evolution em Docker separado, com versão fixada, volumes persistentes, serviços auxiliares requeridos pela versão, HTTPS, firewall e segredo de API fora do repositório; Next fala com Evolution por rede privada sempre que possível.
+4. **Homologação:** Cláudio valida migrations/backup, QR e reconexão, desconexão, consentimento, as cinco transições, duplicidade, falhas e logs sem PII. Só depois da validação o recurso pode ser habilitado para restaurantes.
+5. **Entrega:** registrar URL/versionamento do serviço (sem divulgar chave), variáveis necessárias, procedimento de backup/restore, health checks, logs/alertas, rollback e evidências dos testes. Nenhuma chave ou QR deve ser copiada para documentação, chat ou frontend.
+
+### Contrato mínimo de API para o frontend
+
+Os caminhos são propostas para alinhamento e podem ser ajustados pelo backend antes da integração; formatos e garantias devem permanecer equivalentes.
+
+| Operação | Endpoint proposto | Resposta essencial |
+|---|---|---|
+| Ler estado e preferência | `GET /api/configuracoes/conexoes/whatsapp` | `connected`, `phone`, `automationEnabled`, `qr` (somente enquanto pendente), `updatedAt` |
+| Iniciar/reiniciar conexão | `POST /api/configuracoes/conexoes/whatsapp/connect` | `status`, `qr`, `expiresAt`; endpoint protegido contra chamadas concorrentes |
+| Atualizar preferência | `PATCH /api/configuracoes/conexoes/whatsapp` | `automationEnabled`; servidor valida sessão ativa antes de habilitar |
+| Desconectar | `DELETE /api/configuracoes/conexoes/whatsapp` | estado final desconectado; operação idempotente |
+| Consultar histórico | `GET /api/configuracoes/conexoes/whatsapp/events` | itens paginados com pedido, status, horário e resultado sanitizado, sem telefone/corpo |
+
+Todos os endpoints exigem sessão válida e papel de administrador, derivam o estabelecimento da sessão e não aceitam tenant/instância arbitrários do cliente. O QR expira e não deve ser armazenado em histórico, cache compartilhado ou logs. Respostas de erro expõem código/mensagem seguros para a UI, nunca stack trace, chave ou payload bruto do provedor.
 
 ## Critérios de aceite
 
@@ -82,9 +104,10 @@ Permitir que cada restaurante conecte seu próprio número de WhatsApp por QR Co
 6. Desativar para novos eventos ignora pendências antigas de modo rastreável; nenhuma mensagem é disparada retroativamente ao reativar.
 7. Testes automatizados/mockados passam; `npm run lint` e `npm run build` passam. Envio real permanece não certificado até configurar e testar a versão real do Evolution em homologação.
 
-## Fora do escopo
+## Fora do escopo desta etapa de interface
 
-- Receber e responder mensagens, bot de atendimento, grupos, catálogo no WhatsApp, templates editáveis, disparos promocionais, pagamento por mensagem, relatórios analíticos e deploy/alteração de VPS.
+- Implementar backend, worker, migration/outbox e endpoints de produção; provisionar, atualizar ou operar a Evolution/VPS. Esses itens fazem parte do handoff do Cláudio, não da entrega frontend.
+- Receber e responder mensagens, bot de atendimento, grupos, catálogo no WhatsApp, templates editáveis, disparos promocionais, pagamento por mensagem e relatórios analíticos.
 - Garantia de que a Evolution ou o WhatsApp entregou/leu a mensagem ao cliente.
 
 ## Referências técnicas
@@ -96,6 +119,8 @@ Permitir que cada restaurante conecte seu próprio número de WhatsApp por QR Co
 
 - [x] Nenhum placeholder/TODO deixado sem decisão.
 - [x] Opt-in explícito e instância central gerenciada são decisões confirmadas pelo usuário.
+- [x] Divisão de responsabilidade atualizada: interface nesta etapa; backend OhFome e Evolution/VPS a cargo do Cláudio.
+- [x] Requisitos de VPS, sequência de homologação e contrato mínimo esperado pela UI registrados para handoff.
 - [x] Os estados finais diferenciam delivery (`entregue`) de outros canais (`finalizado`).
 - [x] A especificação não promete entrega/leitura nem exactly-once externo; timeouts ambíguos são apresentados ao admin.
 - [x] Nenhuma chamada externa real ou produção está no escopo desta fase.
