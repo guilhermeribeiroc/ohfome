@@ -31,6 +31,26 @@ import { mascararMoeda, numeroDaMoeda } from "@/lib/moeda";
 import { usePolling } from "@/lib/use-polling";
 import { Bell, ChefHat, PackageCheck, PackageSearch } from "lucide-react";
 
+interface OpcaoPublica {
+  id: string;
+  nome: string;
+  acrescimo: number;
+}
+interface GrupoOpcoesPublico {
+  id: string;
+  nome: string;
+  minimoSelecoes: number;
+  maximoSelecoes: number;
+  opcoes: OpcaoPublica[];
+}
+interface OpcaoEscolhida {
+  grupoId: string;
+  grupoNome: string;
+  opcaoId: string;
+  opcaoNome: string;
+  acrescimo: number;
+}
+
 interface ProdutoPublico {
   id: string;
   nome: string;
@@ -41,6 +61,20 @@ interface ProdutoPublico {
   imagemUrl?: string | null;
   controlaEstoqueUnidades?: boolean;
   estoqueDisponivel?: number | null;
+  grupoOpcoes?: GrupoOpcoesPublico[];
+}
+
+interface ItemCarrinho {
+  chave: string;
+  produtoId: string;
+  quantidade: number;
+  opcoes: OpcaoEscolhida[];
+  observacao: string;
+}
+
+function chaveItemCarrinho(produtoId: string, opcoes: OpcaoEscolhida[]) {
+  const assinatura = opcoes.map((opcao) => opcao.opcaoId).sort().join(",");
+  return `${produtoId}::${assinatura}`;
 }
 
 interface CardapioData {
@@ -81,8 +115,7 @@ interface CobrancaPix {
 }
 
 interface CarrinhoSalvo {
-  itens: Record<string, number>;
-  observacoes: Record<string, string>;
+  itens: Record<string, ItemCarrinho>;
 }
 
 function chavePedidoAtivo(slug: string) {
@@ -109,10 +142,13 @@ function carregarCarrinho(slug: string): CarrinhoSalvo | null {
     const bruto = window.localStorage.getItem(chaveCarrinho(slug));
     if (!bruto) return null;
     const carrinho = JSON.parse(bruto) as Partial<CarrinhoSalvo>;
-    return {
-      itens: carrinho.itens ?? {},
-      observacoes: carrinho.observacoes ?? {},
-    };
+    const itens = Object.fromEntries(
+      Object.entries(carrinho.itens ?? {}).filter(
+        // formato antigo do carrinho (produtoId -> número) não é mais válido
+        ([, item]) => item && typeof item === "object" && typeof (item as ItemCarrinho).produtoId === "string",
+      ),
+    ) as Record<string, ItemCarrinho>;
+    return { itens };
   } catch {
     return null;
   }
@@ -181,10 +217,7 @@ function descricaoDoProduto(produto: ProdutoPublico) {
 export function CardapioPublico({ slug }: { slug: string }) {
   const [dados, setDados] = useState<CardapioData | null>(null);
   const [erroCarregar, setErroCarregar] = useState(false);
-  const [carrinho, setCarrinho] = useState<Record<string, number>>({});
-  const [observacoesItens, setObservacoesItens] = useState<
-    Record<string, string>
-  >({});
+  const [carrinho, setCarrinho] = useState<Record<string, ItemCarrinho>>({});
   const [grupo, setGrupo] = useState<GrupoMenu>("comidas");
   const [categoriaAtiva, setCategoriaAtiva] = useState<string | null>(null);
   const [produtoSelecionado, setProdutoSelecionado] =
@@ -246,10 +279,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
   useEffect(() => {
     const restaurar = window.setTimeout(() => {
       const salvo = carregarCarrinho(slug);
-      if (salvo) {
-        setCarrinho(salvo.itens);
-        setObservacoesItens(salvo.observacoes);
-      }
+      if (salvo) setCarrinho(salvo.itens);
       carrinhoHidratado.current = true;
     }, 0);
     return () => window.clearTimeout(restaurar);
@@ -259,17 +289,14 @@ export function CardapioPublico({ slug }: { slug: string }) {
     if (!carrinhoHidratado.current) return;
     try {
       if (Object.keys(carrinho).length) {
-        window.localStorage.setItem(
-          chaveCarrinho(slug),
-          JSON.stringify({ itens: carrinho, observacoes: observacoesItens }),
-        );
+        window.localStorage.setItem(chaveCarrinho(slug), JSON.stringify({ itens: carrinho }));
       } else {
         window.localStorage.removeItem(chaveCarrinho(slug));
       }
     } catch {
       /* carrinho continua funcional mesmo sem armazenamento local */
     }
-  }, [carrinho, observacoesItens, slug]);
+  }, [carrinho, slug]);
 
   useEffect(() => {
     const aoVoltar = () => {
@@ -450,54 +477,85 @@ export function CardapioPublico({ slug }: { slug: string }) {
     );
   }, [busca, dados]);
 
+  function precoDoItem(item: ItemCarrinho) {
+    const base = dados?.produtos.find((produto) => produto.id === item.produtoId)?.precoVenda ?? 0;
+    return base + item.opcoes.reduce((total, opcao) => total + opcao.acrescimo, 0);
+  }
+
   const totalItens = Object.values(carrinho).reduce(
-    (total, quantidade) => total + quantidade,
+    (total, item) => total + item.quantidade,
     0,
   );
-  const totalValor = useMemo(() => {
-    if (!dados) return 0;
-    return Object.entries(carrinho).reduce(
-      (total, [id, quantidade]) =>
-        total +
-        (dados.produtos.find((produto) => produto.id === id)?.precoVenda ?? 0) *
-          quantidade,
-      0,
-    );
-  }, [carrinho, dados]);
+  const quantidadePorProduto = useMemo(() => {
+    const mapa: Record<string, number> = {};
+    for (const item of Object.values(carrinho)) {
+      mapa[item.produtoId] = (mapa[item.produtoId] ?? 0) + item.quantidade;
+    }
+    return mapa;
+  }, [carrinho]);
+  const totalValor = dados
+    ? Object.values(carrinho).reduce((total, item) => total + precoDoItem(item) * item.quantidade, 0)
+    : 0;
 
   const segmento = SEGMENTOS.find((item) => item.id === dados?.tipo);
   const cardapioDisponivel = dados?.disponibilidade?.aberto ?? true;
 
-  function ajustar(produtoId: string, delta: number) {
+  function ajustarLinha(chave: string, delta: number) {
     if (!cardapioDisponivel) return;
-    const produto = dados?.produtos.find((item) => item.id === produtoId);
     navigator.vibrate?.(10);
     setCarrinho((atual) => {
-      if (delta > 0 && produto?.controlaEstoqueUnidades && (produto.estoqueDisponivel ?? 0) <= (atual[produtoId] ?? 0)) {
+      const item = atual[chave];
+      if (!item) return atual;
+      const produto = dados?.produtos.find((candidato) => candidato.id === item.produtoId);
+      const quantidadeAtualDoProduto = quantidadePorProduto[item.produtoId] ?? 0;
+      if (delta > 0 && produto?.controlaEstoqueUnidades && (produto.estoqueDisponivel ?? 0) <= quantidadeAtualDoProduto) {
         setAvisoCarrinho(`${produto.nome} está esgotado no momento.`);
         return atual;
       }
-      const quantidade = (atual[produtoId] ?? 0) + delta;
-      if (quantidade <= 0)
-        return Object.fromEntries(
-          Object.entries(atual).filter(([id]) => id !== produtoId),
-        );
-      return { ...atual, [produtoId]: quantidade };
+      const quantidade = item.quantidade + delta;
+      if (quantidade <= 0) {
+        return Object.fromEntries(Object.entries(atual).filter(([id]) => id !== chave));
+      }
+      return { ...atual, [chave]: { ...item, quantidade } };
     });
   }
 
-  function adicionarEVoltarAoCardapio(produto: ProdutoPublico) {
+  function removerLinha(chave: string) {
+    setCarrinho((atual) => {
+      return Object.fromEntries(Object.entries(atual).filter(([id]) => id !== chave));
+    });
+  }
+
+  function atualizarObservacaoLinha(chave: string, observacao: string) {
+    setCarrinho((atual) => {
+      const item = atual[chave];
+      if (!item) return atual;
+      return { ...atual, [chave]: { ...item, observacao: observacao.slice(0, 1000) } };
+    });
+  }
+
+  function adicionarAoCarrinho(produto: ProdutoPublico, args: { quantidade: number; opcoes: OpcaoEscolhida[]; observacao: string }) {
     if (!cardapioDisponivel) {
       setAvisoCarrinho(
         dados?.disponibilidade?.motivo ?? "O delivery está fechado no momento.",
       );
       return;
     }
-    if (produto.controlaEstoqueUnidades && (produto.estoqueDisponivel ?? 0) <= 0) {
+    const disponivel = produto.controlaEstoqueUnidades ? (produto.estoqueDisponivel ?? 0) - (quantidadePorProduto[produto.id] ?? 0) : Infinity;
+    if (disponivel <= 0) {
       setAvisoCarrinho(`${produto.nome} está esgotado no momento.`);
       return;
     }
-    ajustar(produto.id, 1);
+    const quantidade = Math.min(args.quantidade, Math.max(1, disponivel));
+    const chave = chaveItemCarrinho(produto.id, args.opcoes);
+    navigator.vibrate?.(10);
+    setCarrinho((atual) => {
+      const existente = atual[chave];
+      if (existente) {
+        return { ...atual, [chave]: { ...existente, quantidade: existente.quantidade + quantidade } };
+      }
+      return { ...atual, [chave]: { chave, produtoId: produto.id, quantidade, opcoes: args.opcoes, observacao: args.observacao.trim() } };
+    });
     setAvisoCarrinho(`${produto.nome} foi adicionado ao pedido.`);
     fecharOverlay();
   }
@@ -527,19 +585,11 @@ export function CardapioPublico({ slug }: { slug: string }) {
 
   function limparCarrinho() {
     setCarrinho({});
-    setObservacoesItens({});
     try {
       window.localStorage.removeItem(chaveCarrinho(slug));
     } catch {
       /* armazenamento local indisponível */
     }
-  }
-
-  function atualizarObservacaoItem(produtoId: string, observacao: string) {
-    setObservacoesItens((atual) => ({
-      ...atual,
-      [produtoId]: observacao.slice(0, 1000),
-    }));
   }
 
   function abrirProduto(produto: ProdutoPublico) {
@@ -881,7 +931,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
             </div>
             <div className="lg:grid lg:grid-cols-2 lg:gap-x-10">
               {categoria.itens.map((produto) => {
-                const quantidade = carrinho[produto.id] ?? 0;
+                const quantidade = quantidadePorProduto[produto.id] ?? 0;
                 const esgotado = produto.controlaEstoqueUnidades && (produto.estoqueDisponivel ?? 0) <= 0;
                 return (
                   <button
@@ -977,13 +1027,8 @@ export function CardapioPublico({ slug }: { slug: string }) {
       {overlay === "produto" && produtoSelecionado && (
         <ProdutoDetalhe
           produto={produtoSelecionado}
-          quantidade={carrinho[produtoSelecionado.id] ?? 0}
-          observacao={observacoesItens[produtoSelecionado.id] ?? ""}
-          ajustar={ajustar}
-          onAtualizarObservacao={atualizarObservacaoItem}
           onFechar={fecharOverlay}
-          onAbrirCarrinho={() => abrirOverlay("carrinho")}
-          onAdicionarAoPedido={() => adicionarEVoltarAoCardapio(produtoSelecionado)}
+          onAdicionar={(args) => adicionarAoCarrinho(produtoSelecionado, args)}
           disponivel={cardapioDisponivel && !(produtoSelecionado.controlaEstoqueUnidades && (produtoSelecionado.estoqueDisponivel ?? 0) <= 0)}
           motivoIndisponivel={produtoSelecionado.controlaEstoqueUnidades && (produtoSelecionado.estoqueDisponivel ?? 0) <= 0 ? "Este item está esgotado no momento." : dados.disponibilidade?.motivo ?? "O delivery está fechado no momento."}
         />
@@ -993,9 +1038,9 @@ export function CardapioPublico({ slug }: { slug: string }) {
           slug={slug}
           dados={dados}
           carrinho={carrinho}
-          observacoesItens={observacoesItens}
-          ajustar={ajustar}
-          onAtualizarObservacao={atualizarObservacaoItem}
+          ajustar={ajustarLinha}
+          onRemover={removerLinha}
+          onAtualizarObservacao={atualizarObservacaoLinha}
           totalValor={totalValor}
           onFechar={fecharOverlay}
           onConfirmado={(codigo, whatsapp, pedidoId) => {
@@ -1374,28 +1419,52 @@ function usePainelAcessivel(onFechar: () => void) {
 
 function ProdutoDetalhe({
   produto,
-  quantidade,
-  observacao,
-  ajustar,
-  onAtualizarObservacao,
   onFechar,
-  onAbrirCarrinho,
-  onAdicionarAoPedido,
+  onAdicionar,
   disponivel,
   motivoIndisponivel,
 }: {
   produto: ProdutoPublico;
-  quantidade: number;
-  observacao: string;
-  ajustar: (id: string, delta: number) => void;
-  onAtualizarObservacao: (id: string, observacao: string) => void;
   onFechar: () => void;
-  onAbrirCarrinho: () => void;
-  onAdicionarAoPedido: () => void;
+  onAdicionar: (args: { quantidade: number; opcoes: OpcaoEscolhida[]; observacao: string }) => void;
   disponivel: boolean;
   motivoIndisponivel: string;
 }) {
   const painelRef = usePainelAcessivel(onFechar);
+  const [quantidade, setQuantidade] = useState(1);
+  const [observacao, setObservacao] = useState("");
+  const [selecionadas, setSelecionadas] = useState<Record<string, string[]>>({});
+  const grupos = produto.grupoOpcoes ?? [];
+
+  function alternarOpcao(grupo: GrupoOpcoesPublico, opcaoId: string) {
+    setSelecionadas((atual) => {
+      const atuais = atual[grupo.id] ?? [];
+      if (grupo.maximoSelecoes === 1) {
+        return { ...atual, [grupo.id]: atuais[0] === opcaoId ? [] : [opcaoId] };
+      }
+      if (atuais.includes(opcaoId)) {
+        return { ...atual, [grupo.id]: atuais.filter((id) => id !== opcaoId) };
+      }
+      if (atuais.length >= grupo.maximoSelecoes) return atual;
+      return { ...atual, [grupo.id]: [...atuais, opcaoId] };
+    });
+  }
+
+  const opcoesEscolhidas: OpcaoEscolhida[] = grupos.flatMap((grupo) =>
+    (selecionadas[grupo.id] ?? [])
+      .map((opcaoId) => grupo.opcoes.find((opcao) => opcao.id === opcaoId))
+      .filter((opcao): opcao is GrupoOpcoesPublico["opcoes"][number] => Boolean(opcao))
+      .map((opcao) => ({ grupoId: grupo.id, grupoNome: grupo.nome, opcaoId: opcao.id, opcaoNome: opcao.nome, acrescimo: opcao.acrescimo })),
+  );
+  const gruposPendentes = grupos.filter((grupo) => (selecionadas[grupo.id] ?? []).length < grupo.minimoSelecoes);
+  const opcoesValidas = gruposPendentes.length === 0;
+  const precoUnitario = produto.precoVenda + opcoesEscolhidas.reduce((total, opcao) => total + opcao.acrescimo, 0);
+
+  function confirmar() {
+    if (!opcoesValidas) return;
+    onAdicionar({ quantidade, opcoes: opcoesEscolhidas, observacao });
+  }
+
   return (
     <div
       data-lenis-prevent
@@ -1432,7 +1501,7 @@ function ProdutoDetalhe({
             {nomeProdutoExibicao(produto)}
           </h2>
           <p className="mt-3 font-display text-2xl font-semibold text-[#0e7775]">
-            {moeda(produto.precoVenda)}
+            {moeda(precoUnitario)}
           </p>
           <p className="mt-7 text-base leading-7 text-black/70 sm:max-w-2xl sm:text-lg sm:leading-8">
             {descricaoDoProduto(produto)}
@@ -1443,6 +1512,37 @@ function ProdutoDetalhe({
               <span>{motivoIndisponivel} Consulte os horários no início do cardápio.</span>
             </div>
           )}
+          {grupos.map((grupo) => (
+            <div key={grupo.id} className="mt-7 rounded-2xl border border-black/[.08] bg-white/55 p-4">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-sm font-semibold text-[#181714]">{grupo.nome}</span>
+                <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[.08em] text-black/40">
+                  {grupo.minimoSelecoes > 0 ? `Escolha ${grupo.minimoSelecoes === grupo.maximoSelecoes ? grupo.minimoSelecoes : `${grupo.minimoSelecoes}-${grupo.maximoSelecoes}`}` : `Até ${grupo.maximoSelecoes}`}
+                </span>
+              </div>
+              <div className="mt-3 space-y-2">
+                {grupo.opcoes.map((opcao) => {
+                  const marcada = (selecionadas[grupo.id] ?? []).includes(opcao.id);
+                  return (
+                    <button
+                      key={opcao.id}
+                      type="button"
+                      onClick={() => alternarOpcao(grupo, opcao.id)}
+                      className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-3 text-left text-sm transition ${marcada ? "border-[#0e7775] bg-[#0e7775]/[.07]" : "border-black/[.08] bg-white"}`}
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <i className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${marcada ? "border-[#0e7775] bg-[#0e7775] text-white" : "border-black/20"}`}>
+                          {marcada && <Check size={12} strokeWidth={3} />}
+                        </i>
+                        {opcao.nome}
+                      </span>
+                      {opcao.acrescimo > 0 && <span className="shrink-0 text-xs font-semibold text-black/50">+{moeda(opcao.acrescimo)}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
           <label className="mt-7 block rounded-2xl border border-coral-100 bg-coral-050 p-4">
             <span className="block text-xs font-semibold text-[#0e7775]">
               Observação deste item
@@ -1452,9 +1552,7 @@ function ProdutoDetalhe({
             </span>
             <textarea
               value={observacao}
-              onChange={(evento) =>
-                onAtualizarObservacao(produto.id, evento.target.value)
-              }
+              onChange={(evento) => setObservacao(evento.target.value.slice(0, 1000))}
               placeholder="Adicionar observação"
               rows={2}
               maxLength={1000}
@@ -1483,10 +1581,10 @@ function ProdutoDetalhe({
           <div className="mx-auto flex max-w-2xl items-center gap-3 lg:max-w-none">
             <div className="flex shrink-0 items-center rounded-full bg-white p-1 shadow-sm">
               <button
-                onClick={() => ajustar(produto.id, -1)}
-                disabled={quantidade === 0 || !disponivel}
+                onClick={() => setQuantidade((atual) => Math.max(1, atual - 1))}
+                disabled={quantidade <= 1 || !disponivel}
                 className="flex h-11 w-11 items-center justify-center rounded-full disabled:opacity-25"
-                aria-label="Remover"
+                aria-label="Diminuir quantidade"
               >
                 <Minus size={17} />
               </button>
@@ -1494,23 +1592,20 @@ function ProdutoDetalhe({
                 {quantidade}
               </strong>
               <button
-                onClick={() => ajustar(produto.id, 1)}
+                onClick={() => setQuantidade((atual) => atual + 1)}
                 disabled={!disponivel}
                 className="flex h-11 w-11 items-center justify-center rounded-full bg-[#181714] text-white"
-                aria-label="Adicionar"
+                aria-label="Aumentar quantidade"
               >
                 <Plus size={17} />
               </button>
             </div>
             <button
-              onClick={() => {
-                if (quantidade === 0) onAdicionarAoPedido();
-                else onAbrirCarrinho();
-              }}
-              disabled={!disponivel}
+              onClick={confirmar}
+              disabled={!disponivel || !opcoesValidas}
               className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-full bg-[#0e7775] px-5 text-sm font-semibold text-white shadow-lg shadow-[#0e7775]/20 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {!disponivel ? "Delivery fechado" : quantidade === 0 ? "Adicionar ao pedido" : "Ver pedido"}
+              {!disponivel ? "Delivery fechado" : !opcoesValidas ? `Escolha ${gruposPendentes[0]?.nome.toLowerCase()}` : "Adicionar ao pedido"}
               <ArrowRight size={16} />
             </button>
           </div>
@@ -1545,8 +1640,8 @@ function CarrinhoSheet({
   slug,
   dados,
   carrinho,
-  observacoesItens,
   ajustar,
+  onRemover,
   onAtualizarObservacao,
   totalValor,
   onFechar,
@@ -1557,10 +1652,10 @@ function CarrinhoSheet({
 }: {
   slug: string;
   dados: CardapioData;
-  carrinho: Record<string, number>;
-  observacoesItens: Record<string, string>;
-  ajustar: (id: string, delta: number) => void;
-  onAtualizarObservacao: (id: string, observacao: string) => void;
+  carrinho: Record<string, ItemCarrinho>;
+  ajustar: (chave: string, delta: number) => void;
+  onRemover: (chave: string) => void;
+  onAtualizarObservacao: (chave: string, observacao: string) => void;
   totalValor: number;
   onFechar: () => void;
   onConfirmado: (
@@ -1605,19 +1700,25 @@ function CarrinhoSheet({
   const [observacoes, setObservacoes] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
-  const itens = Object.entries(carrinho)
-    .map(([id, quantidade]) => ({
-      produto: dados.produtos.find((produto) => produto.id === id),
-      quantidade,
-      observacoes: (observacoesItens[id] ?? "").trim(),
+  const itens = Object.values(carrinho)
+    .map((item) => ({
+      chave: item.chave,
+      produto: dados.produtos.find((produto) => produto.id === item.produtoId),
+      quantidade: item.quantidade,
+      opcoes: item.opcoes,
+      observacoes: item.observacao.trim(),
+      precoUnitario: (dados.produtos.find((produto) => produto.id === item.produtoId)?.precoVenda ?? 0) + item.opcoes.reduce((total, opcao) => total + opcao.acrescimo, 0),
     }))
     .filter(
       (
         item,
       ): item is {
+        chave: string;
         produto: ProdutoPublico;
         quantidade: number;
+        opcoes: OpcaoEscolhida[];
         observacoes: string;
+        precoUnitario: number;
       } => Boolean(item.produto),
     );
   const entregaSelecionada = formaRecebimento === "entrega";
@@ -1743,6 +1844,7 @@ function CarrinhoSheet({
           produtoId: item.produto.id,
           quantidade: item.quantidade,
           observacoes: item.observacoes || undefined,
+          opcoes: item.opcoes.map((opcao) => ({ grupoId: opcao.grupoId, opcaoId: opcao.opcaoId })),
         })),
       }),
     });
@@ -1796,7 +1898,7 @@ function CarrinhoSheet({
       "*Itens:*",
       ...itens.map(
         (item) =>
-          `${item.quantidade}× ${nomeProdutoExibicao(item.produto)} — ${moeda(item.produto.precoVenda * item.quantidade)}${item.observacoes ? `\n   Obs.: ${item.observacoes}` : ""}`,
+          `${item.quantidade}× ${nomeProdutoExibicao(item.produto)}${item.opcoes.length ? ` (${item.opcoes.map((opcao) => opcao.opcaoNome).join(", ")})` : ""} — ${moeda(item.precoUnitario * item.quantidade)}${item.observacoes ? `\n   Obs.: ${item.observacoes}` : ""}`,
       ),
       "",
       `*Total:* ${moeda(totalComTaxa)}`,
@@ -1863,9 +1965,9 @@ function CarrinhoSheet({
               ) : (
                 <div>
                   {itens.map(
-                    ({ produto, quantidade, observacoes: observacao }) => (
+                    ({ chave, produto, quantidade, opcoes, observacoes: observacao, precoUnitario }) => (
                       <div
-                        key={produto.id}
+                        key={chave}
                         className="grid grid-cols-[76px_1fr_auto] items-start gap-3 border-b border-black/[.08] py-4"
                       >
                         <span
@@ -1877,8 +1979,13 @@ function CarrinhoSheet({
                             {nomeProdutoExibicao(produto)}
                           </strong>
                           <small className="text-[#0e7775]">
-                            {moeda(produto.precoVenda)}
+                            {moeda(precoUnitario)}
                           </small>
+                          {opcoes.length > 0 && (
+                            <p className="mt-1 text-xs leading-5 text-black/55">
+                              {opcoes.map((opcao) => opcao.opcaoNome).join(" · ")}
+                            </p>
+                          )}
                           <label className="mt-2 block">
                             <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[.1em] text-black/42">
                               Observação deste item
@@ -1887,7 +1994,7 @@ function CarrinhoSheet({
                               value={observacao}
                               onChange={(evento) =>
                                 onAtualizarObservacao(
-                                  produto.id,
+                                  chave,
                                   evento.target.value,
                                 )
                               }
@@ -1898,21 +2005,29 @@ function CarrinhoSheet({
                             />
                           </label>
                         </span>
-                        <span className="flex items-center rounded-full bg-white p-1">
+                        <span className="flex flex-col items-end gap-1.5">
+                          <span className="flex items-center rounded-full bg-white p-1">
+                            <button
+                              onClick={() => ajustar(chave, -1)}
+                              className="flex h-10 w-10 items-center justify-center rounded-full"
+                            >
+                              <Minus size={15} />
+                            </button>
+                            <b className="w-5 text-center text-xs">
+                              {quantidade}
+                            </b>
+                            <button
+                              onClick={() => ajustar(chave, 1)}
+                              className="flex h-10 w-10 items-center justify-center rounded-full bg-[#181714] text-white"
+                            >
+                              <Plus size={15} />
+                            </button>
+                          </span>
                           <button
-                            onClick={() => ajustar(produto.id, -1)}
-                            className="flex h-10 w-10 items-center justify-center rounded-full"
+                            onClick={() => onRemover(chave)}
+                            className="text-[11px] font-medium text-black/40 underline-offset-2 hover:text-[#941c42] hover:underline"
                           >
-                            <Minus size={15} />
-                          </button>
-                          <b className="w-5 text-center text-xs">
-                            {quantidade}
-                          </b>
-                          <button
-                            onClick={() => ajustar(produto.id, 1)}
-                            className="flex h-10 w-10 items-center justify-center rounded-full bg-[#181714] text-white"
-                          >
-                            <Plus size={15} />
+                            Remover
                           </button>
                         </span>
                       </div>
@@ -2243,7 +2358,7 @@ function CarrinhoSheet({
                   </Campo>
                   <div className="rounded-2xl border border-black/[.08] bg-white/55 p-4">
                     <div className="flex items-center justify-between"><b className="text-sm">Resumo do pedido</b><span className="text-xs text-black/45">{itens.reduce((soma, item) => soma + item.quantidade, 0)} item(ns)</span></div>
-                    <div className="mt-3 space-y-2 text-xs text-black/60">{itens.map((item) => <div key={item.produto.id} className="flex justify-between gap-3"><span className="min-w-0 truncate">{item.quantidade}× {item.produto.nome}</span><span>{moeda(item.produto.precoVenda * item.quantidade)}</span></div>)}</div>
+                    <div className="mt-3 space-y-2 text-xs text-black/60">{itens.map((item) => <div key={item.chave} className="flex justify-between gap-3"><span className="min-w-0 truncate">{item.quantidade}× {item.produto.nome}{item.opcoes.length ? ` (${item.opcoes.map((opcao) => opcao.opcaoNome).join(", ")})` : ""}</span><span>{moeda(item.precoUnitario * item.quantidade)}</span></div>)}</div>
                   </div>
                   {erro && <p role="alert" className="rounded-xl bg-red-500/10 p-3 text-xs text-red-700">{erro}</p>}
                 </>

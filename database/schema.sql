@@ -1357,7 +1357,21 @@ as $$
         'descricao', p.descricao,
         'imagemUrl', p.imagem_url,
         'categoriaNome', coalesce(c.nome, 'Geral'),
-        'precoVenda', p.preco_venda
+        'precoVenda', p.preco_venda,
+        'grupoOpcoes', coalesce((
+          select jsonb_agg(jsonb_build_object(
+            'id', g.id,
+            'nome', g.nome,
+            'minimoSelecoes', g.minimo_selecoes,
+            'maximoSelecoes', g.maximo_selecoes,
+            'opcoes', coalesce((
+              select jsonb_agg(jsonb_build_object('id', o.id, 'nome', o.nome, 'acrescimo', o.acrescimo) order by o.ordem, o.nome)
+              from produto_opcoes o where o.grupo_id = g.id and o.ativo
+            ), '[]'::jsonb)
+          ) order by g.ordem, g.nome)
+          from produto_grupos_opcoes g
+          where g.produto_id = p.id and g.ativo
+        ), '[]'::jsonb)
       ) order by coalesce(c.ordem_exibicao, 0), p.nome, p.tamanho)
       from produtos p
       left join categorias_produto c on c.id = p.categoria_id
@@ -1406,6 +1420,10 @@ declare
   v_quantidade int;
   v_preco numeric(10,2);
   v_item_observacoes text;
+  v_item_opcoes jsonb;
+  v_opcoes_fornecidas boolean;
+  v_acrescimo numeric(10,2);
+  v_item_pedido_id uuid;
   v_endereco text := nullif(btrim(coalesce(p_endereco, '')), '');
   v_observacoes text := nullif(btrim(coalesce(p_observacoes, '')), '');
   v_cpf text := nullif(btrim(coalesce(p_cpf, '')), '');
@@ -1544,8 +1562,48 @@ begin
       raise exception 'Produto inválido' using errcode = '22023';
     end if;
 
+    -- Opcoes do item (ex.: pao, tamanho). Compativel com clientes antigos
+    -- que ainda nao enviam o campo: so valida minimo/maximo quando a chave
+    -- "opcoes" vem no payload (mesma regra do fluxo interno Balcao/Mesa).
+    v_opcoes_fornecidas := (v_item ? 'opcoes');
+    v_item_opcoes := coalesce(v_item->'opcoes', '[]'::jsonb);
+
+    if (select count(*) from jsonb_array_elements(v_item_opcoes)) <>
+       (select count(distinct elem->>'opcaoId') from jsonb_array_elements(v_item_opcoes) elem) then
+      raise exception 'Não repita a mesma opção' using errcode = '22023';
+    end if;
+
+    if (
+      select count(*) from jsonb_array_elements(v_item_opcoes) elem
+      join produto_opcoes o on o.id = (elem->>'opcaoId')::uuid and o.ativo
+      join produto_grupos_opcoes g on g.id = o.grupo_id and g.ativo and g.produto_id = v_produto_id
+      where g.id::text = elem->>'grupoId'
+    ) <> jsonb_array_length(v_item_opcoes) then
+      raise exception 'Uma opção não pertence a este produto' using errcode = '22023';
+    end if;
+
+    if v_opcoes_fornecidas and exists (
+      select 1 from produto_grupos_opcoes g
+      where g.produto_id = v_produto_id and g.ativo
+        and (select count(*) from jsonb_array_elements(v_item_opcoes) elem where elem->>'grupoId' = g.id::text)
+            not between g.minimo_selecoes and g.maximo_selecoes
+    ) then
+      raise exception 'Escolha as opções deste item dentro do mínimo e máximo permitido' using errcode = '22023';
+    end if;
+
+    select coalesce(sum(o.acrescimo), 0) into v_acrescimo
+    from jsonb_array_elements(v_item_opcoes) elem
+    join produto_opcoes o on o.id = (elem->>'opcaoId')::uuid;
+
     insert into itens_pedido (pedido_id, produto_id, quantidade, preco_unitario, observacoes)
-    values (v_pedido_id, v_produto_id, v_quantidade, v_preco, v_item_observacoes);
+    values (v_pedido_id, v_produto_id, v_quantidade, v_preco + v_acrescimo, v_item_observacoes)
+    returning id into v_item_pedido_id;
+
+    insert into itens_pedido_opcoes (estabelecimento_id, item_pedido_id, grupo_nome, opcao_nome, acrescimo)
+    select v_estabelecimento_id, v_item_pedido_id, g.nome, o.nome, o.acrescimo
+    from jsonb_array_elements(v_item_opcoes) elem
+    join produto_opcoes o on o.id = (elem->>'opcaoId')::uuid
+    join produto_grupos_opcoes g on g.id = o.grupo_id;
   end loop;
 
   if p_forma_recebimento = 'entrega' then
@@ -1720,6 +1778,10 @@ declare
   v_quantidade int;
   v_preco numeric(10,2);
   v_item_observacoes text;
+  v_item_opcoes jsonb;
+  v_opcoes_fornecidas boolean;
+  v_acrescimo numeric(10,2);
+  v_item_pedido_id uuid;
   v_observacoes text := nullif(btrim(coalesce(p_observacoes, '')), '');
   v_total numeric(10,2);
 begin
@@ -1773,8 +1835,46 @@ begin
     if v_preco is null then
       raise exception 'Produto inválido' using errcode = '22023';
     end if;
+
+    v_opcoes_fornecidas := (v_item ? 'opcoes');
+    v_item_opcoes := coalesce(v_item->'opcoes', '[]'::jsonb);
+
+    if (select count(*) from jsonb_array_elements(v_item_opcoes)) <>
+       (select count(distinct elem->>'opcaoId') from jsonb_array_elements(v_item_opcoes) elem) then
+      raise exception 'Não repita a mesma opção' using errcode = '22023';
+    end if;
+
+    if (
+      select count(*) from jsonb_array_elements(v_item_opcoes) elem
+      join produto_opcoes o on o.id = (elem->>'opcaoId')::uuid and o.ativo
+      join produto_grupos_opcoes g on g.id = o.grupo_id and g.ativo and g.produto_id = v_produto_id
+      where g.id::text = elem->>'grupoId'
+    ) <> jsonb_array_length(v_item_opcoes) then
+      raise exception 'Uma opção não pertence a este produto' using errcode = '22023';
+    end if;
+
+    if v_opcoes_fornecidas and exists (
+      select 1 from produto_grupos_opcoes g
+      where g.produto_id = v_produto_id and g.ativo
+        and (select count(*) from jsonb_array_elements(v_item_opcoes) elem where elem->>'grupoId' = g.id::text)
+            not between g.minimo_selecoes and g.maximo_selecoes
+    ) then
+      raise exception 'Escolha as opções deste item dentro do mínimo e máximo permitido' using errcode = '22023';
+    end if;
+
+    select coalesce(sum(o.acrescimo), 0) into v_acrescimo
+    from jsonb_array_elements(v_item_opcoes) elem
+    join produto_opcoes o on o.id = (elem->>'opcaoId')::uuid;
+
     insert into itens_pedido (pedido_id, produto_id, quantidade, preco_unitario, observacoes)
-    values (v_novo_pedido_id, v_produto_id, v_quantidade, v_preco, v_item_observacoes);
+    values (v_novo_pedido_id, v_produto_id, v_quantidade, v_preco + v_acrescimo, v_item_observacoes)
+    returning id into v_item_pedido_id;
+
+    insert into itens_pedido_opcoes (estabelecimento_id, item_pedido_id, grupo_nome, opcao_nome, acrescimo)
+    select v_estabelecimento_id, v_item_pedido_id, g.nome, o.nome, o.acrescimo
+    from jsonb_array_elements(v_item_opcoes) elem
+    join produto_opcoes o on o.id = (elem->>'opcaoId')::uuid
+    join produto_grupos_opcoes g on g.id = o.grupo_id;
   end loop;
 
   if v_forma_recebimento = 'entrega' then
