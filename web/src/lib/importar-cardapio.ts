@@ -133,7 +133,9 @@ export async function extrairItensCardapio(
               "Se não puder relacionar preço e tamanho com segurança, mantenha como item comum e preserve o texto. Para item comum, só use tamanho P, M ou G; rótulos livres de pizza ficam em pizzas. " +
               "Preserve o texto de ingredientes/descrição exatamente como está escrito, sem resumir. " +
               "Se um item tiver preços diferentes por tipo de pão (ex.: colunas 'Bola' e 'Árabe' com valores distintos), gere uma entrada por tipo de pão, usando tamanho null e colocando o tipo de pão entre parênteses no nome (ex.: 'X-Burguer (Pão Bola)', 'X-Burguer (Pão Árabe)'). " +
-              "Se para um sanduíche ou hambúrguer o cardápio listar os tipos de pão disponíveis para escolha SEM variar o preço, preencha tiposPao com cada tipo; nos demais itens deixe tiposPao vazio.",
+              "Se para um sanduíche ou hambúrguer o cardápio listar os tipos de pão disponíveis para escolha SEM variar o preço, preencha tiposPao com cada tipo; nos demais itens deixe tiposPao vazio. " +
+              "Se o mesmo sabor/recheio aparecer em mais de uma versão do produto dentro da mesma categoria (ex.: 'Pastel Família' vs 'Pastel' avulso vs 'Pastel 12 unidades', todos com um item 'Queijo'), inclua a versão no nome de cada um pra eles não ficarem com nome idêntico (ex.: 'Pastel Família - Queijo', 'Pastel - Queijo', 'Pastel 12 unidades - Queijo'), mesmo que isso signifique repetir a categoria no nome. " +
+              "Se a mesma foto aparecer repetida ou duas fotos tiverem uma faixa de texto em comum (continuação de rolagem), registre cada item do cardápio só uma vez, mesmo que ele apareça em mais de uma foto.",
           },
         ],
       },
@@ -170,6 +172,16 @@ export async function extrairItensCardapio(
       };
     })
     .filter((item): item is ItemCardapioExtraido => item !== null);
+  // Rede de segurança: se a mesma foto cobrir uma área repetida (rolagem de
+  // PDF) ou o modelo listar o mesmo item duas vezes, nunca deixa passar dois
+  // itens idênticos (mesmo nome+tamanho+categoria+preço) pro lote de criação.
+  const vistos = new Set<string>();
+  const itensSemDuplicata = itens.filter((item) => {
+    const chave = [item.nome.toLowerCase(), item.tamanho ?? "", item.categoriaSugerida.toLowerCase(), item.precoVenda].join("||");
+    if (vistos.has(chave)) return false;
+    vistos.add(chave);
+    return true;
+  });
   const pizzas = (Array.isArray(entrada.pizzas) ? entrada.pizzas : [])
     .map((item): PizzaCardapioExtraida | null => {
       if (!item || typeof item !== "object") return null;
@@ -189,6 +201,16 @@ export async function extrairItensCardapio(
       if (nome.length < 2 || !categoriaSugerida || !tamanhos.length || !sabores.length) return null;
       return { nome, categoriaSugerida, descricao: typeof registro.descricao === "string" ? registro.descricao.trim() : "", regraMeioAMeio: registro.regraMeioAMeio === "media" || registro.regraMeioAMeio === "preco_fixo" ? registro.regraMeioAMeio : "maior_valor", tamanhos, sabores };
     })
-    .filter((pizza): pizza is PizzaCardapioExtraida => pizza !== null);
-  return { itens, pizzas };
+    .filter((pizza): pizza is PizzaCardapioExtraida => pizza !== null)
+    .map((pizza) => {
+      const saboresVistos = new Set<string>();
+      const saboresSemDuplicata = pizza.sabores.filter((sabor) => {
+        const chave = sabor.nome.toLowerCase();
+        if (saboresVistos.has(chave)) return false;
+        saboresVistos.add(chave);
+        return true;
+      });
+      return { ...pizza, sabores: saboresSemDuplicata };
+    });
+  return { itens: itensSemDuplicata, pizzas };
 }

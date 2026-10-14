@@ -41,6 +41,15 @@ export async function POST(request: NextRequest) {
   if (itens.some((item) => item.nome.length < 2 || !Number.isFinite(item.precoVenda) || item.precoVenda < 0)) {
     return NextResponse.json({ erro: "Um ou mais itens têm nome ou preço inválido." }, { status: 400 });
   }
+  // Nunca cria o mesmo item duas vezes no mesmo envio (ex.: reenvio
+  // acidental, duplo clique, item repetido vindo da importação de cardápio).
+  const itensVistos = new Set<string>();
+  const itensSemDuplicata = itens.filter((item) => {
+    const chave = [item.nome.toLowerCase(), item.tamanho ?? "", item.categoriaNome.toLowerCase(), item.precoVenda].join("||");
+    if (itensVistos.has(chave)) return false;
+    itensVistos.add(chave);
+    return true;
+  });
   const pizzas: PizzaEntrada[] = pizzasBrutas.map((pizza: Record<string, unknown>) => ({
     nome: typeof pizza?.nome === "string" ? pizza.nome.trim() : "",
     categoriaNome: typeof pizza?.categoriaNome === "string" ? pizza.categoriaNome.trim() : "",
@@ -77,8 +86,28 @@ export async function POST(request: NextRequest) {
     }
 
     const resultado = [];
-    for (const item of itens) {
+    for (const item of itensSemDuplicata) {
       const catId = await categoriaId(item.categoriaNome);
+      // Guarda contra reenvio acidental (duplo clique, reimportação da
+      // mesma foto): se já existe produto idêntico nesta categoria, reusa
+      // em vez de criar outro.
+      const { rows: existente } = await client.query<{ id: string }>(
+        `select id from produtos where estabelecimento_id = $1 and categoria_id is not distinct from $2
+           and lower(nome) = lower($3) and tamanho is not distinct from $4 and preco_venda = $5 limit 1`,
+        [estabelecimentoId, catId, item.nome, item.tamanho, item.precoVenda]
+      );
+      if (existente[0]) {
+        const { rows: existenteCompleto } = await client.query(
+          `select id, nome, tamanho, descricao, imagem_url as "imagemUrl",
+             coalesce((select nome from categorias_produto where id = produtos.categoria_id), 'Geral') as "categoriaNome",
+             modo_precificacao as "modoPrecificacao", preco_custo as "precoCusto",
+             margem_percentual as "margemPercentual", preco_venda as "precoVenda", ativo
+           from produtos where id = $1`,
+          [existente[0].id]
+        );
+        resultado.push(existenteCompleto[0]);
+        continue;
+      }
       const { rows } = await client.query(
         `insert into produtos (estabelecimento_id, categoria_id, nome, tamanho, descricao, modo_precificacao, preco_custo, margem_percentual, preco_venda)
          values ($1, $2, $3, $4, $5, 'preco_manual', 0, 0, $6)
