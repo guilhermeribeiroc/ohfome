@@ -1359,6 +1359,8 @@ as $$
         'categoriaNome', coalesce(c.nome, 'Geral'),
         'precoVenda', p.preco_venda,
         'tipoProduto', p.tipo_produto,
+        'controlaEstoqueUnidades', p.controla_estoque_unidades,
+        'estoqueDisponivel', case when p.controla_estoque_unidades then fn_disponibilidade_produto(e.id, p.id) else null end,
         'grupoOpcoes', coalesce((
           select jsonb_agg(jsonb_build_object(
             'id', g.id,
