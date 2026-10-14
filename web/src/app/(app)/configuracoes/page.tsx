@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight, Clock3, CreditCard, Printer } from "lucide-react";
+import { ChevronRight, Clock3, CreditCard, MessageCircle, Printer } from "lucide-react";
 import { InstalarOhFome } from "@/components/pwa/PwaRegistro";
 
 export default function ConfiguracoesPage() {
@@ -20,6 +20,11 @@ export default function ConfiguracoesPage() {
         <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-coral-050 text-coral-600"><Clock3 size={23} /></span>
         <span><b className="text-lg text-ink-900">Horários do cardápio</b><span className="mt-1 block text-sm text-ink-500">Turnos, dias fechados e pausa em imprevistos.</span></span>
         <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-coral-600">Configurar horários <ChevronRight size={16} /></span>
+      </Link>
+      <Link href="/configuracoes/conexoes/whatsapp" className="of-panel group flex min-h-48 flex-col justify-between p-6 transition hover:-translate-y-0.5 hover:border-coral-300">
+        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-basil-050 text-basil-700"><MessageCircle size={23} /></span>
+        <span><b className="text-lg text-ink-900">Conexões · WhatsApp</b><span className="mt-1 block text-sm text-ink-500">Conecte o número do restaurante e configure avisos de pedidos.</span></span>
+        <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-coral-600">Abrir conexões <ChevronRight size={16} /></span>
       </Link>
     </div>
     <div className="mt-5"><InstalarOhFome /></div>

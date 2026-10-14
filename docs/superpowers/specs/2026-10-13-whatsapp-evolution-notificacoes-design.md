@@ -66,7 +66,7 @@ Permitir que cada restaurante conecte seu próprio número de WhatsApp por QR Co
 
 ## Escopo de implementação
 
-- **Nesta etapa (Dimitre/Codex):** página `/configuracoes/conexoes` com seção WhatsApp; estados de desconectado/conectando/conectado/erro; apresentação de QR temporário, instrução de escaneamento, número conectado, ação de desconectar/reconectar, toggle de automação e histórico/erros que o backend disponibilizar. A interface deve funcionar em desktop e celular, ter estados de carregamento/vazio/erro e não simular sucesso se o backend ainda não estiver instalado.
+- **Nesta etapa (Dimitre/Codex):** página `/configuracoes/conexoes/whatsapp` em Configurações → Conexões; estados de desconectado/conectando/conectado/erro; apresentação de QR temporário, instrução de escaneamento, número conectado, ação de desconectar/reconectar, toggle de automação e histórico/erros que o backend disponibilizar. No checkout, deixar o consentimento de WhatsApp desmarcado por padrão e enviar `notificar: boolean` no pedido público. A interface deve funcionar em desktop e celular, ter estados de carregamento/vazio/erro e não simular sucesso se o backend ainda não estiver instalado.
 - **Contrato para a UI:** a tela dependerá de endpoints autenticados do OhFome para consultar estado/configuração, iniciar conexão e receber QR, desconectar, atualizar o toggle e consultar histórico. Respostas terão formato estável e sanitizado; segredos globais e URL administrativa da Evolution nunca serão enviados ao browser. O backend deverá impor autorização de administrador e escopo do tenant. A interface poderá ser desenvolvida com dados mockados, mas só será integrada/testada de ponta a ponta quando o Cláudio disponibilizar esses endpoints.
 - **A cargo do Cláudio (backend OhFome + VPS):** implementar os endpoints e persistência/worker/outbox descritos na arquitetura; provisionar Evolution API em serviço Docker separado do contêiner Next; configurar persistência, banco/Redis exigidos pela versão escolhida, domínio HTTPS, firewall/rede privada, chave mestra como segredo no servidor e backup/monitoramento; aplicar migrations; testar conexão por QR e envio em homologação antes de habilitar produção.
 - **Consentimento e status:** checkout deve manter opt-in desmarcado por padrão e persistir o consentimento explícito ligado ao pedido. A automação só envia os cinco estados definidos neste design. Não presumir consentimento de clientes/pedidos existentes.
@@ -86,11 +86,15 @@ Os caminhos são propostas para alinhamento e podem ser ajustados pelo backend a
 
 | Operação | Endpoint proposto | Resposta essencial |
 |---|---|---|
-| Ler estado e preferência | `GET /api/configuracoes/conexoes/whatsapp` | `connected`, `phone`, `automationEnabled`, `qr` (somente enquanto pendente), `updatedAt` |
-| Iniciar/reiniciar conexão | `POST /api/configuracoes/conexoes/whatsapp/connect` | `status`, `qr`, `expiresAt`; endpoint protegido contra chamadas concorrentes |
-| Atualizar preferência | `PATCH /api/configuracoes/conexoes/whatsapp` | `automationEnabled`; servidor valida sessão ativa antes de habilitar |
-| Desconectar | `DELETE /api/configuracoes/conexoes/whatsapp` | estado final desconectado; operação idempotente |
-| Consultar histórico | `GET /api/configuracoes/conexoes/whatsapp/events` | itens paginados com pedido, status, horário e resultado sanitizado, sem telefone/corpo |
+| Ler estado e preferência | `GET /api/configuracoes/conexoes/whatsapp` | `status`, `connected`, `phone`, `automationEnabled`, `qrCodeDataUrl`, `qrExpiresAt`, `updatedAt` |
+| Iniciar/reiniciar conexão | `POST /api/configuracoes/conexoes/whatsapp/connect` | mesmo tipo de conexão, QR como data URL e expiração; endpoint protegido contra chamadas concorrentes |
+| Atualizar preferência | `PATCH /api/configuracoes/conexoes/whatsapp` | recebe e retorna `{ automationEnabled }`; servidor valida sessão ativa antes de habilitar |
+| Desconectar | `DELETE /api/configuracoes/conexoes/whatsapp` | estado atualizado desconectado; operação idempotente |
+| Consultar histórico | `GET /api/configuracoes/conexoes/whatsapp/events?limit=10` | `{ items, nextCursor }`, itens com id, pedido, status, horário e resultado sanitizado, sem telefone/corpo |
+
+Contrato consumido pelo frontend implementado: `GET` retorna `{ status, connected, phone, automationEnabled, qrCodeDataUrl, qrExpiresAt, updatedAt }`; status da conexão é `disconnected | connecting | connected | error`. `POST .../connect` retorna esse mesmo objeto. `PATCH` aceita `{ automationEnabled }` e retorna a preferência efetiva. `DELETE` retorna o objeto atualizado. Histórico retorna `{ items: [{ id, orderCode, status, createdAt, outcome }], nextCursor }`, com `status = novo | em_preparo | pronto | saiu_para_entrega | finalizado` e `outcome = pending | accepted | failed | uncertain | ignored`. QR deve ser uma data URL de imagem temporária; datas ISO-8601. Campos não aplicáveis podem ser `null`. Erro usa `{ erro, codigo? }` e 404 `WHATSAPP_INTEGRATION_NOT_CONFIGURED` pode indicar que o backend não foi implantado.
+
+O checkout já envia `notificar` na criação do pedido; a UI agora o inicializa como `false` e apresenta consentimento explícito apenas para atualizações por WhatsApp. O backend deve tratar o valor como consentimento específico daquele pedido (snapshot), nunca inferi-lo do perfil de cliente nem usar a preferência armazenada no cliente para autorizar pedidos antigos. Manter o `notificar` do cliente somente como preferência separada, se ainda necessário a outros fluxos.
 
 Todos os endpoints exigem sessão válida e papel de administrador, derivam o estabelecimento da sessão e não aceitam tenant/instância arbitrários do cliente. O QR expira e não deve ser armazenado em histórico, cache compartilhado ou logs. Respostas de erro expõem código/mensagem seguros para a UI, nunca stack trace, chave ou payload bruto do provedor.
 

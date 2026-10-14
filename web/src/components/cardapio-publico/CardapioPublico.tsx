@@ -1582,7 +1582,7 @@ function CarrinhoSheet({
   const [telefone, setTelefone] = useState("");
   const [cpf, setCpf] = useState("");
   const [email, setEmail] = useState("");
-  const [notificar, setNotificar] = useState(true);
+  const [notificar, setNotificar] = useState(false);
   const [rua, setRua] = useState("");
   const [numeroEndereco, setNumeroEndereco] = useState("");
   const [complementoEndereco, setComplementoEndereco] = useState("");
@@ -2029,8 +2029,7 @@ function CarrinhoSheet({
                   className="h-5 w-5 shrink-0 accent-[#0e7775]"
                 />
                 <span className="text-xs leading-5 text-black/70">
-                  <b className="text-black">Quero ser avisado</b> sobre o
-                  andamento deste pedido, aqui e pelo WhatsApp.
+                  <b className="text-black">Quero receber atualizações deste pedido pelo WhatsApp.</b>
                 </span>
               </label>
               {entregaSelecionada ? (

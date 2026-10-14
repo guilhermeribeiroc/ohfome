@@ -13,7 +13,7 @@
 
 1. Cada restaurante conecta seu próprio número escaneando QR, mas a URL e a chave global da Evolution são centralizadas em segredos do servidor.
 2. A conexão e o toggle são isolados por estabelecimento e só podem ser administrados por usuários administradores autenticados.
-3. A automação vem desativada. O checkout pede opt-in explícito, desmarcado por padrão. Sem consentimento gravado para aquele pedido, não há envio.
+3. A automação vem desativada. O checkout envia o campo existente `notificar` e agora pede opt-in explícito desmarcado por padrão. Backend deve persistir um snapshot de consentimento ligado ao pedido; não pode autorizar envio só porque o perfil do cliente tem `notificar_pedido = true`. Sem consentimento gravado para aquele pedido, não há envio.
 4. Eventos: pedido recebido (`novo`), em preparo, pronto, saiu para entrega e finalizado (mensagem “entregue” no delivery).
 5. Falha ao enviar mensagem não pode desfazer pedido ou mudança de status. A UI deve expor estado pendente/falha/resultado incerto sem afirmar entrega/leitura.
 
@@ -23,13 +23,17 @@ Favor confirmar ou ajustar estes caminhos/formas antes de fechar a integração:
 
 | Operação | Caminho | Payload/resposta mínima |
 |---|---|---|
-| Estado/preferência | `GET /api/configuracoes/conexoes/whatsapp` | `{ connected, phone, automationEnabled, qr?, updatedAt }` |
-| Gerar QR/conectar | `POST /api/configuracoes/conexoes/whatsapp/connect` | `{ status, qr, expiresAt }` |
-| Ativar/desativar | `PATCH /api/configuracoes/conexoes/whatsapp` | request `{ automationEnabled }`, response com preferência efetiva |
-| Desconectar | `DELETE /api/configuracoes/conexoes/whatsapp` | estado desconectado; idempotente |
-| Histórico | `GET /api/configuracoes/conexoes/whatsapp/events` | itens paginados `{ orderCode, status, createdAt, outcome }` |
+| Estado/preferência | `GET /api/configuracoes/conexoes/whatsapp` | `{ status, connected, phone, automationEnabled, qrCodeDataUrl, qrExpiresAt, updatedAt }` |
+| Gerar QR/conectar | `POST /api/configuracoes/conexoes/whatsapp/connect` | mesmo tipo de conexão, incluindo `status: "connecting"` e QR temporário |
+| Ativar/desativar | `PATCH /api/configuracoes/conexoes/whatsapp` | request `{ automationEnabled }`, response `{ automationEnabled }` |
+| Desconectar | `DELETE /api/configuracoes/conexoes/whatsapp` | estado desconectado no tipo de conexão; idempotente |
+| Histórico | `GET /api/configuracoes/conexoes/whatsapp/events?limit=10` | `{ items: [{ id, orderCode, status, createdAt, outcome }], nextCursor }` |
+
+Tipos aceitos pela UI: `status = disconnected | connecting | connected | error`; status de pedido `novo | em_preparo | pronto | saiu_para_entrega | finalizado`; resultado `pending | accepted | failed | uncertain | ignored`. `qrCodeDataUrl` deve ser uma data URL de imagem válida e transitória; `qrExpiresAt` é ISO-8601. `phone`, QR, `qrExpiresAt` e `updatedAt` podem ser `null` quando não aplicáveis. Erros usam `{ erro, codigo? }`; para backend ainda indisponível, responder 404 com `codigo: "WHATSAPP_INTEGRATION_NOT_CONFIGURED"` ou outro erro HTTP claro, sem segredo/payload do provedor. O frontend já está consumindo esse contrato.
 
 Requisitos transversais: sessão e papel admin em todas as operações; estabelecimento derivado da sessão, nunca do body; nenhum segredo Evolution no browser; QR com expiração, sem persistir em log/cache/histórico; mensagens/telefones fora de logs; erros sanitizados, sem stack trace/payload cru do provedor.
+
+No endpoint público de criação do pedido, preservar `notificar: boolean` como o aceite explícito do cliente para atualizações WhatsApp daquele pedido. Não exigir opt-in para fazer o pedido. Não presumir consentimento por cliente/pedido antigo e revalidar essa autorização antes de cada envio.
 
 ## Backend e banco
 
