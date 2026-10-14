@@ -546,6 +546,7 @@ function NovoProdutoModal({ onFechar, onCriado }: { onFechar: () => void; onCria
   const [novaCategoria, setNovaCategoria] = useState("");
   const [descricao, setDescricao] = useState("");
   const [tamanho, setTamanho] = useState<TamanhoProduto | null>(null);
+  const [controlaEstoqueUnidades, setControlaEstoqueUnidades] = useState(false);
   const [imagemUrl, setImagemUrl] = useState("");
   const [enviandoImagem, setEnviandoImagem] = useState(false);
   const [modoPrecificacao, setModoPrecificacao] = useState<ModoPrecificacao>("margem");
@@ -609,6 +610,13 @@ function NovoProdutoModal({ onFechar, onCriado }: { onFechar: () => void; onCria
       return;
     }
     const produto = await res.json();
+    if (controlaEstoqueUnidades) {
+      await fetch("/api/estoque/produtos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ produtoId: produto.id, acao: "configurar", ativo: true, saldoInicial: 0 }),
+      }).catch(() => null);
+    }
     onCriado(produto.id);
   }
 
@@ -634,6 +642,10 @@ function NovoProdutoModal({ onFechar, onCriado }: { onFechar: () => void; onCria
             <p className="text-[10px] font-bold uppercase tracking-[.14em] text-ink-400">Informações do item</p>
             <label className="block"><span className="mb-1.5 block text-xs font-semibold text-ink-600">Nome do produto</span><input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex.: Pizza Calabresa" className={CAMPO_CLASSE} /></label>
             <SeletorTamanho value={tamanho} onChange={setTamanho} />
+            <label className="flex items-start gap-2.5 rounded-xl border border-cream-200 bg-cream-50/70 p-3">
+              <input type="checkbox" checked={controlaEstoqueUnidades} onChange={(e) => setControlaEstoqueUnidades(e.target.checked)} className="mt-0.5" />
+              <span className="text-xs leading-5 text-ink-600"><span className="font-semibold text-ink-900">Produto vendido por unidade</span> (ex.: lata, garrafa). A quantidade é controlada em Estoque → Produtos por unidade e o item fica &quot;esgotado&quot; sozinho quando acabar.</span>
+            </label>
             <label className="block"><span className="mb-1.5 block text-xs font-semibold text-ink-600">Descrição <em className="not-italic font-normal text-ink-400">(opcional)</em></span><textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder="Ingredientes ou detalhes que ajudam na venda" rows={2} className={`${CAMPO_CLASSE} resize-none`} /></label>
             <div className="rounded-2xl border border-cream-200 bg-cream-50/70 p-3.5"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold text-ink-700">Imagem do produto <span className="font-normal text-ink-400">(opcional)</span></p><p className="mt-0.5 text-[11px] text-ink-400">Envie uma foto ou cole o endereço dela.</p></div><ImageIcon size={17} className="text-coral-600" /></div><label className="mt-3 flex min-h-[48px] cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-coral-300 bg-surface px-3 text-sm font-semibold text-coral-700 transition hover:bg-coral-050"><Upload size={16} />{enviandoImagem ? "Enviando imagem..." : "Escolher arquivo"}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => adicionarImagem(e.target.files?.[0])} className="sr-only" /></label><div className="my-3 flex items-center gap-3 text-[10px] font-semibold uppercase tracking-[.12em] text-ink-400"><i className="h-px flex-1 bg-cream-200" />ou cole uma URL<i className="h-px flex-1 bg-cream-200" /></div><div className="relative"><Link2 size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" /><input value={imagemUrl} onChange={(e) => setImagemUrl(e.target.value)} placeholder="https://..." className={`${CAMPO_CLASSE} !bg-surface !pl-10`} /></div>{imagemUrl && <p className="mt-2 truncate text-[11px] text-basil-600">Imagem pronta para o cardápio.</p>}</div>
           </section>

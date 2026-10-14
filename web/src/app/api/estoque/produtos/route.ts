@@ -10,14 +10,16 @@ export async function GET(request: NextRequest) {
   const produtos = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     const { rows } = await client.query(
       `select p.id as "produtoId", p.nome, p.tamanho, p.controla_estoque_unidades as "controlaEstoqueUnidades",
+              p.categoria_id as "categoriaId", coalesce(c.nome, 'Geral') as "categoriaNome",
               ep.saldo_fisico as "saldoFisico",
               coalesce(sum(ec.quantidade) filter (where ec.status in ('reservado', 'comprometido')), 0)::integer as comprometido,
               coalesce(ep.saldo_fisico, 0) - coalesce(sum(ec.quantidade) filter (where ec.status in ('reservado', 'comprometido')), 0)::integer as disponivel
        from produtos p
+       left join categorias_produto c on c.id = p.categoria_id
        left join estoque_produtos ep on ep.produto_id = p.id and ep.estabelecimento_id = p.estabelecimento_id
        left join estoque_compromissos_produtos ec on ec.produto_id = p.id and ec.estabelecimento_id = p.estabelecimento_id
-       group by p.id, ep.saldo_fisico
-       order by p.nome, p.tamanho`,
+       group by p.id, p.categoria_id, c.nome, ep.saldo_fisico
+       order by c.nome, p.nome, p.tamanho`,
     );
     return rows;
   });
