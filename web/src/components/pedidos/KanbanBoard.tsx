@@ -93,6 +93,7 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Central
   const [colunaDestino, setColunaDestino] = useState<PedidoStatus | null>(null);
   const [pedidoDetalhe, setPedidoDetalhe] = useState<Pedido | null>(null);
   const [promptNotificar, setPromptNotificar] = useState<{ pedido: Pedido; status: PedidoStatus } | null>(null);
+  const [confirmacaoAutomatica, setConfirmacaoAutomatica] = useState<{ codigo: number; status: PedidoStatus } | null>(null);
   const [notificando, setNotificando] = useState(false);
   const [pedidoParaDespachar, setPedidoParaDespachar] = useState<Pedido | null>(null);
   const [filtroCanal, setFiltroCanal] = useState<"todos" | PedidoCanal>("todos");
@@ -114,7 +115,9 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Central
     setDados((lista) => (lista ?? []).map((pedido) => pedido.id === pedidoId ? { ...pedido, status } : pedido));
     const resposta = await fetch(`/api/pedidos/${pedidoId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
     if (!resposta.ok) { recarregar(); return; }
-    if (pedidoAtual.clienteTelefone && status !== "cancelado") {
+    if (pedidoAtual.notificacaoAutomatica && status !== "cancelado") {
+      setConfirmacaoAutomatica({ codigo: pedidoAtual.codigo, status });
+    } else if (pedidoAtual.clienteTelefone && status !== "cancelado") {
       setPromptNotificar({ pedido: { ...pedidoAtual, status }, status });
     }
   }
@@ -125,7 +128,8 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Central
     if (!resposta.ok) { const dados = await resposta.json().catch(() => null); return { erro: dados?.erro ?? "Não foi possível despachar o pedido." }; }
     const atualizado = await resposta.json().catch(() => null) as { status?: PedidoStatus } | null;
     setDados((lista) => (lista ?? []).map((pedido) => pedido.id === pedidoParaDespachar.id ? { ...pedido, status: atualizado?.status ?? "saiu_para_entrega" } : pedido));
-    if (pedidoParaDespachar.clienteTelefone) setPromptNotificar({ pedido: { ...pedidoParaDespachar, status: "saiu_para_entrega" }, status: "saiu_para_entrega" });
+    if (pedidoParaDespachar.notificacaoAutomatica) setConfirmacaoAutomatica({ codigo: pedidoParaDespachar.codigo, status: "saiu_para_entrega" });
+    else if (pedidoParaDespachar.clienteTelefone) setPromptNotificar({ pedido: { ...pedidoParaDespachar, status: "saiu_para_entrega" }, status: "saiu_para_entrega" });
     setPedidoParaDespachar(null);
     return {};
   }
@@ -135,6 +139,12 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Central
     const t = setTimeout(() => setPromptNotificar(null), 7000);
     return () => clearTimeout(t);
   }, [promptNotificar]);
+
+  useEffect(() => {
+    if (!confirmacaoAutomatica) return;
+    const t = setTimeout(() => setConfirmacaoAutomatica(null), 5000);
+    return () => clearTimeout(t);
+  }, [confirmacaoAutomatica]);
 
   async function confirmarNotificacao() {
     if (!promptNotificar) return;
@@ -244,6 +254,7 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Central
           <button onClick={() => setPromptNotificar(null)} className="shrink-0 text-white/40 transition hover:text-white" aria-label="Fechar aviso"><X size={15} /></button>
         </div>
       )}
+      {confirmacaoAutomatica && <div className="fixed inset-x-4 bottom-4 z-[60] mx-auto flex max-w-sm items-start gap-3 rounded-2xl bg-emerald-700 p-4 text-white shadow-2xl sm:right-4 sm:left-auto"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/15"><Check size={17} /></span><div className="min-w-0 flex-1"><p className="text-sm font-semibold">Mensagem automática enfileirada</p><p className="mt-0.5 text-xs leading-5 text-white/75">Pedido #{confirmacaoAutomatica.codigo}: atualização para “{PEDIDO_STATUS_LABEL[confirmacaoAutomatica.status]}” será enviada ao cliente.</p></div><button onClick={() => setConfirmacaoAutomatica(null)} className="shrink-0 text-white/60 hover:text-white" aria-label="Fechar confirmação"><X size={15} /></button></div>}
     </section>
   );
 }

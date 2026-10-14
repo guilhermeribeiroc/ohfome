@@ -7,6 +7,7 @@ import { accessTokenDoEstabelecimento, criarCobrancaPixMercadoPago, emailTecnico
 const PEDIDOS_ATIVOS_QUERY = `
   select
     p.id, p.codigo, p.tipo, p.origem, p.status, p.total, p.observacoes, p.forma_recebimento as "formaRecebimento", p.forma_pagamento as "formaPagamento", p.tipo_cartao as "tipoCartao", p.troco_para as "trocoPara", p.pagamento_dividido as "pagamentoDividido", p.pagamento_status as "pagamentoStatus", p.created_at as "createdAt", p.notificado_em as "notificadoEm",
+    (p.whatsapp_consentimento and exists (select 1 from estabelecimentos ew where ew.id = p.estabelecimento_id and ew.whatsapp_automacao_ativa and ew.whatsapp_instancia is not null)) as "notificacaoAutomatica",
     m.numero as "mesaNumero",
     c.nome as "clienteNome",
     c.telefone as "clienteTelefone",

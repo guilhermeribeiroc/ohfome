@@ -148,6 +148,7 @@ export interface Pedido {
   total: number;
   createdAt: string;
   notificadoEm?: string;
+  notificacaoAutomatica?: boolean;
   pedidoPaiCodigo?: number;
 }
 
