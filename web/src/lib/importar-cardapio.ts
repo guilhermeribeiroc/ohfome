@@ -107,7 +107,7 @@ export async function extrairItensCardapio(
   const client = new Anthropic({ apiKey });
   const modelo = process.env.ANTHROPIC_MODEL_CARDAPIO?.trim() || "claude-sonnet-5";
 
-  const mensagem = await client.messages.create({
+  const mensagem = await client.messages.stream({
     model: modelo,
     max_tokens: 32000,
     tools: [FERRAMENTA],
@@ -138,7 +138,7 @@ export async function extrairItensCardapio(
         ],
       },
     ],
-  });
+  }).finalMessage();
 
   const usoFerramenta = mensagem.content.find((bloco) => bloco.type === "tool_use");
   if (!usoFerramenta || usoFerramenta.type !== "tool_use") {
