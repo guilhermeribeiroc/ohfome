@@ -12,9 +12,10 @@ O cardápio digital não pedirá e-mail quando o cliente escolher Pix automátic
 ## Decisões confirmadas
 
 - Pix automático pode ser usado para pedido de balcão, retirada e delivery criado na Central.
+- As opções de Pix dependem do atendimento: em **balcão** e **retirada**, o atendente escolhe **Pix manual** ou **Pix automático**; em **delivery**, escolhe **Pix na entrega** ou **Pix automático**.
 - O atendente escolhe Pix e gera o QR Code explicitamente; não há cobrança antes dessa ação.
 - Com QR automático, o pedido só segue à cozinha após confirmação do Mercado Pago.
-- Para dinheiro, cartão e Pix manual, o fluxo atual segue sem mudanças e o pedido vai normalmente para a cozinha conforme sua modalidade.
+- Para dinheiro, cartão, Pix manual e Pix na entrega, o fluxo atual segue sem QR e o pedido vai normalmente para a cozinha conforme sua modalidade.
 - A validade de cinco minutos fica fora desta entrega: a integração online atual do Mercado Pago exige mínimo de 30 minutos. A validade real continua 30 minutos até avaliação de uma modalidade compatível.
 - O campo de e-mail deixa de ser exibido/exigido no cardápio público para Pix automático.
 
@@ -22,7 +23,7 @@ O cardápio digital não pedirá e-mail quando o cliente escolher Pix automátic
 
 ### Pedido presencial e QR
 
-1. No novo pedido, o atendente escolhe o tipo de atendimento e adiciona itens normalmente.
+1. No novo pedido, o atendente escolhe o tipo de atendimento e adiciona itens normalmente. A forma de Pix exibida é contextual: **Pix manual** em balcão/retirada e **Pix na entrega** no delivery; ambas são alternativas sem cobrança automática. **Pix automático** aparece em todos os três tipos.
 2. Ao selecionar **Pix automático**, o botão principal muda para **Gerar QR Pix**. O backend cria o pedido com `pagamento_status = pendente` e `enviado_cozinha = false`, reserva o estoque e cria a cobrança no Mercado Pago com chave de idempotência única.
 3. A resposta traz apenas os dados necessários para o modal seguro: código do pedido, QR em base64, Pix copia-e-cola e data/hora de expiração.
 4. A Central mostra modal de cobrança com QR, copiar-e-colar, contagem regressiva e acompanhamento do status. O QR não é impresso automaticamente nem exposto fora da sessão que o gerou.
@@ -53,6 +54,7 @@ O cardápio digital não pedirá e-mail quando o cliente escolher Pix automátic
 
 ## Experiência de uso
 
+- Em balcão e retirada, **Pix manual** significa que a equipe confirma o recebimento fora do QR automático. Em delivery, **Pix na entrega** deixa o pagamento pendente para recebimento na entrega. Nenhuma dessas opções gera QR nem bloqueia a cozinha.
 - A opção **Pix automático** só aparece quando o estabelecimento ativou Pix automático e conectou Mercado Pago. Caso contrário, a UI explica que é necessário configurar Pagamentos e Pix.
 - Depois de gerar, o modal mostra valor, pedido, prazo real de 30 minutos, QR e copia-e-cola. Fechar o modal não cancela a cobrança; o pedido pendente pode ser aberto novamente pela Central para acompanhar ou gerar uma nova cobrança após expirar/falhar.
 - Pedidos pendentes de Pix são distinguíveis na Central e não aparecem como prontos para preparo/cozinha até aprovação.
@@ -60,7 +62,7 @@ O cardápio digital não pedirá e-mail quando o cliente escolher Pix automátic
 
 ## Critérios de aceite
 
-1. Atendente autorizado cria Pix automático para balcão, retirada e delivery; usuário de outro tenant não acessa a cobrança.
+1. Em balcão/retirada, a Central apresenta Pix manual e Pix automático; em delivery, Pix na entrega e Pix automático. Usuário de outro tenant não acessa a cobrança.
 2. Uma ação repetida não cria cobrança duplicada; valor é sempre calculado no banco.
 3. Pedido Pix pendente não é enviado/imprimido na cozinha; aprovação libera uma vez e baixa estoque uma vez.
 4. Falha/expiração libera reserva e não envia à cozinha; nova cobrança é deliberada e rastreável.
