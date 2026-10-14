@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json(resultado);
   } catch (erro) {
+    console.error(`POST /api/produtos/importar-cardapio (${arquivos.length} fotos, ${totalBytes} bytes)`, erro);
     return NextResponse.json({ erro: erro instanceof Error ? erro.message : "Não foi possível ler o cardápio." }, { status: 502 });
   }
 }
