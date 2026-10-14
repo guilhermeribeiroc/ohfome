@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
 
   const produtos = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     const { rows } = await client.query(
-      `select p.id as "produtoId", p.nome, p.tamanho, p.controla_estoque_unidades as "controlaEstoqueUnidades",
+      `select p.id as "produtoId", p.nome, p.tamanho, p.imagem_url as "imagemUrl", p.controla_estoque_unidades as "controlaEstoqueUnidades",
               p.categoria_id as "categoriaId", coalesce(c.nome, 'Geral') as "categoriaNome",
               ep.saldo_fisico as "saldoFisico",
               coalesce(sum(ec.quantidade) filter (where ec.status in ('reservado', 'comprometido')), 0)::integer as comprometido,
