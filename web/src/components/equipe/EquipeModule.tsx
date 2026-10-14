@@ -35,6 +35,7 @@ export function EquipeModule() {
   const [rascunhoUsuario, setRascunhoUsuario] = useState<RascunhoUsuario>({ nome: "", usuario: "", senha: "", role: "" });
   const [rascunhoEntregador, setRascunhoEntregador] = useState<RascunhoEntregador>({ nome: "", veiculo: "", telefone: "" });
   const [erroUsuario, setErroUsuario] = useState("");
+  const [erroEntregador, setErroEntregador] = useState("");
 
   const cargos = MODULOS.filter((modulo) => estabelecimento?.modulosAtivos.includes(modulo.id));
   const usuarios = dados ?? [];
@@ -54,6 +55,9 @@ export function EquipeModule() {
 
       <section className="of-panel mt-5 overflow-hidden">
         <header className="of-panel-header"><div><h2 className="font-display text-lg font-bold text-ink-900">Entregadores</h2><p className="mt-0.5 text-xs text-ink-400">{(entregadores ?? []).filter((entregador) => entregador.ativo !== false).length} entregador(es) ativo(s). Não cria login nem senha.</p></div><div className="flex items-center gap-2"><span className="hidden h-10 w-10 items-center justify-center rounded-xl bg-basil-050 text-basil-600 sm:flex"><Truck size={19} /></span><button onClick={() => setNovoEntregadorAberto(true)} className="of-btn-primary"><Plus size={16} />Novo entregador</button></div></header>
+        <div className="divide-y divide-cream-200">{(entregadores ?? []).map((entregador) => <EntregadorLinha key={entregador.id} entregador={entregador} onAtualizado={(atualizado) => setEntregadores((atual) => (atual ?? []).map((item) => item.id === atualizado.id ? atualizado : item))} onExcluido={(id) => setEntregadores((atual) => (atual ?? []).filter((item) => item.id !== id))} onFalha={setErroEntregador} />)}</div>
+        {erroEntregador && <p role="alert" className="border-t border-danger-100 bg-danger-050 px-4 py-3 text-xs font-medium text-danger-700">{erroEntregador}</p>}
+        {!(entregadores ?? []).length && <div className="p-10 text-center text-sm text-ink-400">Nenhum entregador cadastrado ainda.</div>}
       </section>
 
       {novoUsuarioAberto && <NovoUsuarioModal cargos={cargos.map((cargo) => cargo.papel)} rascunho={rascunhoUsuario} onAlterar={setRascunhoUsuario} onFechar={() => setNovoUsuarioAberto(false)} onCriado={(criado) => { setDados((atual) => [...(atual ?? []), criado]); setRascunhoUsuario({ nome: "", usuario: "", senha: "", role: "" }); setNovoUsuarioAberto(false); }} />}
@@ -120,6 +124,43 @@ function NovoEntregadorModal({ rascunho, onAlterar, onFechar, onCriado }: { rasc
       <footer className="mt-5 flex justify-end border-t border-cream-200 pt-4"><button onClick={() => void criar()} disabled={enviando} className="of-btn-primary">{enviando ? "Cadastrando..." : "Cadastrar entregador"}<Plus size={16} /></button></footer>
     </section>
   </div>;
+}
+
+function EntregadorLinha({ entregador, onAtualizado, onExcluido, onFalha }: { entregador: Entregador; onAtualizado: (entregador: Entregador) => void; onExcluido: (id: string) => void; onFalha: (erro: string) => void }) {
+  const [nome, setNome] = useState(entregador.nome);
+  const [veiculo, setVeiculo] = useState(entregador.veiculo ?? "");
+  const [telefone, setTelefone] = useState(entregador.telefone ?? "");
+  const [salvando, setSalvando] = useState(false);
+
+  async function atualizar(campos: Record<string, unknown>) {
+    setSalvando(true);
+    const resposta = await fetch(`/api/entregadores/${entregador.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(campos) });
+    setSalvando(false);
+    if (!resposta.ok) {
+      const dadosErro = await resposta.json().catch(() => null);
+      onFalha(dadosErro?.erro ?? "Não foi possível atualizar o entregador.");
+      return;
+    }
+    onAtualizado(await resposta.json() as Entregador);
+  }
+
+  async function excluir() {
+    if (!confirm(`Remover "${entregador.nome}" da equipe de entrega?`)) return;
+    setSalvando(true);
+    const resposta = await fetch(`/api/entregadores/${entregador.id}`, { method: "DELETE" });
+    setSalvando(false);
+    if (!resposta.ok) {
+      const dadosErro = await resposta.json().catch(() => null);
+      onFalha(dadosErro?.erro ?? "Não foi possível remover o entregador.");
+      return;
+    }
+    onExcluido(entregador.id);
+  }
+
+  return <details className="group px-4 py-3.5"><summary className="flex cursor-pointer list-none items-center gap-3"><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${entregador.ativo !== false ? "bg-cream-100 text-ink-700" : "bg-danger-050 text-danger-600"}`}><Truck size={18} /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-ink-900">{entregador.nome}</p><p className="mt-0.5 text-xs text-ink-400">{entregador.veiculo || "Sem veículo"}{entregador.telefone ? ` · ${entregador.telefone}` : ""}</p></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.1em] ${entregador.ativo !== false ? "bg-basil-050 text-basil-700" : "bg-danger-050 text-danger-600"}`}>{entregador.ativo !== false ? "Ativo" : "Desativado"}</span></summary>
+    <div className="mt-4 grid gap-3 rounded-2xl bg-cream-50 p-3.5 sm:grid-cols-3"><label><span className="of-label">Nome</span><input value={nome} onChange={(evento) => setNome(evento.target.value)} className="of-field !bg-surface" /></label><label><span className="of-label">Veículo</span><input value={veiculo} onChange={(evento) => setVeiculo(evento.target.value)} className="of-field !bg-surface" /></label><label><span className="of-label">Telefone</span><input value={telefone} onChange={(evento) => setTelefone(evento.target.value)} className="of-field !bg-surface" /></label></div>
+    <div className="mt-3 flex flex-wrap justify-end gap-2"><button onClick={() => void atualizar({ nome, veiculo, telefone })} disabled={salvando} className="of-btn-secondary"><Save size={15} />Salvar</button><button onClick={() => void atualizar({ ativo: entregador.ativo === false })} disabled={salvando} className={entregador.ativo !== false ? "of-btn-secondary !text-danger-600" : "of-btn-secondary !text-basil-700"}><Power size={15} />{entregador.ativo !== false ? "Desativar" : "Reativar"}</button><button onClick={() => void excluir()} disabled={salvando} className="of-btn-secondary !text-danger-600"><X size={15} />Excluir</button></div>
+  </details>;
 }
 
 function UsuarioLinha({ conta, cargos, onAtualizado, onFalha }: { conta: UsuarioEquipe; cargos: PapelUsuario[]; onAtualizado: (conta: UsuarioEquipe) => void; onFalha: (erro: string) => void }) {
