@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, sessaoPodeGerirEstoque } from "@/lib/api-auth";
 import { comEstabelecimento } from "@/lib/db";
+import { imagemPadraoPorProduto } from "@/lib/imagens-categoria";
 
 interface ItemEntrada {
   nome: string;
@@ -118,14 +119,14 @@ export async function POST(request: NextRequest) {
         continue;
       }
       const { rows } = await client.query(
-        `insert into produtos (estabelecimento_id, categoria_id, nome, tamanho, descricao, modo_precificacao, preco_custo, margem_percentual, preco_venda)
-         values ($1, $2, $3, $4, $5, 'preco_manual', 0, 0, $6)
+        `insert into produtos (estabelecimento_id, categoria_id, nome, tamanho, descricao, modo_precificacao, preco_custo, margem_percentual, preco_venda, imagem_url)
+         values ($1, $2, $3, $4, $5, 'preco_manual', 0, 0, $6, $7)
          returning
            id, nome, tamanho, descricao, imagem_url as "imagemUrl",
            coalesce((select nome from categorias_produto where id = $2), 'Geral') as "categoriaNome",
            modo_precificacao as "modoPrecificacao", preco_custo as "precoCusto",
            margem_percentual as "margemPercentual", preco_venda as "precoVenda", ativo`,
-        [estabelecimentoId, catId, item.nome, item.tamanho, item.descricao || null, item.precoVenda]
+        [estabelecimentoId, catId, item.nome, item.tamanho, item.descricao || null, item.precoVenda, imagemPadraoPorProduto(item.nome, item.categoriaNome)]
       );
       if (item.tiposPao.length > 0) {
         const { rows: grupoRows } = await client.query<{ id: string }>(
@@ -143,7 +144,7 @@ export async function POST(request: NextRequest) {
     }
     for (const pizza of pizzas) {
       const catId = await categoriaId(pizza.categoriaNome);
-      const { rows } = await client.query(`insert into produtos (estabelecimento_id, categoria_id, nome, descricao, modo_precificacao, preco_custo, margem_percentual, preco_venda, tipo_produto) values ($1,$2,$3,$4,'preco_manual',0,0,$5,'pizza') returning id, nome, descricao`, [estabelecimentoId, catId, pizza.nome, pizza.descricao || null, Math.min(...pizza.tamanhos.map((tamanho) => tamanho.precoSaborUnico))]);
+      const { rows } = await client.query(`insert into produtos (estabelecimento_id, categoria_id, nome, descricao, modo_precificacao, preco_custo, margem_percentual, preco_venda, tipo_produto, imagem_url) values ($1,$2,$3,$4,'preco_manual',0,0,$5,'pizza',$6) returning id, nome, descricao`, [estabelecimentoId, catId, pizza.nome, pizza.descricao || null, Math.min(...pizza.tamanhos.map((tamanho) => tamanho.precoSaborUnico)), imagemPadraoPorProduto(pizza.nome, pizza.categoriaNome)]);
       const produto = rows[0];
       await client.query(`insert into produto_configuracoes_pizza (produto_id, estabelecimento_id, regra_meio_a_meio) values ($1,$2,$3)`, [produto.id, estabelecimentoId, pizza.regraMeioAMeio]);
       for (const [ordem, tamanho] of pizza.tamanhos.entries()) await client.query(`insert into pizza_tamanhos (produto_id, estabelecimento_id, nome, preco_sabor_unico, preco_meio_a_meio, ordem) values ($1,$2,$3,$4,$5,$6)`, [produto.id, estabelecimentoId, tamanho.nome, tamanho.precoSaborUnico, tamanho.precoMeioAMeio, ordem]);

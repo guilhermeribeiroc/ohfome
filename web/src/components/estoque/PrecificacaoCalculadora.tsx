@@ -5,6 +5,7 @@ import { Calculator, Camera, Check, CircleDollarSign, Image as ImageIcon, Link2,
 import { nomeProdutoComTamanho, type Categoria, type ModoPrecificacao, type Produto, type TamanhoProduto } from "@/lib/types";
 import { usePolling } from "@/lib/use-polling";
 import { mascararMoeda, moedaComCentavos, numeroDaMoeda } from "@/lib/moeda";
+import { imagemPadraoPorProduto } from "@/lib/imagens-categoria";
 import { FichaTecnica } from "./FichaTecnica";
 import { OpcoesProduto } from "./OpcoesProduto";
 import { PizzaConfiguracao } from "./PizzaConfiguracao";
@@ -469,7 +470,8 @@ function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; 
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-ink-600">{itens.length} item(ns) e {pizzas.length} pizza(s) encontrada(s) · {selecionados.length + pizzasSelecionadas.length} selecionado(s)</p>
               </div>
-              {pizzas.map((pizza) => <div key={pizza.chave} className="rounded-2xl border border-coral-200 bg-coral-050/50 p-3.5"><div className="flex items-start gap-2"><input type="checkbox" checked={pizza.incluir} onChange={() => setPizzas((atuais) => atuais.map((item) => item.chave === pizza.chave ? { ...item, incluir: !item.incluir } : item))} className="mt-1" /><div className="min-w-0 flex-1"><p className="text-sm font-bold text-ink-900">🍕 {pizza.nome}</p><p className="mt-1 text-xs text-ink-500">{pizza.categoriaNome} · meio a meio: {pizza.regraMeioAMeio === "maior_valor" ? "maior valor" : pizza.regraMeioAMeio === "media" ? "média" : "preço fixo"}</p><p className="mt-2 text-xs text-ink-700"><b>Tamanhos:</b> {pizza.tamanhos.map((tamanho) => `${tamanho.nome} R$ ${tamanho.precoSaborUnico.toFixed(2).replace(".", ",")}`).join(" · ")}</p><p className="mt-1 text-xs text-ink-700"><b>Sabores:</b> {pizza.sabores.map((sabor) => sabor.nome).join(" · ")}</p><p className="mt-2 text-[11px] text-ink-400">Após criar, você pode ajustar sabores, tamanhos e valores na edição do produto.</p></div></div></div>)}
+              <p className="text-[11px] text-ink-400">Cada item recebe uma foto genérica da categoria dele automaticamente. Depois de criar, você pode trocar a foto de cada produto na edição.</p>
+              {pizzas.map((pizza) => <div key={pizza.chave} className="rounded-2xl border border-coral-200 bg-coral-050/50 p-3.5"><div className="flex items-start gap-2"><input type="checkbox" checked={pizza.incluir} onChange={() => setPizzas((atuais) => atuais.map((item) => item.chave === pizza.chave ? { ...item, incluir: !item.incluir } : item))} className="mt-1" /><img src={imagemPadraoPorProduto(pizza.nome, pizza.categoriaNome)} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" /><div className="min-w-0 flex-1"><p className="text-sm font-bold text-ink-900">🍕 {pizza.nome}</p><p className="mt-1 text-xs text-ink-500">{pizza.categoriaNome} · meio a meio: {pizza.regraMeioAMeio === "maior_valor" ? "maior valor" : pizza.regraMeioAMeio === "media" ? "média" : "preço fixo"}</p><p className="mt-2 text-xs text-ink-700"><b>Tamanhos:</b> {pizza.tamanhos.map((tamanho) => `${tamanho.nome} R$ ${tamanho.precoSaborUnico.toFixed(2).replace(".", ",")}`).join(" · ")}</p><p className="mt-1 text-xs text-ink-700"><b>Sabores:</b> {pizza.sabores.map((sabor) => sabor.nome).join(" · ")}</p><p className="mt-2 text-[11px] text-ink-400">Após criar, você pode ajustar sabores, tamanhos e valores na edição do produto.</p></div></div></div>)}
               <div className="space-y-3">
                 {itens.map((item, indice) => (
                   <div key={item.chave}>
@@ -485,6 +487,7 @@ function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; 
                       >
                         <Check size={14} />
                       </button>
+                      <img src={imagemPadraoPorProduto(item.nome, item.categoriaNome)} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
                       <div className="min-w-0 flex-1 space-y-2">
                         <div className="flex gap-2">
                           <input value={item.nome} onChange={(e) => atualizarItem(item.chave, "nome", e.target.value)} placeholder="Nome do produto" className={`${CAMPO_CLASSE} !py-2 flex-1 font-semibold`} />
