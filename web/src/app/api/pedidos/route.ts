@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createHash, randomUUID } from "crypto";
 import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, sessaoPodeAcessarModulo } from "@/lib/api-auth";
 import { comEstabelecimento } from "@/lib/db";
+import { accessTokenDoEstabelecimento, criarCobrancaPixMercadoPago, emailTecnicoPix, MercadoPagoErro } from "@/lib/mercado-pago";
 
 const PEDIDOS_ATIVOS_QUERY = `
   select
@@ -110,6 +111,7 @@ export async function POST(request: NextRequest) {
   const atualizarCliente = body?.atualizarCliente === true;
   const formaRecebimento = tipo === "balcao" && body?.formaRecebimento === "retirada" ? "retirada" : null;
   const whatsappConsentimento = body?.whatsappConsentimento === true;
+  const pixAutomatico = body?.pixAutomatico === true;
   const chaveIdempotencia = request.headers.get("Idempotency-Key") ?? (typeof body?.chaveIdempotencia === "string" ? body.chaveIdempotencia : randomUUID());
 
   if (tipo !== "mesa" && tipo !== "balcao" && tipo !== "delivery") {
@@ -130,7 +132,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ erro: "Selecione o cliente para a retirada." }, { status: 400 });
   }
   if (modalidade === "imediata" && tipo !== "balcao") return NextResponse.json({ erro: "Venda imediata é exclusiva do balcão." }, { status: 400 });
-  if (modalidade === "imediata" && (!confirmarRecebimento || !formaPagamento)) {
+  if (modalidade === "imediata" && !pixAutomatico && (!confirmarRecebimento || !formaPagamento)) {
     return NextResponse.json({ erro: "Confirme a entrega e o recebimento para concluir a venda imediata." }, { status: 400 });
   }
   if (chaveIdempotencia.length < 16 || chaveIdempotencia.length > 200) return NextResponse.json({ erro: "Chave de confirmação inválida." }, { status: 400 });
@@ -141,6 +143,12 @@ export async function POST(request: NextRequest) {
     if (formaPagamento === "cartao" && tipoCartao !== "credito" && tipoCartao !== "debito") {
       return NextResponse.json({ erro: "Informe crédito ou débito." }, { status: 400 });
     }
+  }
+  if (pixAutomatico && formaPagamento !== "pix") {
+    return NextResponse.json({ erro: "Pix automático precisa usar a forma de pagamento Pix." }, { status: 400 });
+  }
+  if (pixAutomatico && tipo === "mesa") {
+    return NextResponse.json({ erro: "Pix automático está disponível para balcão, retirada e delivery." }, { status: 400 });
   }
   const itensValidos = itensInput.filter(
     (i): i is ItemInput & { produtoId: string; quantidade: number } => typeof i.produtoId === "string" && Number.isInteger(i.quantidade) && (i.quantidade ?? 0) > 0
@@ -154,7 +162,7 @@ export async function POST(request: NextRequest) {
       const hashConteudo = createHash("sha256").update(JSON.stringify({
         tipo, mesaId, clienteIdInformado, clienteNome, clienteTelefone, endereco, bairroId, itens: itensValidos,
         formaPagamento, tipoCartao, trocoPara: Number.isFinite(trocoPara) ? trocoPara : null, modalidade,
-        formaRecebimento, whatsappConsentimento,
+        formaRecebimento, whatsappConsentimento, pixAutomatico,
       })).digest("hex");
       const { rows: chaveExistente } = await client.query(
         `select pedido_id as "pedidoId", hash_conteudo as hash from pedidos_idempotencia
@@ -163,7 +171,7 @@ export async function POST(request: NextRequest) {
       );
       if (chaveExistente[0]) {
         if (chaveExistente[0].hash !== hashConteudo) throw Object.assign(new Error("Esta confirmação já foi usada para outro pedido."), { status: 409 });
-        return { pedidoId: chaveExistente[0].pedidoId as string, repetido: true };
+        return { pedidoId: chaveExistente[0].pedidoId as string, repetido: true, pixAutomatico };
       }
       // Preco sempre vem do banco, nunca do cliente.
       const idsProdutos = itensValidos.map((i) => i.produtoId);
@@ -242,12 +250,12 @@ export async function POST(request: NextRequest) {
          returning id`,
         [
           sessao.estabelecimentoId, tipo,
-          modalidade === "imediata" ? "finalizado" : "novo", modalidade !== "imediata",
+          modalidade === "imediata" && !pixAutomatico ? "finalizado" : "novo", modalidade !== "imediata" && !pixAutomatico,
           comandaId, clienteId, sessao.usuarioId, taxaEntrega,
           formaPagamento ?? null,
           formaPagamento === "cartao" ? tipoCartao : null,
           formaPagamento === "dinheiro" && trocoPara > 0 ? trocoPara : null,
-          modalidade, modalidade === "imediata" ? "pago" : "pendente",
+          modalidade, modalidade === "imediata" && !pixAutomatico ? "pago" : "pendente",
           formaRecebimento, whatsappConsentimento && clienteId !== null,
         ]
       );
@@ -329,20 +337,70 @@ export async function POST(request: NextRequest) {
       }
 
       await client.query(`select fn_comprometer_estoque_pedido($1, 'comprometido')`, [pedidoId]);
-      if (modalidade === "imediata") await client.query(`select fn_consumir_estoque_pedido($1)`, [pedidoId]);
+      if (modalidade === "imediata" && !pixAutomatico) await client.query(`select fn_consumir_estoque_pedido($1)`, [pedidoId]);
       await client.query(
         `insert into pedidos_idempotencia (estabelecimento_id, chave, hash_conteudo, pedido_id) values ($1, $2, $3, $4)`,
         [sessao.estabelecimentoId, chaveIdempotencia, hashConteudo, pedidoId]
       );
-      return { pedidoId, repetido: false };
+      return { pedidoId, repetido: false, pixAutomatico };
     });
+
+    let cobranca: { copiaCola?: string; qrCodeBase64?: string; ticketUrl?: string; expiraEm?: string } | null = null;
+    if (criado.pixAutomatico) {
+      try {
+        cobranca = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
+          const { rows: existente } = await client.query<{ copiaCola: string | null; qrCodeBase64: string | null; ticketUrl: string | null; expiraEm: Date | null }>(
+            `select copia_cola as "copiaCola", qr_code_base64 as "qrCodeBase64", ticket_url as "ticketUrl", expira_em as "expiraEm"
+               from pagamentos_pix where pedido_id = $1`, [criado.pedidoId]
+          );
+          if (existente[0]?.copiaCola && existente[0]?.qrCodeBase64) return {
+            copiaCola: existente[0].copiaCola,
+            qrCodeBase64: existente[0].qrCodeBase64,
+            ticketUrl: existente[0].ticketUrl ?? undefined,
+            expiraEm: existente[0].expiraEm?.toISOString(),
+          };
+
+          const { rows: configuracoes } = await client.query<{ expiracaoMinutos: number }>(
+            `select expiracao_minutos as "expiracaoMinutos" from configuracoes_pix
+              where estabelecimento_id = $1 and ativo and modo = 'mercado_pago'`, [sessao.estabelecimentoId]
+          );
+          const configuracao = configuracoes[0];
+          if (!configuracao) throw new MercadoPagoErro("Ative o Pix automático do Mercado Pago em Configurações antes de gerar o QR Code.", 409);
+          const { rows: pedidos } = await client.query<{ total: number }>(`select total from pedidos where id = $1 and enviado_cozinha = false and pagamento_status = 'pendente'`, [criado.pedidoId]);
+          if (!pedidos[0]) throw new MercadoPagoErro("Este pedido já não está aguardando pagamento.", 409);
+          const idempotencyKey = randomUUID();
+          const expiraEm = new Date(Date.now() + configuracao.expiracaoMinutos * 60_000);
+          await client.query(
+            `insert into pagamentos_pix (estabelecimento_id, pedido_id, provedor, idempotency_key, valor, expira_em)
+             values ($1, $2, 'mercado_pago', $3::uuid, $4, $5)`,
+            [sessao.estabelecimentoId, criado.pedidoId, idempotencyKey, pedidos[0].total, expiraEm]
+          );
+          const resultado = await criarCobrancaPixMercadoPago(await accessTokenDoEstabelecimento(client, sessao.estabelecimentoId), {
+            pedidoId: criado.pedidoId, valor: Number(pedidos[0].total), email: emailTecnicoPix(), expiraEm, idempotencyKey,
+          });
+          const pagamento = resultado.pagamento;
+          await client.query(
+            `update pagamentos_pix set order_id = $2, payment_id = $3, copia_cola = $4, qr_code_base64 = $5, ticket_url = $6 where pedido_id = $1`,
+            [criado.pedidoId, resultado.ordem.id, pagamento.id ?? null, pagamento.payment_method?.qr_code ?? null, pagamento.payment_method?.qr_code_base64 ?? null, pagamento.payment_method?.ticket_url ?? null]
+          );
+          return { copiaCola: pagamento.payment_method?.qr_code, qrCodeBase64: pagamento.payment_method?.qr_code_base64, ticketUrl: pagamento.payment_method?.ticket_url, expiraEm: expiraEm.toISOString() };
+        });
+      } catch (erro) {
+        await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
+          await client.query(`update pedidos set pagamento_status = 'falhou' where id = $1 and enviado_cozinha = false and pagamento_status = 'pendente'`, [criado.pedidoId]);
+          await client.query(`select fn_liberar_estoque_pedido($1::uuid)`, [criado.pedidoId]);
+        }).catch(() => undefined);
+        const status = erro instanceof MercadoPagoErro ? erro.status : 502;
+        return NextResponse.json({ erro: erro instanceof MercadoPagoErro ? erro.message : "Não foi possível gerar o Pix. Tente novamente." }, { status });
+      }
+    }
 
     const [pedido] = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
       const { rows } = await client.query(`${PEDIDOS_ATIVOS_QUERY} where p.id = $1`, [criado.pedidoId]);
       return rows;
     });
 
-    return NextResponse.json(pedido, { status: criado.repetido ? 200 : 201 });
+    return NextResponse.json({ ...pedido, cobranca }, { status: criado.repetido ? 200 : 201 });
   } catch (erro) {
     const status = (erro as { status?: number }).status ?? 500;
     if (status === 500) console.error("POST /api/pedidos", erro);

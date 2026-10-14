@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { randomUUID } from "crypto";
 import { comEstabelecimento, queryPublico } from "@/lib/db";
-import { accessTokenDoEstabelecimento, criarCobrancaPixMercadoPago, MercadoPagoErro } from "@/lib/mercado-pago";
+import { accessTokenDoEstabelecimento, criarCobrancaPixMercadoPago, emailTecnicoPix, MercadoPagoErro } from "@/lib/mercado-pago";
 import { ipClienteConfiavel, limitado } from "@/lib/rate-limit";
 
 const EMAIL_TELEFONE_MIN = 8;
@@ -33,10 +33,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   })) ?? null;
   const observacoes = typeof body?.observacoes === "string" ? body.observacoes.trim() : "";
   const cpf = typeof body?.cpf === "string" ? body.cpf.replace(/\D/g, "") : "";
-  const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
   const notificar = body?.notificar === true;
   const bairroId = typeof body?.bairroId === "string" ? body.bairroId : null;
   const itens = Array.isArray(body?.itens) ? body.itens : [];
+  const precisaEmailTecnicoPix = formaPagamento === "pix" || pagamentoDividido?.some((parte) => parte.forma === "pix");
 
   const ip = ipClienteConfiavel(request);
   const limiteTelefone = await limitado("pedido-publico:telefone", `${slug}:${telefone}`);
@@ -86,7 +86,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const linhas = await queryPublico<{ fn_criar_pedido_publico: { id: string; codigo: number; estabelecimentoId: string; notificar: boolean; taxaEntrega: number; total: number; valorPix?: number; pixModo?: "manual" | "mercado_pago" | null; aguardandoPagamento?: boolean } }>(
       "select fn_criar_pedido_publico($1, $2, $3, $4, $5, $6, $7, $8, $9::numeric, $10::jsonb, $11, $12, $13::uuid, $14, $15::jsonb)",
-      [slug, clienteNome, telefone, formaRecebimento, endereco, observacoes, formaPagamento, tipoCartao || null, trocoPara, JSON.stringify(itens), cpf || null, notificar, bairroId, email || null, pagamentoDividido ? JSON.stringify(pagamentoDividido) : null]
+      // A função ainda recebe esse campo por compatibilidade de schema. O
+      // e-mail é gerado no servidor somente quando o Pix automático é usado.
+      [slug, clienteNome, telefone, formaRecebimento, endereco, observacoes, formaPagamento, tipoCartao || null, trocoPara, JSON.stringify(itens), cpf || null, notificar, bairroId, precisaEmailTecnicoPix ? emailTecnicoPix() : null, pagamentoDividido ? JSON.stringify(pagamentoDividido) : null]
     );
     const pedido = linhas[0].fn_criar_pedido_publico;
     const valorCobrancaPix = pedido.valorPix ?? pedido.total;
@@ -101,11 +103,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         );
         const configuracao = configuracoes[0];
         if (!configuracao) throw new MercadoPagoErro("Pix automático não está disponível neste momento.", 409);
-        const { rows: clienteRows } = await client.query<{ email: string | null }>(
-          `select c.email from pedidos p join clientes c on c.id = p.cliente_id where p.id = $1 and p.enviado_cozinha = false`, [pedido.id]
-        );
-        const emailPagador = clienteRows[0]?.email;
-        if (!emailPagador) throw new MercadoPagoErro("Informe um e-mail válido para gerar o Pix.", 400);
+        const emailPagador = emailTecnicoPix();
 
         const idempotencyKey = randomUUID();
         const expiraEm = new Date(Date.now() + configuracao.expiracaoMinutos * 60_000);

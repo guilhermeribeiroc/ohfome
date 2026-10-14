@@ -1807,7 +1807,6 @@ function CarrinhoSheet({
   const [nome, setNome] = useState("");
   const [telefone, setTelefone] = useState("");
   const [cpf, setCpf] = useState("");
-  const [email, setEmail] = useState("");
   const [notificar, setNotificar] = useState(false);
   const [rua, setRua] = useState("");
   const [numeroEndereco, setNumeroEndereco] = useState("");
@@ -1863,7 +1862,6 @@ function CarrinhoSheet({
   const forma2Efetiva = dividirPagamento && forma2 === formaPagamento
     ? (["cartao", "dinheiro", "pix"] as const).find((f) => f !== formaPagamento && (f !== "pix" || dados.pix)) ?? "dinheiro"
     : forma2;
-  const usaPixMercadoPagoNaDivisao = dividirPagamento && dados.pix?.modo === "mercado_pago" && (formaPagamento === "pix" || forma2Efetiva === "pix");
   const enderecoFormatado = [
     rua.trim() && `${rua.trim()}, ${numeroEndereco.trim()}`,
     complementoEndereco.trim(),
@@ -1896,16 +1894,6 @@ function CarrinhoSheet({
       return;
     }
     if (!validarDados()) return;
-    const emailPagador = email.trim();
-    const usaPixMpNaParte1 = formaPagamento === "pix" && dados.pix?.modo === "mercado_pago";
-    const usaPixMpNaParte2 = dividirPagamento && forma2Efetiva === "pix" && dados.pix?.modo === "mercado_pago";
-    if (
-      (usaPixMpNaParte1 || usaPixMpNaParte2) &&
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailPagador)
-    ) {
-      setErro("Informe um e-mail válido para gerar o Pix.");
-      return;
-    }
     if (
       !dividirPagamento &&
       formaPagamento === "dinheiro" &&
@@ -1942,7 +1930,6 @@ function CarrinhoSheet({
         clienteNome: nome,
         telefone,
         cpf,
-        email: emailPagador,
         notificar,
         formaRecebimento,
         endereco: enderecoFormatado,
@@ -2398,12 +2385,6 @@ function CarrinhoSheet({
                   >
                     {dividirPagamento ? "Pagar com uma forma só" : "Quero pagar em duas formas"}
                   </button>
-                  {!dividirPagamento && formaPagamento === "pix" && dados.pix?.modo === "mercado_pago" && (
-                    <Campo label="Seu e-mail para o Pix">
-                      <input type="email" autoComplete="email" value={email} onChange={(evento) => setEmail(evento.target.value)} placeholder="voce@exemplo.com" className="menu-field" />
-                      <small className="mt-1 block text-xs text-black/45">Usamos esse e-mail apenas para criar a cobrança no Mercado Pago.</small>
-                    </Campo>
-                  )}
                   {!dividirPagamento && formaPagamento === "pix" && (
                     <div className="rounded-2xl border border-coral-100 bg-coral-050 p-3 text-sm leading-5 text-black/65">
                       {dados.pix?.modo === "mercado_pago" ? "Você receberá um QR Code Pix válido por 30 minutos. A cozinha só receberá a comanda após a confirmação do pagamento." : "O Pix será pago na entrega. A equipe receberá seu pedido agora e confirmará o pagamento depois."}
@@ -2480,11 +2461,6 @@ function CarrinhoSheet({
                           <p className="mt-2 text-xs leading-4 text-black/45">Você receberá um QR Code Pix só desse valor.</p>
                         )}
                       </div>
-                      {(usaPixMercadoPagoNaDivisao) && (
-                        <Campo label="Seu e-mail para o Pix">
-                          <input type="email" autoComplete="email" value={email} onChange={(evento) => setEmail(evento.target.value)} placeholder="voce@exemplo.com" className="menu-field" />
-                        </Campo>
-                      )}
                     </div>
                   )}
                   <Campo label="Observações do pedido (opcional)">

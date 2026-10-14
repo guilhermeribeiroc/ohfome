@@ -130,7 +130,7 @@ export async function extrairItensCardapio(
               "Preserve as seções do cardápio quando elas forem legíveis. Quando não existir título claro, classifique cada produto pelo que ele é: pizzas, esfihas, hambúrgueres, sanduíches, pastéis, porções, bebidas, sobremesas ou outra categoria curta e coerente. " +
               "Para uma seção de pizzas com sabores e preços por tamanho, crie UMA ÚNICA pizza configurável por seção do cardápio (ex.: 'Pizzas Salgadas', 'Pizzas Doces'), juntando todos os sabores daquela seção no mesmo array de sabores — nunca crie uma pizza configurável separada por sabor. " +
               "Na pizza, use o menor preço de cada tamanho como precoSaborUnico. Para o acrescimo de cada sabor, use a diferença de preço no tamanho P (o menor tamanho) entre aquele sabor e o precoSaborUnico do tamanho P, mesmo que a diferença não seja idêntica nos outros tamanhos. Use maior_valor para meio a meio salvo se a foto declarar outra regra. " +
-              "Se não puder relacionar preço e tamanho com segurança, mantenha como item comum e preserve o texto. Para item comum, só use tamanho P, M ou G; rótulos livres de pizza ficam em pizzas. " +
+              "Só preencha tamanho P, M ou G em um item comum quando a própria foto mostrar claramente o MESMO produto em P, M e/ou G, cada qual com seu preço. Sanduíches, hambúrgueres, lanches, pastéis, esfihas e porções normalmente não usam esse campo: use tamanho null, a menos que a foto mostre explicitamente aquelas variações P/M/G do mesmo produto. Se não puder relacionar preço e tamanho com segurança, mantenha como item comum com tamanho null e preserve o texto. Rótulos livres de pizza ficam em pizzas. " +
               "Preserve o texto de ingredientes/descrição exatamente como está escrito, sem resumir. " +
               "Se um item tiver preços diferentes por tipo de pão (ex.: colunas 'Bola' e 'Árabe' com valores distintos), gere uma entrada por tipo de pão, usando tamanho null e colocando o tipo de pão entre parênteses no nome (ex.: 'X-Burguer (Pão Bola)', 'X-Burguer (Pão Árabe)'). " +
               "Se para um sanduíche ou hambúrguer o cardápio listar os tipos de pão disponíveis para escolha SEM variar o preço, preencha tiposPao com cada tipo; nos demais itens deixe tiposPao vazio. " +
@@ -162,9 +162,15 @@ export async function extrairItensCardapio(
           .map((tipo) => (typeof tipo === "string" ? tipo.trim() : ""))
           .filter((tipo) => tipo.length >= 2),
       ));
+      // Um P/M/G inferido em lanches era exibido em todo o sistema como se
+      // fosse tamanho real. A leitura só pode sugeri-lo quando a foto deixa
+      // isso explícito; para estes grupos conservadores, preservamos o item
+      // e deixamos a revisão humana decidir o tamanho.
+      const contextoLanche = `${nome} ${typeof registro.categoriaSugerida === "string" ? registro.categoriaSugerida : ""}`.toLowerCase();
+      const tamanhoSeguro = /sandu[ií]che|hamb[uú]rg|lanche|x[- ]?burger|esfiha|pastel/.test(contextoLanche) ? null : tamanho;
       return {
         nome,
-        tamanho,
+        tamanho: tamanhoSeguro,
         descricao: typeof registro.descricao === "string" ? registro.descricao.trim() : "",
         precoVenda: Math.round(precoVenda * 100) / 100,
         categoriaSugerida: typeof registro.categoriaSugerida === "string" && registro.categoriaSugerida.trim() ? registro.categoriaSugerida.trim() : "Geral",

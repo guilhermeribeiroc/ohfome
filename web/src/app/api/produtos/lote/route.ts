@@ -16,6 +16,10 @@ interface PizzaEntrada {
   sabores: { nome: string; descricao: string; acrescimo: number }[];
 }
 
+function pareceLanche(item: Pick<ItemEntrada, "nome" | "categoriaNome">) {
+  return /sandu[ií]che|hamb[uú]rg|lanche|x[- ]?burger|esfiha|pastel/i.test(`${item.nome} ${item.categoriaNome}`);
+}
+
 export async function POST(request: NextRequest) {
   const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
@@ -37,6 +41,11 @@ export async function POST(request: NextRequest) {
       ? Array.from(new Set(item.tiposPao.map((tipo: unknown) => (typeof tipo === "string" ? tipo.trim() : "")).filter((tipo: string) => tipo.length >= 2)))
       : [],
   }));
+
+  // A importação automática não tem uma confirmação humana para tamanhos em
+  // lanches. Evita que um P/M/G inferido polua o cadastro; no editor o dono
+  // ainda pode definir um tamanho verdadeiro de forma explícita.
+  for (const item of itens) if (pareceLanche(item)) item.tamanho = null;
 
   if (itens.some((item) => item.nome.length < 2 || !Number.isFinite(item.precoVenda) || item.precoVenda < 0)) {
     return NextResponse.json({ erro: "Um ou mais itens têm nome ou preço inválido." }, { status: 400 });

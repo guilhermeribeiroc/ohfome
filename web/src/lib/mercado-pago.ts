@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "crypto";
 import type { PoolClient } from "pg";
 
 const MP_API = "https://api.mercadopago.com";
@@ -40,6 +40,19 @@ export class MercadoPagoErro extends Error {
     super(message);
     this.name = "MercadoPagoErro";
   }
+}
+
+/**
+ * O Checkout Orders exige um e-mail de pagador para criar o Pix. Este e-mail
+ * é técnico, aleatório e nunca vem do cliente do cardápio. O domínio precisa
+ * ser controlado pelo operador para não apontar notificações a terceiros.
+ */
+export function emailTecnicoPix() {
+  const dominio = process.env.PIX_PAYER_EMAIL_DOMAIN?.trim().toLowerCase();
+  if (!dominio || !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9-]+)+$/.test(dominio)) {
+    throw new MercadoPagoErro("Configure PIX_PAYER_EMAIL_DOMAIN com um domínio válido para gerar Pix automático.", 503);
+  }
+  return `pix-${randomUUID()}@${dominio}`;
 }
 
 function ambiente(nome: "MERCADO_PAGO_CLIENT_ID" | "MERCADO_PAGO_CLIENT_SECRET" | "MERCADO_PAGO_REDIRECT_URI" | "MERCADO_PAGO_TOKEN_ENCRYPTION_KEY") {
