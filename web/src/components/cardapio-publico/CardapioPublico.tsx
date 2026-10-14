@@ -1484,15 +1484,23 @@ function ProdutoDetalhe({
   const grupos = produto.grupoOpcoes ?? [];
   const ehPizza = produto.tipoProduto === "pizza" && Boolean(produto.pizza);
   const [pizzaTamanhoId, setPizzaTamanhoId] = useState("");
-  const [pizzaSaborUmId, setPizzaSaborUmId] = useState("");
-  const [pizzaSaborDoisId, setPizzaSaborDoisId] = useState("");
+  const [pizzaSaboresEscolhidos, setPizzaSaboresEscolhidos] = useState<string[]>([]);
   const pizzaTamanhos = produto.pizza?.tamanhos ?? [];
   const pizzaSabores = produto.pizza?.sabores ?? [];
+
+  function alternarSaborPizza(saborId: string) {
+    setPizzaSaboresEscolhidos((atuais) => {
+      if (atuais.includes(saborId)) return atuais.filter((id) => id !== saborId);
+      if (atuais.length >= 2) return [atuais[1], saborId];
+      return [...atuais, saborId];
+    });
+  }
+
   const pizzaEscolhida: PizzaEscolhida | null = (() => {
     if (!ehPizza) return null;
     const tamanho = pizzaTamanhos.find((item) => item.id === pizzaTamanhoId);
-    const saborUm = pizzaSabores.find((item) => item.id === pizzaSaborUmId);
-    const saborDois = pizzaSaborDoisId ? pizzaSabores.find((item) => item.id === pizzaSaborDoisId) : null;
+    const saborUm = pizzaSabores.find((item) => item.id === pizzaSaboresEscolhidos[0]);
+    const saborDois = pizzaSaboresEscolhidos[1] ? pizzaSabores.find((item) => item.id === pizzaSaboresEscolhidos[1]) : null;
     if (!tamanho || !saborUm) return null;
     const valorUm = tamanho.precoSaborUnico + saborUm.acrescimo;
     const valorDois = saborDois ? tamanho.precoSaborUnico + saborDois.acrescimo : null;
@@ -1599,20 +1607,28 @@ function ProdutoDetalhe({
                 </div>
               </div>
               <div>
-                <span className="text-sm font-semibold text-[#181714]">Sabor</span>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-sm font-semibold text-[#181714]">Sabor</span>
+                  <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[.08em] text-black/40">
+                    {pizzaSaboresEscolhidos.length === 0 && "Escolha 1 ou 2 (meio a meio)"}
+                    {pizzaSaboresEscolhidos.length === 1 && "Toque em outro pra meio a meio"}
+                    {pizzaSaboresEscolhidos.length === 2 && "Meio a meio selecionado"}
+                  </span>
+                </div>
                 <div className="mt-2 space-y-2">
                   {pizzaSabores.map((sabor) => {
-                    const marcado = pizzaSaborUmId === sabor.id;
+                    const posicao = pizzaSaboresEscolhidos.indexOf(sabor.id);
+                    const marcado = posicao !== -1;
                     return (
                       <button
                         key={sabor.id}
                         type="button"
-                        onClick={() => { setPizzaSaborUmId(sabor.id); if (pizzaSaborDoisId === sabor.id) setPizzaSaborDoisId(""); }}
+                        onClick={() => alternarSaborPizza(sabor.id)}
                         className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-3 text-left text-sm transition ${marcado ? "border-[#0e7775] bg-[#0e7775]/[.07]" : "border-black/[.08] bg-white"}`}
                       >
                         <span className="flex items-center gap-2.5">
-                          <i className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${marcado ? "border-[#0e7775] bg-[#0e7775] text-white" : "border-black/20"}`}>
-                            {marcado && <Check size={12} strokeWidth={3} />}
+                          <i className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-bold ${marcado ? "border-[#0e7775] bg-[#0e7775] text-white" : "border-black/20"}`}>
+                            {marcado && (pizzaSaboresEscolhidos.length === 2 ? `½` : <Check size={12} strokeWidth={3} />)}
                           </i>
                           <span>
                             {sabor.nome}
@@ -1624,20 +1640,6 @@ function ProdutoDetalhe({
                     );
                   })}
                 </div>
-              </div>
-              <div>
-                <span className="text-sm font-semibold text-[#181714]">Segundo sabor <span className="text-xs font-medium text-black/40">(opcional, meio a meio)</span></span>
-                <select
-                  value={pizzaSaborDoisId}
-                  onChange={(evento) => setPizzaSaborDoisId(evento.target.value)}
-                  disabled={!pizzaSaborUmId}
-                  className="mt-2 w-full rounded-xl border border-black/[.08] bg-white px-3.5 py-3 text-sm outline-none disabled:opacity-50"
-                >
-                  <option value="">Pizza de um sabor só</option>
-                  {pizzaSabores.filter((sabor) => sabor.id !== pizzaSaborUmId).map((sabor) => (
-                    <option key={sabor.id} value={sabor.id}>{sabor.nome}</option>
-                  ))}
-                </select>
               </div>
             </div>
           )}
