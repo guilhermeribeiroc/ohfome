@@ -108,6 +108,8 @@ export async function POST(request: NextRequest) {
   const modalidade = body?.modalidade === "imediata" ? "imediata" : "preparo";
   const confirmarRecebimento = body?.confirmarRecebimento === true;
   const atualizarCliente = body?.atualizarCliente === true;
+  const formaRecebimento = tipo === "balcao" && body?.formaRecebimento === "retirada" ? "retirada" : null;
+  const whatsappConsentimento = body?.whatsappConsentimento === true;
   const chaveIdempotencia = request.headers.get("Idempotency-Key") ?? (typeof body?.chaveIdempotencia === "string" ? body.chaveIdempotencia : randomUUID());
 
   if (tipo !== "mesa" && tipo !== "balcao" && tipo !== "delivery") {
@@ -123,6 +125,9 @@ export async function POST(request: NextRequest) {
   }
   if (tipo === "delivery" && ((!clienteNome && !clienteIdInformado) || !endereco || !bairroId)) {
     return NextResponse.json({ erro: "Informe cliente, endereço e bairro para delivery." }, { status: 400 });
+  }
+  if (formaRecebimento === "retirada" && !clienteNome && !clienteIdInformado) {
+    return NextResponse.json({ erro: "Selecione o cliente para a retirada." }, { status: 400 });
   }
   if (modalidade === "imediata" && tipo !== "balcao") return NextResponse.json({ erro: "Venda imediata é exclusiva do balcão." }, { status: 400 });
   if (modalidade === "imediata" && (!confirmarRecebimento || !formaPagamento)) {
@@ -149,6 +154,7 @@ export async function POST(request: NextRequest) {
       const hashConteudo = createHash("sha256").update(JSON.stringify({
         tipo, mesaId, clienteIdInformado, clienteNome, clienteTelefone, endereco, bairroId, itens: itensValidos,
         formaPagamento, tipoCartao, trocoPara: Number.isFinite(trocoPara) ? trocoPara : null, modalidade,
+        formaRecebimento, whatsappConsentimento,
       })).digest("hex");
       const { rows: chaveExistente } = await client.query(
         `select pedido_id as "pedidoId", hash_conteudo as hash from pedidos_idempotencia
@@ -206,7 +212,7 @@ export async function POST(request: NextRequest) {
             [clienteId, clienteNome || null, clienteTelefone, endereco || null]
           );
         }
-      } else if (tipo === "delivery" && clienteNome) {
+      } else if ((tipo === "delivery" || formaRecebimento === "retirada") && clienteNome) {
         const { rows } = await client.query(
           `insert into clientes (estabelecimento_id, nome, telefone, endereco)
            values ($1, $2, $3, $4)
@@ -231,8 +237,8 @@ export async function POST(request: NextRequest) {
       }
 
       const { rows: pedidoRows } = await client.query(
-        `insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, comanda_id, cliente_id, usuario_id, taxa_entrega, forma_pagamento, tipo_cartao, troco_para, modalidade_atendimento, pagamento_status)
-         values ($1, $2, 'presencial', $3, $4, case when $4 then now() else null end, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        `insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, comanda_id, cliente_id, usuario_id, taxa_entrega, forma_pagamento, tipo_cartao, troco_para, modalidade_atendimento, pagamento_status, forma_recebimento, whatsapp_consentimento)
+         values ($1, $2, 'presencial', $3, $4, case when $4 then now() else null end, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
          returning id`,
         [
           sessao.estabelecimentoId, tipo,
@@ -242,6 +248,7 @@ export async function POST(request: NextRequest) {
           formaPagamento === "cartao" ? tipoCartao : null,
           formaPagamento === "dinheiro" && trocoPara > 0 ? trocoPara : null,
           modalidade, modalidade === "imediata" ? "pago" : "pendente",
+          formaRecebimento, whatsappConsentimento && clienteId !== null,
         ]
       );
       const pedidoId = pedidoRows[0].id;

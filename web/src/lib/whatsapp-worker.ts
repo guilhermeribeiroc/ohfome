@@ -22,6 +22,7 @@ type ContextoEnvio = {
   clienteNome: string | null;
   codigo: number | null;
   tipo: string | null;
+  formaRecebimento: string | null;
   estabelecimentoNome: string | null;
 };
 
@@ -37,9 +38,12 @@ function normalizarTelefone(telefone: string): string {
   return telefone.replace(/\D/g, "");
 }
 
-function montarTexto(statusPedido: StatusPedidoWhatsApp, tipo: string | null, codigo: number, nome: string): string {
+function montarTexto(statusPedido: StatusPedidoWhatsApp, tipo: string | null, formaRecebimento: string | null, codigo: number, nome: string): string {
   if (statusPedido === "finalizado" && tipo === "delivery") {
     return `Seu pedido #${codigo} na ${nome} foi entregue. Obrigado!`;
+  }
+  if (statusPedido === "pronto" && tipo === "balcao" && formaRecebimento === "retirada") {
+    return `Seu pedido #${codigo} na ${nome} está pronto! Já pode vir buscar.`;
   }
   return MENSAGEM_POR_STATUS[statusPedido](codigo, nome);
 }
@@ -48,7 +52,7 @@ async function buscarContexto(item: ClaimRow): Promise<ContextoEnvio> {
   return comEstabelecimento(item.estabelecimentoId, async (client) => {
     const { rows } = await client.query(
       `select e.whatsapp_automacao_ativa as "automationEnabled", e.whatsapp_instancia as "instancia", e.nome as "estabelecimentoNome",
-              p.whatsapp_consentimento as "consentimento", p.codigo as "codigo", p.tipo::text as "tipo",
+              p.whatsapp_consentimento as "consentimento", p.codigo as "codigo", p.tipo::text as "tipo", p.forma_recebimento as "formaRecebimento",
               c.nome as "clienteNome", c.telefone as "telefone"
        from pedidos p
        join estabelecimentos e on e.id = p.estabelecimento_id
@@ -58,7 +62,7 @@ async function buscarContexto(item: ClaimRow): Promise<ContextoEnvio> {
     );
     return (rows[0] as ContextoEnvio | undefined) ?? {
       automationEnabled: false, instancia: null, consentimento: false,
-      telefone: null, clienteNome: null, codigo: null, tipo: null, estabelecimentoNome: null,
+      telefone: null, clienteNome: null, codigo: null, tipo: null, formaRecebimento: null, estabelecimentoNome: null,
     };
   });
 }
@@ -100,7 +104,7 @@ async function processarItem(item: ClaimRow) {
     return;
   }
 
-  const texto = montarTexto(item.statusPedido, contexto.tipo, contexto.codigo, contexto.estabelecimentoNome ?? "nosso restaurante");
+  const texto = montarTexto(item.statusPedido, contexto.tipo, contexto.formaRecebimento, contexto.codigo, contexto.estabelecimentoNome ?? "nosso restaurante");
 
   try {
     const resposta = await enviarTexto(contexto.instancia, telefone, texto);
