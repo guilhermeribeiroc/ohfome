@@ -35,6 +35,15 @@ function getPoolPublica(): Pool {
   return globalForPg.pgPoolPublica;
 }
 
+// Para operacoes internas que legitimamente cruzam estabelecimentos (hoje: so
+// o worker de WhatsApp reivindicando lotes da fila global via
+// fn_whatsapp_claim_notificacoes). So deve chamar funcoes SECURITY DEFINER
+// que ja restringem o que e lido/escrito — nunca SQL livre aqui.
+export async function queryInterno<T = unknown>(text: string, params?: unknown[]): Promise<T[]> {
+  const { rows } = await getPoolInterna().query(text, params);
+  return rows as T[];
+}
+
 // Para operacoes que nao dependem de um estabelecimento logado ainda
 // (login, registro, cardapio publico) — essas passam pelas funcoes SECURITY
 // DEFINER do banco, que ja restringem o que pode ser lido/escrito.

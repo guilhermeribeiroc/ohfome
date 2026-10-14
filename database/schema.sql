@@ -81,6 +81,10 @@ create table estabelecimentos (
   slug text not null unique,
   logo_url text,
   whatsapp_atendimento text,
+  -- Nome da instancia na Evolution API (ver migration 039); criada uma vez e
+  -- reaproveitada em reconexoes. Automacao comeca desativada.
+  whatsapp_instancia text unique,
+  whatsapp_automacao_ativa boolean not null default false,
   cardapio_banner_modo text not null default 'padrao' check (cardapio_banner_modo in ('padrao', 'fixo', 'carrossel')),
   onboarding_concluido boolean not null default false,
   -- Conta interna usada para apresentar o produto; não é exposta no cardápio.
@@ -530,6 +534,9 @@ create table pedidos (
   pagamento_status text not null default 'pendente' check (pagamento_status in ('pendente', 'pago', 'falhou', 'estornado')),
   notificado_em timestamptz,
   notificado_mensagem text,
+  -- Snapshot do consentimento de WhatsApp no momento do pedido (migration
+  -- 039) — nunca inferir de clientes.notificar_pedido, que pode mudar depois.
+  whatsapp_consentimento boolean not null default false,
   subtotal numeric(10, 2) not null default 0,
   taxa_entrega numeric(10, 2) not null default 0,
   desconto numeric(10, 2) not null default 0,
@@ -702,6 +709,116 @@ $$ language plpgsql;
 create trigger trg_pedidos_historico
   after insert or update of status on pedidos
   for each row execute function registrar_historico_status();
+
+-- Outbox de notificacoes WhatsApp (migration 039): uma linha por (pedido,
+-- status) a notificar. Sem telefone nem corpo de mensagem — so o necessario
+-- pro worker montar e rastrear o envio.
+create table notificacoes_whatsapp_pedido (
+  id uuid primary key default gen_random_uuid(),
+  estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade,
+  pedido_id uuid not null references pedidos(id) on delete cascade,
+  status_pedido pedido_status not null,
+  fila text not null default 'pending' check (fila in ('pending', 'accepted', 'failed', 'uncertain', 'ignored')),
+  tentativas integer not null default 0,
+  proxima_tentativa_em timestamptz not null default now(),
+  lease_until timestamptz,
+  provider_message_id text,
+  erro text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (pedido_id, status_pedido)
+);
+
+create index idx_notificacoes_whatsapp_estabelecimento on notificacoes_whatsapp_pedido(estabelecimento_id);
+create index idx_notificacoes_whatsapp_claim on notificacoes_whatsapp_pedido(proxima_tentativa_em)
+  where fila = 'pending';
+
+create trigger trg_notificacoes_whatsapp_updated_at
+  before update on notificacoes_whatsapp_pedido
+  for each row execute function set_updated_at();
+
+-- Enfileira uma notificacao por transicao de status (inclui o insert, que
+-- cobre "pedido recebido"). So gera evento quando ha cliente com telefone,
+-- consentimento gravado no PEDIDO (nunca no perfil do cliente) e a automacao
+-- do estabelecimento esta ativa. Nenhuma chamada externa acontece aqui —
+-- so grava a intencao, na mesma transacao da mudanca de status.
+create function enfileirar_notificacao_whatsapp() returns trigger as $$
+declare
+  v_automacao_ativa boolean;
+  v_telefone text;
+begin
+  if new.status = 'cancelado' or new.cliente_id is null or not new.whatsapp_consentimento then
+    return new;
+  end if;
+
+  select e.whatsapp_automacao_ativa into v_automacao_ativa
+  from estabelecimentos e where e.id = new.estabelecimento_id;
+
+  if not coalesce(v_automacao_ativa, false) then
+    return new;
+  end if;
+
+  select c.telefone into v_telefone from clientes c where c.id = new.cliente_id;
+  if v_telefone is null or length(v_telefone) < 10 then
+    return new;
+  end if;
+
+  insert into notificacoes_whatsapp_pedido (estabelecimento_id, pedido_id, status_pedido)
+  values (new.estabelecimento_id, new.id, new.status)
+  on conflict (pedido_id, status_pedido) do nothing;
+
+  return new;
+end;
+$$ language plpgsql;
+
+create trigger trg_pedidos_notificacao_whatsapp
+  after insert or update of status on pedidos
+  for each row execute function enfileirar_notificacao_whatsapp();
+
+-- Desativar a automacao ignora pendencias existentes (mantendo o historico);
+-- reativar nao reenvia retroativamente, pois so novas transicoes passam pelo
+-- trigger acima.
+create function fn_whatsapp_desativar_automacao(p_estabelecimento_id uuid) returns void
+language sql
+security invoker
+set search_path = public
+as $$
+  update notificacoes_whatsapp_pedido
+  set fila = 'ignored'
+  where estabelecimento_id = p_estabelecimento_id and fila = 'pending';
+$$;
+
+-- Claim em lote entre estabelecimentos para o worker: roda com privilegio do
+-- dono (bypassa RLS, que e por-tenant) mas devolve so os campos minimos; o
+-- worker busca o resto por tenant (via comEstabelecimento, respeitando RLS
+-- de novo). Nenhum segredo, telefone ou corpo de mensagem passa por aqui.
+create function fn_whatsapp_claim_notificacoes(p_limite integer default 20)
+returns table (id uuid, estabelecimento_id uuid, pedido_id uuid, status_pedido pedido_status, tentativas integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  return query
+  update notificacoes_whatsapp_pedido n
+  set lease_until = now() + interval '2 minutes',
+      tentativas = n.tentativas + 1
+  from (
+    select n2.id
+    from notificacoes_whatsapp_pedido n2
+    where n2.fila = 'pending'
+      and n2.proxima_tentativa_em <= now()
+      and (n2.lease_until is null or n2.lease_until < now())
+    order by n2.created_at
+    limit p_limite
+    for update skip locked
+  ) claimed
+  where n.id = claimed.id
+  returning n.id, n.estabelecimento_id, n.pedido_id, n.status_pedido, n.tentativas;
+end;
+$$;
+
+revoke all on function fn_whatsapp_claim_notificacoes(integer) from public;
 
 create function enfileirar_impressao_cozinha() returns trigger as $$
 begin
@@ -917,7 +1034,8 @@ begin
     'custos_fixos', 'whatsapp_mensagens', 'estado_aplicacao', 'estabelecimento_modulos',
     'impressao_jobs', 'bairros_entrega', 'banners_cardapio',
     'produto_grupos_opcoes', 'produto_opcoes', 'itens_pedido_opcoes',
-    'produto_configuracoes_pizza', 'pizza_tamanhos', 'pizza_sabores', 'itens_pedido_pizza'
+    'produto_configuracoes_pizza', 'pizza_tamanhos', 'pizza_sabores', 'itens_pedido_pizza',
+    'notificacoes_whatsapp_pedido'
   ]
   loop
     execute format('alter table %I enable row level security', tabela);
@@ -1393,7 +1511,7 @@ begin
         notificar_pedido = excluded.notificar_pedido
   returning id into v_cliente_id;
 
-  insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, cliente_id, observacoes, forma_recebimento, forma_pagamento, tipo_cartao, troco_para, pagamento_dividido, taxa_entrega, pagamento_status)
+  insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, cliente_id, observacoes, forma_recebimento, forma_pagamento, tipo_cartao, troco_para, pagamento_dividido, taxa_entrega, pagamento_status, whatsapp_consentimento)
   values (
     v_estabelecimento_id,
     case when p_forma_recebimento = 'entrega' then 'delivery'::pedido_tipo else 'balcao'::pedido_tipo end,
@@ -1402,7 +1520,7 @@ begin
     case when p_forma_pagamento = 'cartao' then p_tipo_cartao else null end,
     v_troco_para,
     case when v_misto then p_pagamento_dividido else null end,
-    v_taxa_entrega, 'pendente'
+    v_taxa_entrega, 'pendente', coalesce(p_notificar_pedido, false)
   )
   returning id, codigo into v_pedido_id, v_codigo;
 
@@ -1592,6 +1710,7 @@ declare
   v_forma_pagamento text;
   v_tipo pedido_tipo;
   v_cliente_id uuid;
+  v_consentimento boolean;
   v_endereco text;
   v_bairro text;
   v_novo_pedido_id uuid;
@@ -1604,8 +1723,8 @@ declare
   v_observacoes text := nullif(btrim(coalesce(p_observacoes, '')), '');
   v_total numeric(10,2);
 begin
-  select p.estabelecimento_id, p.status::text, p.forma_recebimento, p.forma_pagamento, p.tipo, p.cliente_id
-    into v_estabelecimento_id, v_status, v_forma_recebimento, v_forma_pagamento, v_tipo, v_cliente_id
+  select p.estabelecimento_id, p.status::text, p.forma_recebimento, p.forma_pagamento, p.tipo, p.cliente_id, p.whatsapp_consentimento
+    into v_estabelecimento_id, v_status, v_forma_recebimento, v_forma_pagamento, v_tipo, v_cliente_id, v_consentimento
   from pedidos p
   join estabelecimentos e on e.id = p.estabelecimento_id
   where e.slug = p_slug and p.id = p_pedido_id and p.origem = 'app';
@@ -1630,11 +1749,11 @@ begin
 
   insert into pedidos (
     estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em,
-    cliente_id, observacoes, forma_recebimento, forma_pagamento, pagamento_status, pedido_pai_id
+    cliente_id, observacoes, forma_recebimento, forma_pagamento, pagamento_status, pedido_pai_id, whatsapp_consentimento
   )
   values (
     v_estabelecimento_id, v_tipo, 'app', 'novo', true, now(),
-    v_cliente_id, v_observacoes, v_forma_recebimento, v_forma_pagamento, 'pendente', p_pedido_id
+    v_cliente_id, v_observacoes, v_forma_recebimento, v_forma_pagamento, 'pendente', p_pedido_id, coalesce(v_consentimento, false)
   )
   returning id, codigo into v_novo_pedido_id, v_codigo;
 
@@ -1743,7 +1862,8 @@ grant select, insert, update, delete on
   configuracoes_pix, mercado_pago_conexoes, mercado_pago_oauth_states, pagamentos_pix,
   demonstracao_referencias, pedidos_idempotencia
   , produto_grupos_opcoes, produto_opcoes, itens_pedido_opcoes,
-  produto_configuracoes_pizza, pizza_tamanhos, pizza_sabores, itens_pedido_pizza
+  produto_configuracoes_pizza, pizza_tamanhos, pizza_sabores, itens_pedido_pizza,
+  notificacoes_whatsapp_pedido
 to ohfome_app;
 
 -- estabelecimentos: sem insert/delete direto (so via fn_registrar_estabelecimento);
@@ -1761,6 +1881,8 @@ grant execute on function fn_criar_pedido_publico(text, text, text, text, text, 
 grant execute on function fn_bairros_publico(text) to ohfome_app;
 grant execute on function fn_integracao_gestao_clientes(integer, timestamptz, uuid) to ohfome_app;
 grant execute on function fn_consumir_rate_limit(text, text, integer, integer) to ohfome_app;
+grant execute on function fn_whatsapp_claim_notificacoes(integer) to ohfome_app;
+grant execute on function fn_whatsapp_desativar_automacao(uuid) to ohfome_app;
 
 -- Colunas serial (ex.: pedidos.codigo) usam uma sequence por baixo; inserir
 -- nelas exige USAGE/SELECT na sequence, nao so privilegio na tabela.
