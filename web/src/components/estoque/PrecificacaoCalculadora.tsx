@@ -316,12 +316,12 @@ function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; 
   function adicionarArquivos(lista: FileList | null) {
     if (!lista) return;
     setErro("");
-    const novos = Array.from(lista).slice(0, Math.max(0, 6 - arquivos.length)).map((arquivo) => {
+    const novos = Array.from(lista).slice(0, Math.max(0, 12 - arquivos.length)).map((arquivo) => {
       const preview = URL.createObjectURL(arquivo);
       urlsAtivos.current.add(preview);
       return { arquivo, preview };
     });
-    setArquivos((atual) => [...atual, ...novos].slice(0, 6));
+    setArquivos((atual) => [...atual, ...novos].slice(0, 12));
   }
 
   function removerArquivo(indice: number) {
@@ -425,7 +425,7 @@ function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; 
               <label className="flex min-h-[130px] cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-coral-300 bg-cream-50/70 text-center transition hover:bg-coral-050">
                 <Upload size={22} className="text-coral-600" />
                 <span className="text-sm font-semibold text-coral-700">Escolher fotos do cardápio</span>
-                <span className="text-[11px] text-ink-400">JPG, PNG ou WebP · até 6 fotos</span>
+                <span className="text-[11px] text-ink-400">JPG, PNG ou WebP · até 12 fotos</span>
                 <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(e) => adicionarArquivos(e.target.files)} className="sr-only" />
               </label>
 

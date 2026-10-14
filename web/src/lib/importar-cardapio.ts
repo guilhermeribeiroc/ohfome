@@ -109,7 +109,7 @@ export async function extrairItensCardapio(
 
   const mensagem = await client.messages.create({
     model: modelo,
-    max_tokens: 4096,
+    max_tokens: 32000,
     tools: [FERRAMENTA],
     tool_choice: { type: "tool", name: FERRAMENTA.name },
     messages: [
@@ -128,11 +128,12 @@ export async function extrairItensCardapio(
               "Leia com atenção e registre TODOS os itens com preço visível, usando a ferramenta registrar_itens_cardapio. " +
               "Não invente itens que não estão na foto. Não pule nenhum item, mesmo que a foto tenha muitos. " +
               "Preserve as seções do cardápio quando elas forem legíveis. Quando não existir título claro, classifique cada produto pelo que ele é: pizzas, esfihas, hambúrgueres, sanduíches, pastéis, porções, bebidas, sobremesas ou outra categoria curta e coerente. " +
-              "Para uma seção de pizzas com sabores e preços por tamanho, crie uma pizza configurável em pizzas, não um produto por sabor/tamanho. " +
-              "Na pizza, use o menor preço de cada tamanho como precoSaborUnico e diferenças como acrescimo do sabor. Use maior_valor para meio a meio salvo se a foto declarar outra regra. " +
+              "Para uma seção de pizzas com sabores e preços por tamanho, crie UMA ÚNICA pizza configurável por seção do cardápio (ex.: 'Pizzas Salgadas', 'Pizzas Doces'), juntando todos os sabores daquela seção no mesmo array de sabores — nunca crie uma pizza configurável separada por sabor. " +
+              "Na pizza, use o menor preço de cada tamanho como precoSaborUnico. Para o acrescimo de cada sabor, use a diferença de preço no tamanho P (o menor tamanho) entre aquele sabor e o precoSaborUnico do tamanho P, mesmo que a diferença não seja idêntica nos outros tamanhos. Use maior_valor para meio a meio salvo se a foto declarar outra regra. " +
               "Se não puder relacionar preço e tamanho com segurança, mantenha como item comum e preserve o texto. Para item comum, só use tamanho P, M ou G; rótulos livres de pizza ficam em pizzas. " +
               "Preserve o texto de ingredientes/descrição exatamente como está escrito, sem resumir. " +
-              "Se para um sanduíche ou hambúrguer o cardápio listar os tipos de pão disponíveis para escolha, preencha tiposPao com cada tipo; nos demais itens deixe tiposPao vazio.",
+              "Se um item tiver preços diferentes por tipo de pão (ex.: colunas 'Bola' e 'Árabe' com valores distintos), gere uma entrada por tipo de pão, usando tamanho null e colocando o tipo de pão entre parênteses no nome (ex.: 'X-Burguer (Pão Bola)', 'X-Burguer (Pão Árabe)'). " +
+              "Se para um sanduíche ou hambúrguer o cardápio listar os tipos de pão disponíveis para escolha SEM variar o preço, preencha tiposPao com cada tipo; nos demais itens deixe tiposPao vazio.",
           },
         ],
       },

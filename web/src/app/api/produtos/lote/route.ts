@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   const itensBrutos = Array.isArray(body?.itens) ? body.itens : [];
   const pizzasBrutas = Array.isArray(body?.pizzas) ? body.pizzas : [];
   if (itensBrutos.length + pizzasBrutas.length === 0) return NextResponse.json({ erro: "Nenhum item para criar." }, { status: 400 });
-  if (itensBrutos.length + pizzasBrutas.length > 100) return NextResponse.json({ erro: "Envie no máximo 100 itens por vez." }, { status: 400 });
+  if (itensBrutos.length + pizzasBrutas.length > 300) return NextResponse.json({ erro: "Envie no máximo 300 itens por vez." }, { status: 400 });
 
   const itens: ItemEntrada[] = itensBrutos.map((item: Record<string, unknown>) => ({
     nome: typeof item?.nome === "string" ? item.nome.trim() : "",

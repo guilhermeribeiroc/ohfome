@@ -5,9 +5,9 @@ import { extrairItensCardapio, mediaTypeAceito, mediaTypePelosBytes } from "@/li
 export const runtime = "nodejs";
 
 const LIMITE_IMAGEM_BYTES = 8 * 1024 * 1024;
-const MAXIMO_IMAGENS = 6;
-const LIMITE_TOTAL_BYTES = 48 * 1024 * 1024;
-const LIMITE_MULTIPART_BYTES = 52 * 1024 * 1024;
+const MAXIMO_IMAGENS = 12;
+const LIMITE_TOTAL_BYTES = 80 * 1024 * 1024;
+const LIMITE_MULTIPART_BYTES = 85 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
   const sessao = await autenticarRequisicao(request);
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     if (!mediaType) return NextResponse.json({ erro: "Envie fotos em JPG, PNG ou WebP." }, { status: 400 });
     if (arquivo.size > LIMITE_IMAGEM_BYTES) return NextResponse.json({ erro: "Cada foto deve ter no máximo 8 MB." }, { status: 400 });
     totalBytes += arquivo.size;
-    if (totalBytes > LIMITE_TOTAL_BYTES) return NextResponse.json({ erro: "As fotos somadas devem ter no máximo 48 MB." }, { status: 413 });
+    if (totalBytes > LIMITE_TOTAL_BYTES) return NextResponse.json({ erro: "As fotos somadas devem ter no máximo 80 MB." }, { status: 413 });
     const bytes = Buffer.from(await arquivo.arrayBuffer());
     if (mediaTypePelosBytes(bytes) !== mediaType) return NextResponse.json({ erro: "Uma das fotos tem conteúdo incompatível com o formato informado." }, { status: 400 });
     const base64 = bytes.toString("base64");
