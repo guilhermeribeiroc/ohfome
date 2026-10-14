@@ -1963,7 +1963,8 @@ grant select, insert, update, delete on
   demonstracao_referencias, pedidos_idempotencia
   , produto_grupos_opcoes, produto_opcoes, itens_pedido_opcoes,
   produto_configuracoes_pizza, pizza_tamanhos, pizza_sabores, itens_pedido_pizza,
-  notificacoes_whatsapp_pedido
+  notificacoes_whatsapp_pedido,
+  estoque_produtos, estoque_compromissos_produtos, movimentacoes_estoque_produtos
 to ohfome_app;
 
 -- estabelecimentos: sem insert/delete direto (so via fn_registrar_estabelecimento);
