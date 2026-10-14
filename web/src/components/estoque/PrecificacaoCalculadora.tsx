@@ -286,6 +286,7 @@ interface ItemRevisao {
   descricao: string;
   precoVenda: string;
   categoriaNome: string;
+  tiposPao: string;
 }
 interface PizzaRevisao {
   chave: string; incluir: boolean; nome: string; categoriaNome: string; descricao: string;
@@ -345,7 +346,7 @@ function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; 
       setEtapa("selecionar");
       return;
     }
-    const extraidos: { nome: string; tamanho: "P" | "M" | "G" | null; descricao: string; precoVenda: number; categoriaSugerida: string }[] = corpo.itens ?? [];
+    const extraidos: { nome: string; tamanho: "P" | "M" | "G" | null; descricao: string; precoVenda: number; categoriaSugerida: string; tiposPao?: string[] }[] = corpo.itens ?? [];
     setItens(
       extraidos.slice().sort((a, b) => a.categoriaSugerida.localeCompare(b.categoriaSugerida, "pt-BR") || a.nome.localeCompare(b.nome, "pt-BR")).map((item, indice) => ({
         chave: `${indice}-${item.nome}`,
@@ -355,6 +356,7 @@ function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; 
         descricao: item.descricao,
         precoVenda: item.precoVenda.toFixed(2).replace(".", ","),
         categoriaNome: item.categoriaSugerida,
+        tiposPao: (item.tiposPao ?? []).join(", "),
       })),
     );
     const pizzasExtraidas: { nome: string; categoriaSugerida: string; descricao: string; regraMeioAMeio: PizzaRevisao["regraMeioAMeio"]; tamanhos: PizzaRevisao["tamanhos"]; sabores: PizzaRevisao["sabores"] }[] = corpo.pizzas ?? [];
@@ -387,6 +389,7 @@ function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; 
           descricao: item.descricao,
           precoVenda: numeroDaMoeda(item.precoVenda),
           categoriaNome: item.categoriaNome,
+          tiposPao: item.tiposPao.split(",").map((tipo) => tipo.trim()).filter(Boolean),
         })),
         pizzas: pizzasSelecionadas.map((pizza) => ({ nome: pizza.nome, categoriaNome: pizza.categoriaNome, descricao: pizza.descricao, regraMeioAMeio: pizza.regraMeioAMeio, tamanhos: pizza.tamanhos, sabores: pizza.sabores })),
       }),
@@ -500,6 +503,7 @@ function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; 
                           </div>
                           <input value={item.categoriaNome} onChange={(e) => atualizarItem(item.chave, "categoriaNome", e.target.value)} placeholder="Categoria" list="categorias-existentes" className={`${CAMPO_CLASSE} !py-2 flex-1 text-xs`} />
                         </div>
+                        <input value={item.tiposPao} onChange={(e) => atualizarItem(item.chave, "tiposPao", e.target.value)} placeholder="Tipos de pão (ex.: Bola, Brioche, Árabe) — deixe vazio se não houver" className={`${CAMPO_CLASSE} !py-2 text-xs`} />
                       </div>
                       <button onClick={() => removerItem(item.chave)} aria-label="Remover item" className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-ink-400 transition hover:bg-danger-050 hover:text-danger-600">
                         <Trash2 size={14} />

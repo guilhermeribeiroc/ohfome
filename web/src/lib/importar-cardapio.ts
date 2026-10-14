@@ -6,6 +6,7 @@ export interface ItemCardapioExtraido {
   descricao: string;
   precoVenda: number;
   categoriaSugerida: string;
+  tiposPao: string[];
 }
 
 export interface PizzaCardapioExtraida {
@@ -51,8 +52,13 @@ const FERRAMENTA = {
               type: "string",
               description: "Nome da seção/categoria do cardápio onde o item está (ex.: 'Pizzas', 'Bebidas', 'Sobremesas'). Se não houver seções visíveis, inferir uma categoria razoável a partir do tipo de item.",
             },
+            tiposPao: {
+              type: "array",
+              items: { type: "string" },
+              description: "Somente para sanduíches/hambúrgueres: se o cardápio listar os tipos de pão que o cliente pode escolher para este item (ex.: 'Bola, Brioche ou Árabe'), liste cada tipo aqui exatamente como está escrito. Array vazio se o cardápio não mencionar opções de pão para este item.",
+            },
           },
-          required: ["nome", "tamanho", "descricao", "precoVenda", "categoriaSugerida"],
+          required: ["nome", "tamanho", "descricao", "precoVenda", "categoriaSugerida", "tiposPao"],
         },
       },
       pizzas: {
@@ -125,7 +131,8 @@ export async function extrairItensCardapio(
               "Para uma seção de pizzas com sabores e preços por tamanho, crie uma pizza configurável em pizzas, não um produto por sabor/tamanho. " +
               "Na pizza, use o menor preço de cada tamanho como precoSaborUnico e diferenças como acrescimo do sabor. Use maior_valor para meio a meio salvo se a foto declarar outra regra. " +
               "Se não puder relacionar preço e tamanho com segurança, mantenha como item comum e preserve o texto. Para item comum, só use tamanho P, M ou G; rótulos livres de pizza ficam em pizzas. " +
-              "Preserve o texto de ingredientes/descrição exatamente como está escrito, sem resumir.",
+              "Preserve o texto de ingredientes/descrição exatamente como está escrito, sem resumir. " +
+              "Se para um sanduíche ou hambúrguer o cardápio listar os tipos de pão disponíveis para escolha, preencha tiposPao com cada tipo; nos demais itens deixe tiposPao vazio.",
           },
         ],
       },
@@ -146,12 +153,19 @@ export async function extrairItensCardapio(
       const precoVenda = Number(registro.precoVenda);
       if (!nome || !Number.isFinite(precoVenda) || precoVenda <= 0) return null;
       const tamanho = registro.tamanho === "P" || registro.tamanho === "M" || registro.tamanho === "G" ? registro.tamanho : null;
+      const tiposPaoBrutos = Array.isArray(registro.tiposPao) ? registro.tiposPao : [];
+      const tiposPao = Array.from(new Set(
+        tiposPaoBrutos
+          .map((tipo) => (typeof tipo === "string" ? tipo.trim() : ""))
+          .filter((tipo) => tipo.length >= 2),
+      ));
       return {
         nome,
         tamanho,
         descricao: typeof registro.descricao === "string" ? registro.descricao.trim() : "",
         precoVenda: Math.round(precoVenda * 100) / 100,
         categoriaSugerida: typeof registro.categoriaSugerida === "string" && registro.categoriaSugerida.trim() ? registro.categoriaSugerida.trim() : "Geral",
+        tiposPao,
       };
     })
     .filter((item): item is ItemCardapioExtraido => item !== null);

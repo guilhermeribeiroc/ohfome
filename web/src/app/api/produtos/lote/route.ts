@@ -8,6 +8,7 @@ interface ItemEntrada {
   descricao: string;
   precoVenda: number;
   categoriaNome: string;
+  tiposPao: string[];
 }
 interface PizzaEntrada {
   nome: string; categoriaNome: string; descricao: string; regraMeioAMeio: "maior_valor" | "media" | "preco_fixo";
@@ -32,6 +33,9 @@ export async function POST(request: NextRequest) {
     descricao: typeof item?.descricao === "string" ? item.descricao.trim() : "",
     precoVenda: Number(item?.precoVenda),
     categoriaNome: typeof item?.categoriaNome === "string" ? item.categoriaNome.trim() : "",
+    tiposPao: Array.isArray(item?.tiposPao)
+      ? Array.from(new Set(item.tiposPao.map((tipo: unknown) => (typeof tipo === "string" ? tipo.trim() : "")).filter((tipo: string) => tipo.length >= 2)))
+      : [],
   }));
 
   if (itens.some((item) => item.nome.length < 2 || !Number.isFinite(item.precoVenda) || item.precoVenda < 0)) {
@@ -85,6 +89,18 @@ export async function POST(request: NextRequest) {
            margem_percentual as "margemPercentual", preco_venda as "precoVenda", ativo`,
         [estabelecimentoId, catId, item.nome, item.tamanho, item.descricao || null, item.precoVenda]
       );
+      if (item.tiposPao.length > 0) {
+        const { rows: grupoRows } = await client.query<{ id: string }>(
+          `insert into produto_grupos_opcoes (estabelecimento_id, produto_id, nome, minimo_selecoes, maximo_selecoes, ativo, ordem) values ($1,$2,'Pão',1,1,true,0) returning id`,
+          [estabelecimentoId, rows[0].id]
+        );
+        for (const [ordem, tipoPao] of item.tiposPao.entries()) {
+          await client.query(
+            `insert into produto_opcoes (estabelecimento_id, grupo_id, nome, acrescimo, ativo, ordem) values ($1,$2,$3,0,true,$4)`,
+            [estabelecimentoId, grupoRows[0].id, tipoPao, ordem]
+          );
+        }
+      }
       resultado.push(rows[0]);
     }
     for (const pizza of pizzas) {
