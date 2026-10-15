@@ -12,6 +12,7 @@ const PRINTER_STORAGE_KEY = "ohfome.qz.estacao.printer";
 const AUTO_STORAGE_KEY = "ohfome.qz.estacao.auto";
 const WIDTH_STORAGE_KEY = "ohfome.qz.estacao.width";
 const COPIES_STORAGE_KEY = "ohfome.qz.estacao.copies";
+const CORTE_STORAGE_KEY = "ohfome.qz.estacao.corte";
 const RECEIPTS_STORAGE_KEY = "ohfome.qz.estacao.receipts";
 const STATION_STORAGE_KEY = "ohfome.qz.estacao.id";
 const LEADER_STORAGE_PREFIX = "ohfome.qz.estacao.lider";
@@ -53,6 +54,16 @@ function centralizar(texto: string, largura = LARGURA_TICKET) {
   const limpo = textoTermico(texto);
   const espacos = Math.max(0, Math.floor((largura - limpo.length) / 2));
   return `${" ".repeat(espacos)}${limpo}`;
+}
+
+// Preenche os dois lados (nao so a esquerda, como centralizar()) porque o
+// texto roda com impressao invertida (GS B) ligada — os espacos tambem viram
+// fundo preto, entao sao eles que desenham a largura da caixa.
+function centralizarCaixa(texto: string, largura: number) {
+  const limpo = textoTermico(texto);
+  const espacos = Math.max(0, largura - limpo.length);
+  const esquerda = Math.floor(espacos / 2);
+  return `${" ".repeat(esquerda)}${limpo}${" ".repeat(espacos - esquerda)}`;
 }
 
 function moedaTermica(valor: number) {
@@ -97,20 +108,39 @@ function exibeClienteNaComanda(pedido: Pedido) {
   return pedido.formaRecebimento === "entrega" || pedido.formaRecebimento === "retirada" || pedido.tipo === "delivery";
 }
 
-export function dadosEscPosPedido(pedido: Pedido, largura = LARGURA_TICKET) {
-  const cabecalho = cabecalhoTermico(pedido, largura);
-  const contexto = `PEDIDO #${pedido.codigo} - ${modalidadePedido(pedido)}`;
-  const larguraCabecalho = Math.max(1, Math.floor(largura / 2));
-  const linhas = ["\x1B\x40", "\x1B\x61\x01", "\x1B\x45\x01", "\x1D\x21\x11", ...quebrarLinha(cabecalho, larguraCabecalho).map((linha) => `${centralizar(linha, larguraCabecalho)}\n`), ...quebrarLinha(contexto, larguraCabecalho).map((linha) => `${centralizar(linha, larguraCabecalho)}\n`), "\x1D\x21\x00", "\x1B\x45\x00", "\n", "\x1B\x61\x00", `${"-".repeat(largura)}\n`];
+export function dadosEscPosPedido(pedido: Pedido, largura = LARGURA_TICKET, cortarPapel = true) {
+  // Caixa com fundo preto (GS B — impressao invertida) trazendo o numero do
+  // pedido e o tipo de atendimento, no lugar do cabecalho com o nome da loja
+  // — ideia tirada de uma nota de outro sistema que o cliente mandou. O nome
+  // da loja/OHFOME desce pro rodape, onde so aparece uma vez por ticket.
+  const linhaPedido = `PEDIDO #${pedido.codigo}`;
+  const linhaModalidade = modalidadePedido(pedido);
+  const larguraCaixa = Math.min(largura, Math.max(textoTermico(linhaPedido).length, textoTermico(linhaModalidade).length) + 6);
+  const deslocamentoCaixa = " ".repeat(Math.max(0, Math.floor((largura - larguraCaixa) / 2)));
+  const larguraTotal = Math.max(1, Math.floor(largura / 2));
+
+  const linhas = [
+    "\x1B\x40", "\x1B\x61\x00",
+    deslocamentoCaixa, "\x1D\x42\x01", "\x1D\x21\x10", "\x1B\x45\x01", `${centralizarCaixa(linhaPedido, larguraCaixa)}\n`, "\x1B\x45\x00", "\x1D\x21\x00", "\x1D\x42\x00",
+    deslocamentoCaixa, "\x1D\x42\x01", `${centralizarCaixa(linhaModalidade, larguraCaixa)}\n`, "\x1D\x42\x00",
+    "\n",
+    `${"-".repeat(largura)}\n`,
+  ];
 
   if (exibeClienteNaComanda(pedido) && pedido.clienteNome?.trim()) {
-    linhas.push(...quebrarLinha(`CLIENTE: ${pedido.clienteNome.trim()}`, largura).map((linha) => `${linha}\n`), "\n");
+    linhas.push("\x1D\x21\x10", ...quebrarLinha(`CLIENTE: ${pedido.clienteNome.trim()}`, largura).map((linha) => `${linha}\n`), "\x1D\x21\x00", "\n");
   }
 
   for (const item of pedido.itens) {
-    linhas.push("\x1D\x21\x10", "\x1B\x45\x01", ...linhaComValor(`${item.quantidade}X ${item.produtoNome}`, moedaTermica(item.precoUnitario * item.quantidade), largura), "\x1B\x45\x00");
-    if (item.pizza) linhas.push("\x1B\x21\x00", `  ${item.pizza.tamanhoNome}: ${item.pizza.saborDoisNome ? `1/2 ${item.pizza.saborUmNome} / 1/2 ${item.pizza.saborDoisNome}` : item.pizza.saborUmNome}`, "\n");
-    for (const opcao of item.opcoes ?? []) linhas.push("\x1B\x21\x00", `  ${opcao.grupoNome}: ${opcao.opcaoNome}`, "\n");
+    linhas.push("\x1D\x21\x20", "\x1B\x45\x01", ...linhaComValor(`${item.quantidade}X ${item.produtoNome}`, moedaTermica(item.precoUnitario * item.quantidade), largura), "\x1B\x45\x00");
+    // quebrarLinha (e não um push direto) por dois motivos: sem ela, um
+    // sabor/opção com nome comprido passava da largura do papel inteiro e a
+    // impressora quebrava sozinha no meio da palavra; e ela já roda o texto
+    // por textoTermico (maiusculas, sem acento), igual todo o resto do
+    // ticket — sem isso esses dois pedaços ficavam com acento/minúscula,
+    // destoando do restante e arriscando virar lixo no code page da térmica.
+    if (item.pizza) linhas.push("\x1B\x21\x00", ...quebrarLinha(`  ${item.pizza.tamanhoNome}: ${item.pizza.saborDoisNome ? `1/2 ${item.pizza.saborUmNome} / 1/2 ${item.pizza.saborDoisNome}` : item.pizza.saborUmNome}`, largura).map((linha) => `${linha}\n`));
+    for (const opcao of item.opcoes ?? []) linhas.push("\x1B\x21\x00", ...quebrarLinha(`  ${opcao.grupoNome}: ${opcao.opcaoNome}`, largura).map((linha) => `${linha}\n`));
     if (item.observacoes) linhas.push("\x1B\x45\x01", ...quebrarLinha(`  OBS: ${item.observacoes}`, largura).map((linha) => `${linha}\n`), "\x1B\x45\x00");
     linhas.push("\x1D\x21\x00");
   }
@@ -119,12 +149,17 @@ export function dadosEscPosPedido(pedido: Pedido, largura = LARGURA_TICKET) {
     linhas.push(`${"-".repeat(largura)}\n`, ...linhaComValor("TAXA DE ENTREGA", Number(pedido.taxaEntrega) > 0 ? moedaTermica(Number(pedido.taxaEntrega)) : "GRATIS", largura));
   }
 
-  linhas.push(`${"-".repeat(largura)}\n`, ...linhaComValor("TOTAL", moedaTermica(pedido.total), largura));
+  // TOTAL ganha negrito + o dobro do tamanho (largura e altura); por isso usa
+  // larguraTotal (metade das colunas) em vez de largura — o GS! 11 abaixo
+  // dobra a largura de cada caractere, entao so cabe metade das colunas de
+  // antes nessa linha.
+  linhas.push(`${"-".repeat(largura)}\n`, "\x1D\x21\x11", "\x1B\x45\x01", ...linhaComValor("TOTAL", moedaTermica(pedido.total), larguraTotal), "\x1B\x45\x00", "\x1D\x21\x00");
 
   if (pedido.enderecoEntrega) {
-    linhas.push(`${"-".repeat(largura)}\n`, ...quebrarLinha("ENDERECO:", largura).map((linha) => `${linha}\n`), ...quebrarLinha(pedido.enderecoEntrega, largura).map((linha) => `${linha}\n`));
+    linhas.push(`${"-".repeat(largura)}\n`, "\x1D\x21\x10", ...quebrarLinha("ENDERECO:", largura).map((linha) => `${linha}\n`), ...quebrarLinha(pedido.enderecoEntrega, largura).map((linha) => `${linha}\n`), "\x1D\x21\x00");
   }
 
+  linhas.push("\x1D\x21\x10");
   if (pedido.formaPagamento === "misto" && pedido.pagamentoDividido) {
     // Mesmo alinhamento em coluna usado pelos itens (linhaComValor), pra não
     // virar uma frase corrida e se misturar com o resto da comanda.
@@ -135,13 +170,24 @@ export function dadosEscPosPedido(pedido: Pedido, largura = LARGURA_TICKET) {
   } else {
     linhas.push(...quebrarLinha(`PAGAMENTO: ${descricaoPagamento(pedido)}`, largura).map((linha) => `${linha}\n`));
   }
+  linhas.push("\x1D\x21\x00");
 
   if (pedido.observacoes) {
-    linhas.push(`${"-".repeat(largura)}\n`, ...quebrarLinha(`OBS: ${pedido.observacoes}`, largura).map((linha) => `${linha}\n`));
+    linhas.push(`${"-".repeat(largura)}\n`, "\x1D\x21\x10", ...quebrarLinha(`OBS: ${pedido.observacoes}`, largura).map((linha) => `${linha}\n`), "\x1D\x21\x00");
   }
 
-  linhas.push(`${"-".repeat(largura)}\n`, ...quebrarLinha(`ORIGEM: ${pedido.origem === "app" ? "CARDAPIO DIGITAL" : pedido.usuarioNome || "ATENDIMENTO"}`, largura).map((linha) => `${linha}\n`));
-  linhas.push(`${new Date(pedido.createdAt).toLocaleString("pt-BR")}\n`, "\n\n", "\x1D\x56\x00");
+  linhas.push(`${"-".repeat(largura)}\n`, "\x1D\x21\x10", ...quebrarLinha(`ORIGEM: ${pedido.origem === "app" ? "CARDAPIO DIGITAL" : pedido.usuarioNome || "ATENDIMENTO"}`, largura).map((linha) => `${linha}\n`));
+  linhas.push(`${new Date(pedido.createdAt).toLocaleString("pt-BR")}\n`, "\x1D\x21\x00");
+
+  // Nome da loja + OHFOME, agora so no rodape (antes tambem abria o ticket).
+  linhas.push(`${"-".repeat(largura)}\n`, "\x1B\x61\x01", "\x1D\x21\x10", "\x1B\x45\x01", ...quebrarLinha(cabecalhoTermico(pedido, largura), largura).map((linha) => `${centralizar(linha, largura)}\n`), "\x1D\x21\x00", "\x1B\x45\x00", "\x1B\x61\x00", "\n\n");
+  // O corte automatico (GS V 0) so deve ser enviado se a impressora tiver
+  // guilhotina de verdade. Impressoras sem guilhotina (ex: POS-58 genericas,
+  // bem comuns em 58mm) nao reconhecem esse comando e, em vez de ignora-lo,
+  // entram em alimentacao continua de papel em branco — foi exatamente o que
+  // aconteceu num cliente com POS-58 sem guilhotina. Quem estiver nessa
+  // situação desliga em "Configuração > Impressão > Corte automático".
+  if (cortarPapel) linhas.push("\x1D\x56\x00");
   return linhas;
 }
 
@@ -200,8 +246,6 @@ interface ImpressaoQzTrayProps {
 }
 
 export function ImpressaoQzTray({ compacta = false }: ImpressaoQzTrayProps) {
-  const { dados: jobs, recarregar } = usePolling<ImpressaoJob[]>("/api/impressao/jobs", 2000);
-  const { dados: falhos, recarregar: recarregarFalhos } = usePolling<ImpressaoJob[]>("/api/impressao/jobs?status=falhou", 10_000);
   const qzRef = useRef<QzApi | null>(null);
   const processandoRef = useRef(false);
   const segurancaConfiguradaRef = useRef(false);
@@ -214,6 +258,10 @@ export function ImpressaoQzTray({ compacta = false }: ImpressaoQzTrayProps) {
   const [modoAssinado, setModoAssinado] = useState(false);
   const [largura, setLargura] = useState(32);
   const [copias, setCopias] = useState(1);
+  // Padrao ligado pra nao mudar o comportamento de quem ja imprime bem hoje —
+  // so quem abrir o painel e desligar explicitamente (impressora sem
+  // guilhotina) passa a nao receber o comando de corte.
+  const [corteAutomatico, setCorteAutomatico] = useState(true);
   const [tentativaReconexao, setTentativaReconexao] = useState(0);
   const [estacaoId, setEstacaoId] = useState("");
   const [estaAbaLider, setEstaAbaLider] = useState(false);
@@ -221,6 +269,22 @@ export function ImpressaoQzTray({ compacta = false }: ImpressaoQzTrayProps) {
   const [ultimoContato, setUltimoContato] = useState<number | null>(null);
   const [painelAberto, setPainelAberto] = useState(!compacta);
   const [mensagem, setMensagem] = useState("Conecte o QZ Tray nesta estação para imprimir.");
+
+  // So esta instancia processa a fila de verdade quando e a aba lider desta
+  // estacao e tem impressao automatica ligada. Nas demais abas/dispositivos
+  // (balcao, financeiro, tablet do garcom), jobs/falhos so alimentam o badge
+  // de "pedidos na fila" — nao precisam de 2s nem de rodar com a aba oculta.
+  const souEstacaoAtiva = estaAbaLider && automatico;
+  const { dados: jobs, recarregar } = usePolling<ImpressaoJob[]>(
+    "/api/impressao/jobs",
+    souEstacaoAtiva ? 2000 : 20_000,
+    { pausarQuandoOculta: !souEstacaoAtiva },
+  );
+  const { dados: falhos, recarregar: recarregarFalhos } = usePolling<ImpressaoJob[]>(
+    "/api/impressao/jobs?status=falhou",
+    souEstacaoAtiva ? 10_000 : 60_000,
+    { pausarQuandoOculta: !souEstacaoAtiva },
+  );
   const dispositivoTatil = useSyncExternalStore(
     useCallback((notificar) => {
       const consulta = window.matchMedia("(pointer: coarse)");
@@ -238,6 +302,8 @@ export function ImpressaoQzTray({ compacta = false }: ImpressaoQzTrayProps) {
       setAutomatico(window.localStorage.getItem(AUTO_STORAGE_KEY) === "true");
       setLargura(Number(window.localStorage.getItem(WIDTH_STORAGE_KEY)) === 48 ? 48 : 32);
       setCopias(Math.min(3, Math.max(1, Number(window.localStorage.getItem(COPIES_STORAGE_KEY)) || 1)));
+      const corteSalvo = window.localStorage.getItem(CORTE_STORAGE_KEY);
+      setCorteAutomatico(corteSalvo === null ? true : corteSalvo === "true");
       abaIdRef.current = window.crypto.randomUUID();
       setEstacaoId(obterOuCriarEstacao());
     }, 0);
@@ -324,9 +390,9 @@ export function ImpressaoQzTray({ compacta = false }: ImpressaoQzTrayProps) {
   const imprimir = useCallback(async (pedido: Pedido, qzApi = qzRef.current) => {
     if (!qzApi || !impressora) throw new Error("Selecione uma impressora da cozinha.");
     const config = qzApi.configs.create(impressora, { forceRaw: true });
-    const dados = dadosEscPosPedido(pedido, largura);
+    const dados = dadosEscPosPedido(pedido, largura, corteAutomatico);
     for (let indice = 0; indice < copias; indice += 1) await qzApi.print(config, dados);
-  }, [copias, impressora, largura]);
+  }, [copias, corteAutomatico, impressora, largura]);
 
   const testar = useCallback(async () => {
     setOcupado(true);
@@ -444,6 +510,11 @@ export function ImpressaoQzTray({ compacta = false }: ImpressaoQzTrayProps) {
     window.localStorage.setItem(COPIES_STORAGE_KEY, String(valor));
   }
 
+  function selecionarCorte(valor: boolean) {
+    setCorteAutomatico(valor);
+    window.localStorage.setItem(CORTE_STORAGE_KEY, String(valor));
+  }
+
   function alternarAutomatico() {
     const proximo = !automatico;
     setAutomatico(proximo);
@@ -471,7 +542,7 @@ export function ImpressaoQzTray({ compacta = false }: ImpressaoQzTrayProps) {
       <div className="flex min-w-0 items-start gap-3"><span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${conectado ? "bg-emerald-500/10 text-emerald-700" : "bg-cream-100 text-ink-500"}`}><IconeStatus size={18} /></span><div><p className="text-sm font-semibold text-ink-900">Estação de impressão</p><p className="mt-0.5 text-xs leading-5 text-ink-500">{mensagem}</p><p className="mt-1 text-[10px] font-medium uppercase tracking-[.1em] text-ink-400">{estaAbaLider ? "Esta aba coordena a fila" : "Outra aba coordena a fila"}</p></div></div>
       <div className="flex flex-wrap items-center gap-2"><button onClick={() => void conectar()} disabled={ocupado} className="of-btn-secondary min-h-10 px-3">{ocupado ? <LoaderCircle size={15} className="animate-spin" /> : <Radio size={15} />}{conectado ? "Atualizar" : "Conectar QZ"}</button><button onClick={alternarAutomatico} disabled={!conectado || !impressora} className={automatico ? "of-btn-primary min-h-10 px-3" : "of-btn-secondary min-h-10 px-3"}>{automatico ? "Impressão automática ativa" : "Ativar impressão automática"}</button></div>
     </div>
-    {conectado && <div className="grid gap-3 border-t border-cream-200 bg-cream-50/55 p-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end"><div className="grid gap-3 sm:grid-cols-3"><label className="block sm:col-span-3"><span className="mb-1.5 block text-[11px] font-semibold text-ink-500">Impressora desta estação</span><select value={impressora} onChange={(evento) => selecionarImpressora(evento.target.value)} className="of-field"><option value="">Selecione a impressora</option>{impressoras.map((nome) => <option key={nome} value={nome}>{nome}</option>)}</select></label><label className="block"><span className="mb-1.5 block text-[11px] font-semibold text-ink-500">Largura</span><select value={largura} onChange={(evento) => selecionarLargura(Number(evento.target.value))} className="of-field"><option value={32}>58 mm</option><option value={48}>80 mm</option></select></label><label className="block"><span className="mb-1.5 block text-[11px] font-semibold text-ink-500">Cópias</span><select value={copias} onChange={(evento) => selecionarCopias(Number(evento.target.value))} className="of-field"><option value={1}>1 via</option><option value={2}>2 vias</option><option value={3}>3 vias</option></select></label><div className="rounded-xl border border-cream-200 bg-white px-3 py-2.5"><span className="block text-[10px] font-semibold uppercase tracking-[.1em] text-ink-400">Fila pendente</span><strong className="mt-0.5 block text-sm text-ink-900">{pendentes} {pendentes === 1 ? "pedido" : "pedidos"}</strong></div></div><button onClick={() => void testar()} disabled={ocupado || !impressora} className="of-btn-secondary min-h-10 px-3"><Printer size={15} /> Imprimir teste</button></div>}
+    {conectado && <div className="grid gap-3 border-t border-cream-200 bg-cream-50/55 p-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><label className="block sm:col-span-2 lg:col-span-4"><span className="mb-1.5 block text-[11px] font-semibold text-ink-500">Impressora desta estação</span><select value={impressora} onChange={(evento) => selecionarImpressora(evento.target.value)} className="of-field"><option value="">Selecione a impressora</option>{impressoras.map((nome) => <option key={nome} value={nome}>{nome}</option>)}</select></label><label className="block"><span className="mb-1.5 block text-[11px] font-semibold text-ink-500">Largura</span><select value={largura} onChange={(evento) => selecionarLargura(Number(evento.target.value))} className="of-field"><option value={32}>58 mm</option><option value={48}>80 mm</option></select></label><label className="block"><span className="mb-1.5 block text-[11px] font-semibold text-ink-500">Cópias</span><select value={copias} onChange={(evento) => selecionarCopias(Number(evento.target.value))} className="of-field"><option value={1}>1 via</option><option value={2}>2 vias</option><option value={3}>3 vias</option></select></label><label className="block"><span className="mb-1.5 block text-[11px] font-semibold text-ink-500">Corte automático</span><select value={corteAutomatico ? "sim" : "nao"} onChange={(evento) => selecionarCorte(evento.target.value === "sim")} className="of-field"><option value="sim">Tenho guilhotina</option><option value="nao">Não tenho guilhotina</option></select></label><div className="rounded-xl border border-cream-200 bg-white px-3 py-2.5"><span className="block text-[10px] font-semibold uppercase tracking-[.1em] text-ink-400">Fila pendente</span><strong className="mt-0.5 block text-sm text-ink-900">{pendentes} {pendentes === 1 ? "pedido" : "pedidos"}</strong></div></div><button onClick={() => void testar()} disabled={ocupado || !impressora} className="of-btn-secondary min-h-10 px-3"><Printer size={15} /> Imprimir teste</button></div>}
     {conectado && !modoAssinado && <p className="flex gap-2 border-t border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800"><TriangleAlert size={16} className="mt-0.5 shrink-0" />Modo de teste: o QZ pode pedir autorização. Para não exibir avisos na operação, configure o certificado e a chave de assinatura do QZ no servidor.</p>}
     {!!falhos?.length && <div className="border-t border-danger-400/20 bg-danger-050/60 p-4"><p className="text-xs font-semibold text-danger-600">Tickets que precisam de atenção</p><div className="mt-2 space-y-2">{falhos.slice(0, 3).map((job) => <div key={job.id} className="flex items-center justify-between gap-3 rounded-xl border border-danger-400/15 bg-white px-3 py-2"><span className="min-w-0 text-xs text-ink-600">Pedido #{job.pedido.codigo}<small className="ml-2 text-ink-400">{job.erro || "Falha após tentativas"}</small></span><button onClick={() => void reenviar(job)} disabled={ocupado} className="shrink-0 text-xs font-semibold text-danger-600 hover:text-danger-700">Reenviar</button></div>)}</div></div>}
   </section>;
