@@ -15,7 +15,7 @@ export interface PizzaCardapioExtraida {
   descricao: string;
   regraMeioAMeio: "maior_valor" | "media" | "preco_fixo";
   tamanhos: { nome: string; precoSaborUnico: number; precoMeioAMeio: number | null }[];
-  sabores: { nome: string; descricao: string; acrescimo: number }[];
+  sabores: { nome: string; descricao: string; acrescimo: number; precos: Record<string, number> }[];
 }
 
 export interface CardapioExtraido { itens: ItemCardapioExtraido[]; pizzas: PizzaCardapioExtraida[]; }
@@ -69,7 +69,7 @@ const FERRAMENTA = {
             nome: { type: "string" }, categoriaSugerida: { type: "string" }, descricao: { type: "string" },
             regraMeioAMeio: { type: "string", enum: ["maior_valor", "media", "preco_fixo"] },
             tamanhos: { type: "array", items: { type: "object", properties: { nome: { type: "string" }, precoSaborUnico: { type: "number" }, precoMeioAMeio: { type: ["number", "null"] } }, required: ["nome", "precoSaborUnico", "precoMeioAMeio"] } },
-            sabores: { type: "array", items: { type: "object", properties: { nome: { type: "string" }, descricao: { type: "string" }, acrescimo: { type: "number" } }, required: ["nome", "descricao", "acrescimo"] } },
+            sabores: { type: "array", items: { type: "object", properties: { nome: { type: "string" }, descricao: { type: "string" }, acrescimo: { type: "number" }, precos: { type: "array", description: "Preço exato deste sabor em cada tamanho, como está impresso no cardápio.", items: { type: "object", properties: { tamanho: { type: "string" }, preco: { type: "number" } }, required: ["tamanho", "preco"] } } }, required: ["nome", "descricao", "acrescimo", "precos"] } },
           },
           required: ["nome", "categoriaSugerida", "descricao", "regraMeioAMeio", "tamanhos", "sabores"],
         },
@@ -129,7 +129,7 @@ export async function extrairItensCardapio(
               "Não invente itens que não estão na foto. Não pule nenhum item, mesmo que a foto tenha muitos. " +
               "Preserve as seções do cardápio quando elas forem legíveis. Quando não existir título claro, classifique cada produto pelo que ele é: pizzas, esfihas, hambúrgueres, sanduíches, pastéis, porções, bebidas, sobremesas ou outra categoria curta e coerente. " +
               "Para uma seção de pizzas com sabores e preços por tamanho, crie UMA ÚNICA pizza configurável por seção do cardápio (ex.: 'Pizzas Salgadas', 'Pizzas Doces'), juntando todos os sabores daquela seção no mesmo array de sabores — nunca crie uma pizza configurável separada por sabor. " +
-              "Na pizza, use o menor preço de cada tamanho como precoSaborUnico. Para o acrescimo de cada sabor, use a diferença de preço no tamanho P (o menor tamanho) entre aquele sabor e o precoSaborUnico do tamanho P, mesmo que a diferença não seja idêntica nos outros tamanhos. Use maior_valor para meio a meio salvo se a foto declarar outra regra. " +
+              "Na pizza, liste em tamanhos cada tamanho que aparece (P, M, G...). Para CADA sabor, preencha precos com o preço exato daquele sabor em cada tamanho, exatamente como está impresso (um objeto {tamanho, preco} por tamanho), e deixe acrescimo em 0. Em tamanhos use o menor preço de cada tamanho como precoSaborUnico. Nunca crie 'Calabresa P', 'Calabresa M' e 'Calabresa G' como itens separados: é um único sabor com três preços. Use maior_valor para meio a meio salvo se a foto declarar outra regra. " +
               "Só preencha tamanho P, M ou G em um item comum quando a própria foto mostrar claramente o MESMO produto em P, M e/ou G, cada qual com seu preço. Sanduíches, hambúrgueres, lanches, pastéis, esfihas e porções normalmente não usam esse campo: use tamanho null, a menos que a foto mostre explicitamente aquelas variações P/M/G do mesmo produto. Se não puder relacionar preço e tamanho com segurança, mantenha como item comum com tamanho null e preserve o texto. Rótulos livres de pizza ficam em pizzas. " +
               "Preserve o texto de ingredientes/descrição exatamente como está escrito, sem resumir. " +
               "Se um item tiver preços diferentes por tipo de pão (ex.: colunas 'Bola' e 'Árabe' com valores distintos), gere uma entrada por tipo de pão, usando tamanho null e colocando o tipo de pão entre parênteses no nome (ex.: 'X-Burguer (Pão Bola)', 'X-Burguer (Pão Árabe)'). " +
@@ -202,8 +202,13 @@ export async function extrairItensCardapio(
       }).filter((tamanho): tamanho is { nome: string; precoSaborUnico: number; precoMeioAMeio: number | null } => tamanho !== null);
       const sabores = (Array.isArray(registro.sabores) ? registro.sabores : []).map((bruto) => {
         const sabor = bruto as Record<string, unknown>; const nomeSabor = typeof sabor?.nome === "string" ? sabor.nome.trim() : ""; const acrescimo = Number(sabor?.acrescimo ?? 0);
-        return nomeSabor.length >= 2 && Number.isFinite(acrescimo) && acrescimo >= 0 ? { nome: nomeSabor, descricao: typeof sabor.descricao === "string" ? sabor.descricao.trim() : "", acrescimo: Math.round(acrescimo * 100) / 100 } : null;
-      }).filter((sabor): sabor is { nome: string; descricao: string; acrescimo: number } => sabor !== null);
+        const precos: Record<string, number> = {};
+        for (const bruto of Array.isArray(sabor?.precos) ? sabor.precos as unknown[] : []) {
+          const entrada = bruto as Record<string, unknown>; const nomeTamanho = typeof entrada?.tamanho === "string" ? entrada.tamanho.trim() : ""; const preco = Number(entrada?.preco);
+          if (nomeTamanho && Number.isFinite(preco) && preco > 0) precos[nomeTamanho] = Math.round(preco * 100) / 100;
+        }
+        return nomeSabor.length >= 2 && Number.isFinite(acrescimo) && acrescimo >= 0 ? { nome: nomeSabor, descricao: typeof sabor.descricao === "string" ? sabor.descricao.trim() : "", acrescimo: Math.round(acrescimo * 100) / 100, precos } : null;
+      }).filter((sabor): sabor is { nome: string; descricao: string; acrescimo: number; precos: Record<string, number> } => sabor !== null);
       if (nome.length < 2 || !categoriaSugerida || !tamanhos.length || !sabores.length) return null;
       return { nome, categoriaSugerida, descricao: typeof registro.descricao === "string" ? registro.descricao.trim() : "", regraMeioAMeio: registro.regraMeioAMeio === "media" || registro.regraMeioAMeio === "preco_fixo" ? registro.regraMeioAMeio : "maior_valor", tamanhos, sabores };
     })

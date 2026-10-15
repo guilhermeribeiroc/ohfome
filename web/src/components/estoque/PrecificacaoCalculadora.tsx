@@ -309,7 +309,7 @@ interface PizzaRevisao {
   chave: string; incluir: boolean; nome: string; categoriaNome: string; descricao: string;
   regraMeioAMeio: "maior_valor" | "media" | "preco_fixo";
   tamanhos: { nome: string; precoSaborUnico: number; precoMeioAMeio: number | null }[];
-  sabores: { nome: string; descricao: string; acrescimo: number }[];
+  sabores: { nome: string; descricao: string; acrescimo: number; precos?: Record<string, number> }[];
 }
 
 function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; onCriados: (ids: string[]) => void }) {

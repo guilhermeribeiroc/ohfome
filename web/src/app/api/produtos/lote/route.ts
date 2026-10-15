@@ -13,7 +13,7 @@ interface ItemEntrada {
 interface PizzaEntrada {
   nome: string; categoriaNome: string; descricao: string; regraMeioAMeio: "maior_valor" | "media" | "preco_fixo";
   tamanhos: { nome: string; precoSaborUnico: number; precoMeioAMeio: number | null }[];
-  sabores: { nome: string; descricao: string; acrescimo: number }[];
+  sabores: { nome: string; descricao: string; acrescimo: number; precos: Record<string, number> }[];
 }
 
 function pareceLanche(item: Pick<ItemEntrada, "nome" | "categoriaNome">) {
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     descricao: typeof pizza?.descricao === "string" ? pizza.descricao.trim() : "",
     regraMeioAMeio: pizza?.regraMeioAMeio === "media" || pizza?.regraMeioAMeio === "preco_fixo" ? pizza.regraMeioAMeio : "maior_valor",
     tamanhos: (Array.isArray(pizza?.tamanhos) ? pizza.tamanhos : []).map((tamanho: Record<string, unknown>) => ({ nome: typeof tamanho?.nome === "string" ? tamanho.nome.trim() : "", precoSaborUnico: Number(tamanho?.precoSaborUnico), precoMeioAMeio: tamanho?.precoMeioAMeio === null || tamanho?.precoMeioAMeio === undefined ? null : Number(tamanho.precoMeioAMeio) })),
-    sabores: (Array.isArray(pizza?.sabores) ? pizza.sabores : []).map((sabor: Record<string, unknown>) => ({ nome: typeof sabor?.nome === "string" ? sabor.nome.trim() : "", descricao: typeof sabor?.descricao === "string" ? sabor.descricao.trim() : "", acrescimo: Number(sabor?.acrescimo ?? 0) })),
+    sabores: (Array.isArray(pizza?.sabores) ? pizza.sabores : []).map((sabor: Record<string, unknown>) => ({ nome: typeof sabor?.nome === "string" ? sabor.nome.trim() : "", descricao: typeof sabor?.descricao === "string" ? sabor.descricao.trim() : "", acrescimo: Number(sabor?.acrescimo ?? 0), precos: Object.fromEntries(Object.entries(sabor?.precos && typeof sabor.precos === "object" ? sabor.precos as Record<string, unknown> : {}).map(([nome, preco]) => [nome.trim(), Number(preco)]).filter(([nome, preco]) => nome && Number.isFinite(preco) && (preco as number) > 0)) as Record<string, number> })),
   }));
   if (pizzas.some((pizza) => pizza.nome.length < 2 || !pizza.categoriaNome || !pizza.tamanhos.length || !pizza.sabores.length || pizza.tamanhos.some((tamanho) => !tamanho.nome || !Number.isFinite(tamanho.precoSaborUnico) || tamanho.precoSaborUnico < 0 || (tamanho.precoMeioAMeio !== null && (!Number.isFinite(tamanho.precoMeioAMeio) || tamanho.precoMeioAMeio < 0))) || (pizza.regraMeioAMeio === "preco_fixo" && pizza.tamanhos.some((tamanho) => tamanho.precoMeioAMeio === null)) || pizza.sabores.some((sabor) => sabor.nome.length < 2 || !Number.isFinite(sabor.acrescimo) || sabor.acrescimo < 0))) return NextResponse.json({ erro: "Revise tamanhos, sabores e preços das pizzas." }, { status: 400 });
 
@@ -146,8 +146,19 @@ export async function POST(request: NextRequest) {
       const { rows } = await client.query(`insert into produtos (estabelecimento_id, categoria_id, nome, descricao, modo_precificacao, preco_custo, margem_percentual, preco_venda, tipo_produto) values ($1,$2,$3,$4,'preco_manual',0,0,$5,'pizza') returning id, nome, descricao`, [estabelecimentoId, catId, pizza.nome, pizza.descricao || null, Math.min(...pizza.tamanhos.map((tamanho) => tamanho.precoSaborUnico))]);
       const produto = rows[0];
       await client.query(`insert into produto_configuracoes_pizza (produto_id, estabelecimento_id, regra_meio_a_meio) values ($1,$2,$3)`, [produto.id, estabelecimentoId, pizza.regraMeioAMeio]);
-      for (const [ordem, tamanho] of pizza.tamanhos.entries()) await client.query(`insert into pizza_tamanhos (produto_id, estabelecimento_id, nome, preco_sabor_unico, preco_meio_a_meio, ordem) values ($1,$2,$3,$4,$5,$6)`, [produto.id, estabelecimentoId, tamanho.nome, tamanho.precoSaborUnico, tamanho.precoMeioAMeio, ordem]);
-      for (const [ordem, sabor] of pizza.sabores.entries()) await client.query(`insert into pizza_sabores (produto_id, estabelecimento_id, nome, descricao, acrescimo, ordem) values ($1,$2,$3,$4,$5,$6)`, [produto.id, estabelecimentoId, sabor.nome, sabor.descricao || null, sabor.acrescimo, ordem]);
+      const tamanhosCriados = new Map<string, string>();
+      for (const [ordem, tamanho] of pizza.tamanhos.entries()) {
+        const { rows: tamanhoCriado } = await client.query(`insert into pizza_tamanhos (produto_id, estabelecimento_id, nome, preco_sabor_unico, preco_meio_a_meio, ordem) values ($1,$2,$3,$4,$5,$6) returning id`, [produto.id, estabelecimentoId, tamanho.nome, tamanho.precoSaborUnico, tamanho.precoMeioAMeio, ordem]);
+        tamanhosCriados.set(tamanho.nome.trim().toLowerCase(), tamanhoCriado[0].id);
+      }
+      for (const [ordem, sabor] of pizza.sabores.entries()) {
+        const { rows: saborCriado } = await client.query(`insert into pizza_sabores (produto_id, estabelecimento_id, nome, descricao, acrescimo, ordem) values ($1,$2,$3,$4,$5,$6) returning id`, [produto.id, estabelecimentoId, sabor.nome, sabor.descricao || null, sabor.acrescimo, ordem]);
+        // Preço próprio do sabor em cada tamanho (tabela do cardápio fotografado).
+        for (const [nomeTamanho, preco] of Object.entries(sabor.precos)) {
+          const tamanhoId = tamanhosCriados.get(nomeTamanho.toLowerCase());
+          if (tamanhoId) await client.query(`insert into pizza_sabor_precos (sabor_id, tamanho_id, estabelecimento_id, preco) values ($1,$2,$3,$4)`, [saborCriado[0].id, tamanhoId, estabelecimentoId, preco]);
+        }
+      }
       resultado.push(produto);
     }
     return resultado;

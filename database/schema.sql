@@ -308,6 +308,17 @@ create table pizza_sabores (
 );
 create index idx_pizza_tamanhos_produto on pizza_tamanhos(produto_id, ordem);
 create index idx_pizza_sabores_produto on pizza_sabores(produto_id, ordem);
+-- Preço específico de um sabor em um tamanho (sobrepõe preço do tamanho + acréscimo).
+create table pizza_sabor_precos (
+  sabor_id uuid not null,
+  tamanho_id uuid not null,
+  estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade,
+  preco numeric(10,2) not null check (preco >= 0),
+  primary key (sabor_id, tamanho_id),
+  foreign key (sabor_id, estabelecimento_id) references pizza_sabores(id, estabelecimento_id) on delete cascade,
+  foreign key (tamanho_id, estabelecimento_id) references pizza_tamanhos(id, estabelecimento_id) on delete cascade
+);
+create index idx_pizza_sabor_precos_tamanho on pizza_sabor_precos(tamanho_id);
 
 -- Escolhas adicionais do produto (ex.: pão e adicionais de um sanduíche).
 create table produto_grupos_opcoes (
@@ -1036,7 +1047,7 @@ begin
     'custos_fixos', 'whatsapp_mensagens', 'estado_aplicacao', 'estabelecimento_modulos',
     'impressao_jobs', 'bairros_entrega', 'banners_cardapio',
     'produto_grupos_opcoes', 'produto_opcoes', 'itens_pedido_opcoes',
-    'produto_configuracoes_pizza', 'pizza_tamanhos', 'pizza_sabores', 'itens_pedido_pizza',
+    'produto_configuracoes_pizza', 'pizza_tamanhos', 'pizza_sabores', 'pizza_sabor_precos', 'itens_pedido_pizza',
     'notificacoes_whatsapp_pedido'
   ]
   loop
@@ -1385,7 +1396,8 @@ as $$
               from pizza_tamanhos pt where pt.produto_id = p.id and pt.ativo
             ), '[]'::jsonb),
             'sabores', coalesce((
-              select jsonb_agg(jsonb_build_object('id', ps.id, 'nome', ps.nome, 'descricao', ps.descricao, 'acrescimo', ps.acrescimo, 'permiteMeioAMeio', ps.permite_meio_a_meio) order by ps.ordem, ps.nome)
+              select jsonb_agg(jsonb_build_object('id', ps.id, 'nome', ps.nome, 'descricao', ps.descricao, 'acrescimo', ps.acrescimo, 'permiteMeioAMeio', ps.permite_meio_a_meio,
+                'precos', coalesce((select jsonb_object_agg(sp.tamanho_id::text, sp.preco) from pizza_sabor_precos sp where sp.sabor_id = ps.id), '{}'::jsonb)) order by ps.ordem, ps.nome)
               from pizza_sabores ps where ps.produto_id = p.id and ps.ativo
             ), '[]'::jsonb)
           )
@@ -1629,7 +1641,9 @@ begin
         raise exception 'Sabor de pizza inválido' using errcode = '22023';
       end if;
 
-      v_pizza_valor_um := v_pizza_preco_sabor_unico + v_pizza_sabor_um_acrescimo;
+      v_pizza_valor_um := coalesce(
+        (select preco from pizza_sabor_precos where sabor_id = v_pizza_sabor_um_id and tamanho_id = v_pizza_tamanho_id),
+        v_pizza_preco_sabor_unico + v_pizza_sabor_um_acrescimo);
 
       if v_pizza_sabor_dois_id is not null then
         if not exists (select 1 from pizza_tamanhos where id = v_pizza_tamanho_id and permite_meio_a_meio) then
@@ -1643,7 +1657,9 @@ begin
         if v_pizza_sabor_dois_nome is null then
           raise exception 'Sabor de pizza inválido' using errcode = '22023';
         end if;
-        v_pizza_valor_dois := v_pizza_preco_sabor_unico + v_pizza_sabor_dois_acrescimo;
+        v_pizza_valor_dois := coalesce(
+          (select preco from pizza_sabor_precos where sabor_id = v_pizza_sabor_dois_id and tamanho_id = v_pizza_tamanho_id),
+          v_pizza_preco_sabor_unico + v_pizza_sabor_dois_acrescimo);
         v_preco := case v_pizza_regra
           when 'media' then (v_pizza_valor_um + v_pizza_valor_dois) / 2
           when 'preco_fixo' then coalesce(v_pizza_preco_meio_a_meio, greatest(v_pizza_valor_um, v_pizza_valor_dois))
@@ -2057,7 +2073,7 @@ grant select, insert, update, delete on
   configuracoes_pix, mercado_pago_conexoes, mercado_pago_oauth_states, pagamentos_pix,
   demonstracao_referencias, pedidos_idempotencia
   , produto_grupos_opcoes, produto_opcoes, itens_pedido_opcoes,
-  produto_configuracoes_pizza, pizza_tamanhos, pizza_sabores, itens_pedido_pizza,
+  produto_configuracoes_pizza, pizza_tamanhos, pizza_sabores, pizza_sabor_precos, itens_pedido_pizza,
   notificacoes_whatsapp_pedido,
   estoque_produtos, estoque_compromissos_produtos, movimentacoes_estoque_produtos
 to ohfome_app;

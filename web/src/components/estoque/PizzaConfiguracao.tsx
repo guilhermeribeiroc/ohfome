@@ -5,7 +5,7 @@ import { Check, Loader2, Plus, Save, Search, Trash2 } from "lucide-react";
 
 type Regra = "maior_valor" | "media" | "preco_fixo";
 type Tamanho = { id?: string; nome: string; precoSaborUnico: number; precoMeioAMeio: number | null; permiteMeioAMeio: boolean; ativo: boolean };
-type Sabor = { id?: string; nome: string; descricao?: string | null; acrescimo: number; permiteMeioAMeio: boolean; ativo: boolean };
+type Sabor = { id?: string; nome: string; descricao?: string | null; acrescimo: number; permiteMeioAMeio: boolean; ativo: boolean; precos?: Record<string, number> };
 
 // Tamanhos mais comuns: um clique cria o tamanho, sem digitar nada.
 const TAMANHOS_RAPIDOS = [
@@ -21,7 +21,7 @@ const REGRAS: { valor: Regra; titulo: string; explicacao: string }[] = [
 ];
 
 const novoTamanho = (nome: string): Tamanho => ({ nome, precoSaborUnico: 0, precoMeioAMeio: null, permiteMeioAMeio: true, ativo: true });
-const novoSabor = (nome: string): Sabor => ({ nome, acrescimo: 0, permiteMeioAMeio: true, ativo: true });
+const novoSabor = (nome: string): Sabor => ({ nome, acrescimo: 0, permiteMeioAMeio: true, ativo: true, precos: {} });
 const dinheiro = (valor: number) => `R$ ${valor.toFixed(2).replace(".", ",")}`;
 
 export function Interruptor({ marcado, onChange, rotulo }: { marcado: boolean; onChange: (valor: boolean) => void; rotulo: string }) {
@@ -35,6 +35,8 @@ export function PizzaConfiguracao({ produtoId, tipoProduto, onSalvo }: { produto
   const [regra, setRegra] = useState<Regra>("maior_valor");
   const [tamanhos, setTamanhos] = useState<Tamanho[]>([]);
   const [sabores, setSabores] = useState<Sabor[]>([]);
+  // Quando ligado, cada sabor tem o seu preço em cada tamanho (como numa tabela de cardápio impresso).
+  const [precoPorSabor, setPrecoPorSabor] = useState(false);
   const [outroTamanho, setOutroTamanho] = useState("");
   const [novoSaborNome, setNovoSaborNome] = useState("");
   const [busca, setBusca] = useState("");
@@ -52,6 +54,7 @@ export function PizzaConfiguracao({ produtoId, tipoProduto, onSalvo }: { produto
         setRegra(dados.regraMeioAMeio);
         setTamanhos(dados.tamanhos);
         setSabores(dados.sabores);
+        setPrecoPorSabor((dados.sabores as Sabor[]).some((sabor) => Object.keys(sabor.precos ?? {}).length > 0));
       })
       .catch((causa) => setErro(causa instanceof Error ? causa.message : "Não foi possível carregar a pizza."))
       .finally(() => setCarregando(false));
@@ -87,6 +90,16 @@ export function PizzaConfiguracao({ produtoId, tipoProduto, onSalvo }: { produto
     setSabores((atuais) => atuais.map((item, i) => i === indice ? { ...item, ...patch } : item));
   }
 
+  function alterarPrecoSabor(indice: number, tamanho: string, valor: string) {
+    setSalvo(false);
+    setSabores((atuais) => atuais.map((item, i) => {
+      if (i !== indice) return item;
+      const precos = { ...(item.precos ?? {}) };
+      if (valor === "") delete precos[tamanho]; else precos[tamanho] = Number(valor);
+      return { ...item, precos };
+    }));
+  }
+
   function adicionarSabor() {
     const nome = novoSaborNome.trim();
     if (nome.length < 2) return;
@@ -99,14 +112,22 @@ export function PizzaConfiguracao({ produtoId, tipoProduto, onSalvo }: { produto
     setErro(""); setSalvo(false);
     if (!tamanhos.length) { setErro("Marque ao menos um tamanho (P, M ou G)."); return; }
     if (!sabores.length) { setErro("Adicione ao menos um sabor."); return; }
-    if (tamanhos.some((tamanho) => !(tamanho.precoSaborUnico > 0))) { setErro("Informe o preço de cada tamanho marcado."); return; }
+    if (!precoPorSabor && tamanhos.some((tamanho) => !(tamanho.precoSaborUnico > 0))) { setErro("Informe o preço de cada tamanho marcado."); return; }
+    if (precoPorSabor) {
+      const semPreco = sabores.find((sabor) => tamanhos.some((tamanho) => !((sabor.precos ?? {})[tamanho.nome] > 0)));
+      if (semPreco) { setErro(`Preencha o preço do sabor "${semPreco.nome}" em todos os tamanhos.`); return; }
+    }
     if (regra === "preco_fixo" && tamanhos.some((tamanho) => tamanho.permiteMeioAMeio && !(Number(tamanho.precoMeioAMeio) > 0))) { setErro("Informe o preço do meio a meio nos tamanhos que aceitam meio a meio."); return; }
     setSalvando(true);
     try {
-      const resposta = await fetch(`/api/produtos/${produtoId}/pizza`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ regraMeioAMeio: regra, tamanhos, sabores }) });
+      // Com preço por sabor, o preço base do tamanho vira o menor preço dele ("a partir de" no cardápio).
+      const nomesAtuais = new Set(tamanhos.map((tamanho) => tamanho.nome));
+      const tamanhosEnvio = precoPorSabor ? tamanhos.map((tamanho) => ({ ...tamanho, precoSaborUnico: Math.min(...sabores.map((sabor) => (sabor.precos ?? {})[tamanho.nome]).filter((valor) => valor > 0)) })) : tamanhos;
+      const saboresEnvio = sabores.map((sabor) => ({ ...sabor, precos: precoPorSabor ? Object.fromEntries(Object.entries(sabor.precos ?? {}).filter(([nome]) => nomesAtuais.has(nome))) : {} }));
+      const resposta = await fetch(`/api/produtos/${produtoId}/pizza`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ regraMeioAMeio: regra, tamanhos: tamanhosEnvio, sabores: saboresEnvio }) });
       const dados = await resposta.json().catch(() => null);
       if (!resposta.ok) throw new Error(dados?.erro ?? "Não foi possível salvar.");
-      setAtiva(true); setTamanhos(dados.tamanhos); setSabores(dados.sabores); setSalvo(true); onSalvo();
+      setAtiva(true); setTamanhos(dados.tamanhos); setSabores(dados.sabores); setPrecoPorSabor((dados.sabores as Sabor[]).some((sabor) => Object.keys(sabor.precos ?? {}).length > 0)); setSalvo(true); onSalvo();
     } catch (causa) {
       setErro(causa instanceof Error ? causa.message : "Não foi possível salvar.");
     } finally {
@@ -145,10 +166,10 @@ export function PizzaConfiguracao({ produtoId, tipoProduto, onSalvo }: { produto
           {tamanhos.map((tamanho) => <div key={tamanho.nome} className="rounded-xl border border-cream-200 bg-cream-50/60 p-3">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <p className="min-w-[3rem] text-sm font-bold text-ink-900">{tamanho.nome}</p>
-              <label className="flex items-center gap-2 text-xs font-semibold text-ink-600">Preço com 1 sabor
+              {!precoPorSabor && <label className="flex items-center gap-2 text-xs font-semibold text-ink-600">Preço com 1 sabor
                 <span className="relative w-28"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-ink-400">R$</span>
                   <input type="number" min="0" step="0.01" value={tamanho.precoSaborUnico || ""} onChange={(evento) => alterarTamanho(tamanho.nome, { precoSaborUnico: Number(evento.target.value) })} className="of-field !min-h-9 !pl-9" aria-label={`Preço do tamanho ${tamanho.nome}`} /></span>
-              </label>
+              </label>}
               <label className="ml-auto flex items-center gap-2 text-xs font-semibold text-ink-600">Aceita meio a meio
                 <Interruptor marcado={tamanho.permiteMeioAMeio} onChange={(valor) => alterarTamanho(tamanho.nome, { permiteMeioAMeio: valor })} rotulo={`Tamanho ${tamanho.nome} aceita meio a meio`} />
               </label>
@@ -178,16 +199,21 @@ export function PizzaConfiguracao({ produtoId, tipoProduto, onSalvo }: { produto
           <button type="button" onClick={adicionarSabor} className="of-btn-secondary !min-h-10 !px-3 !text-xs"><Plus size={14} /> Sabor</button>
         </div>
 
+        <label className="mt-3 flex items-start justify-between gap-3 rounded-xl border border-cream-200 bg-cream-50/60 p-3">
+          <span><span className="block text-sm font-semibold text-ink-900">Cada sabor tem seu preço em cada tamanho</span><span className="mt-0.5 block text-xs leading-5 text-ink-500">Ligue se o seu cardápio tem uma tabela (ex.: Maravilha P 20, M 26, G 36 e Mista P 20, M 25, G 32). Desligado, o preço é o do tamanho mais o valor extra do sabor.</span></span>
+          <Interruptor marcado={precoPorSabor} onChange={(valor) => { setPrecoPorSabor(valor); setSalvo(false); }} rotulo="Preço por sabor e tamanho" />
+        </label>
         {sabores.length > 6 && <div className="relative mt-2"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" /><input value={busca} onChange={(evento) => setBusca(evento.target.value)} placeholder="Buscar sabor" className="of-field !min-h-10 !pl-9" aria-label="Buscar sabor" /></div>}
 
         {sabores.length > 0 && <div className="mt-3 divide-y divide-cream-100 rounded-xl border border-cream-200 bg-white">
-          <div className="hidden grid-cols-[1fr_7.5rem_9rem_2.25rem] gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-ink-400 sm:grid"><span>Sabor</span><span>Valor extra</span><span>Meio a meio</span><span /></div>
-          {saboresVisiveis.map(({ sabor, indice }) => <div key={sabor.id ?? `${sabor.nome}-${indice}`} className="grid grid-cols-[1fr_auto] items-center gap-2 px-3 py-2 sm:grid-cols-[1fr_7.5rem_9rem_2.25rem]">
+          {!precoPorSabor && <div className="hidden grid-cols-[1fr_7.5rem_9rem_2.25rem] gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-ink-400 sm:grid"><span>Sabor</span><span>Valor extra</span><span>Meio a meio</span><span /></div>}
+          {saboresVisiveis.map(({ sabor, indice }) => <div key={sabor.id ?? `${sabor.nome}-${indice}`} className={`grid grid-cols-[1fr_auto] items-center gap-2 px-3 py-2 ${precoPorSabor ? "" : "sm:grid-cols-[1fr_7.5rem_9rem_2.25rem]"}`}>
             <input value={sabor.nome} onChange={(evento) => alterarSabor(indice, { nome: evento.target.value })} className="of-field !min-h-9" aria-label="Nome do sabor" />
-            <button type="button" onClick={() => { setSalvo(false); setSabores((atuais) => atuais.filter((_, i) => i !== indice)); }} className="of-icon-btn text-danger-600 sm:order-last" aria-label={`Remover sabor ${sabor.nome}`}><Trash2 size={14} /></button>
-            <label className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-ink-400">+ R$</span>
-              <input type="number" min="0" step="0.01" value={sabor.acrescimo || ""} placeholder="0" onChange={(evento) => alterarSabor(indice, { acrescimo: Number(evento.target.value) })} className="of-field !min-h-9 !pl-11" aria-label={`Valor extra do sabor ${sabor.nome}`} /></label>
-            <label className="flex items-center justify-end gap-2 text-xs font-semibold text-ink-600 sm:justify-start">{sabor.permiteMeioAMeio ? "Aceita" : "Só inteira"}
+            <button type="button" onClick={() => { setSalvo(false); setSabores((atuais) => atuais.filter((_, i) => i !== indice)); }} className={`of-icon-btn text-danger-600 ${precoPorSabor ? "" : "sm:order-last"}`} aria-label={`Remover sabor ${sabor.nome}`}><Trash2 size={14} /></button>
+            {precoPorSabor && <div className="col-span-2 flex flex-wrap gap-2">{tamanhos.map((tamanho) => <label key={tamanho.nome} className="flex items-center gap-1.5 text-[11px] font-bold text-ink-500">{tamanho.nome}<span className="relative w-24"><span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] font-medium text-ink-400">R$</span><input type="number" min="0" step="0.01" value={(sabor.precos ?? {})[tamanho.nome] ?? ""} onChange={(evento) => alterarPrecoSabor(indice, tamanho.nome, evento.target.value)} className="of-field !min-h-9 !pl-8 !pr-1" aria-label={`Preço de ${sabor.nome} no tamanho ${tamanho.nome}`} /></span></label>)}</div>}
+            {!precoPorSabor && <label className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-ink-400">+ R$</span>
+              <input type="number" min="0" step="0.01" value={sabor.acrescimo || ""} placeholder="0" onChange={(evento) => alterarSabor(indice, { acrescimo: Number(evento.target.value) })} className="of-field !min-h-9 !pl-11" aria-label={`Valor extra do sabor ${sabor.nome}`} /></label>}
+            <label className={`flex items-center gap-2 text-xs font-semibold text-ink-600 ${precoPorSabor ? "col-span-2 justify-start" : "justify-end sm:justify-start"}`}>{sabor.permiteMeioAMeio ? "Aceita" : "Só inteira"}
               <Interruptor marcado={sabor.permiteMeioAMeio} onChange={(valor) => alterarSabor(indice, { permiteMeioAMeio: valor })} rotulo={`Sabor ${sabor.nome} aceita meio a meio`} /></label>
           </div>)}
           {!saboresVisiveis.length && <p className="px-3 py-4 text-center text-xs text-ink-500">Nenhum sabor com esse nome. Tente outra busca.</p>}

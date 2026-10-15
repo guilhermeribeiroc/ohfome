@@ -64,6 +64,8 @@ interface PizzaSaborPublico {
   descricao: string;
   acrescimo: number;
   permiteMeioAMeio?: boolean;
+  /** Preço próprio do sabor por tamanho, indexado pelo id do tamanho. */
+  precos?: Record<string, number>;
 }
 interface PizzaConfigPublica {
   regraMeioAMeio: "maior_valor" | "media" | "preco_fixo";
@@ -102,6 +104,11 @@ interface ItemCarrinho {
   opcoes: OpcaoEscolhida[];
   pizza?: PizzaEscolhida;
   observacao: string;
+}
+
+// Preço do sabor naquele tamanho: o da tabela do cardápio, quando existe; senão tamanho + acréscimo.
+function valorSaborNoTamanho(tamanho: PizzaTamanhoPublico, sabor: PizzaSaborPublico) {
+  return sabor.precos?.[tamanho.id] ?? tamanho.precoSaborUnico + sabor.acrescimo;
 }
 
 function chaveItemCarrinho(produtoId: string, opcoes: OpcaoEscolhida[], pizza?: PizzaEscolhida) {
@@ -1523,8 +1530,8 @@ function ProdutoDetalhe({
     const saborUm = pizzaSabores.find((item) => item.id === pizzaSaboresEscolhidos[0]);
     const saborDois = pizzaSaboresEscolhidos[1] ? pizzaSabores.find((item) => item.id === pizzaSaboresEscolhidos[1]) : null;
     if (!tamanho || !saborUm) return null;
-    const valorUm = tamanho.precoSaborUnico + saborUm.acrescimo;
-    const valorDois = saborDois ? tamanho.precoSaborUnico + saborDois.acrescimo : null;
+    const valorUm = valorSaborNoTamanho(tamanho, saborUm);
+    const valorDois = saborDois ? valorSaborNoTamanho(tamanho, saborDois) : null;
     const regra = produto.pizza?.regraMeioAMeio ?? "maior_valor";
     const preco = !saborDois ? valorUm : regra === "maior_valor" ? Math.max(valorUm, valorDois!) : regra === "media" ? (valorUm + valorDois!) / 2 : (tamanho.precoMeioAMeio ?? Math.max(valorUm, valorDois!));
     return { tamanhoId: tamanho.id, tamanhoNome: tamanho.nome, saborUmId: saborUm.id, saborUmNome: saborUm.nome, saborDoisId: saborDois?.id, saborDoisNome: saborDois?.nome, preco };
@@ -1622,7 +1629,7 @@ function ProdutoDetalhe({
                       className={`rounded-xl border px-2 py-3 text-center text-sm font-semibold transition ${pizzaTamanhoId === tamanho.id ? "border-[#0e7775] bg-[#0e7775]/[.07] text-[#0e7775]" : "border-black/[.08] bg-white text-[#181714]"}`}
                     >
                       {tamanho.nome}
-                      <span className="mt-0.5 block text-[11px] font-medium text-black/45">{moeda(tamanho.precoSaborUnico)}</span>
+                      <span className="mt-0.5 block text-[11px] font-medium text-black/45">{pizzaSabores.some((sabor) => sabor.precos && Object.keys(sabor.precos).length > 0) ? `a partir de ${moeda(tamanho.precoSaborUnico)}` : moeda(tamanho.precoSaborUnico)}</span>
                       {tamanho.permiteMeioAMeio === false && <span className="mt-0.5 block text-[10px] font-medium text-black/40">1 sabor</span>}
                     </button>
                   ))}
@@ -1658,7 +1665,7 @@ function ProdutoDetalhe({
                             {sabor.descricao && <span className="block text-[11px] font-normal text-black/45">{sabor.descricao}</span>}
                           </span>
                         </span>
-                        {semCombinar ? <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[.06em] text-black/40">Não combina</span> : sabor.acrescimo > 0 && <span className="shrink-0 text-xs font-semibold text-black/50">+{moeda(sabor.acrescimo)}</span>}
+                        {semCombinar ? <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[.06em] text-black/40">Não combina</span> : sabor.precos && Object.keys(sabor.precos).length > 0 ? (tamanhoEscolhido && <span className="shrink-0 text-xs font-semibold text-black/50">{moeda(valorSaborNoTamanho(tamanhoEscolhido, sabor))}</span>) : sabor.acrescimo > 0 && <span className="shrink-0 text-xs font-semibold text-black/50">+{moeda(sabor.acrescimo)}</span>}
                       </button>
                     );
                   })}
