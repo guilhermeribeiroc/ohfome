@@ -108,13 +108,15 @@ export function dadosEscPosPedido(pedido: Pedido, largura = LARGURA_TICKET) {
 
   for (const item of pedido.itens) {
     // Título do item (negrito, altura dupla, preço na mesma linha quando couber):
-    //   pizza -> "1X PIZZA - TAMANHO G"   (os sabores vêm logo abaixo)
+    //   pizza -> "1X PIZZA - G"   (os sabores vêm logo abaixo)
     //   outros -> "1X SANDUICHE - AMERICANO" (a categoria vem antes do nome)
     const categoria = item.categoriaNome?.trim() ?? "";
     const nomeSemCategoria = textoTermico(item.produtoNome).startsWith(textoTermico(categoria));
+    // Tamanho sem a palavra "TAMANHO": "1X PIZZA - M". Produtos com o tamanho no nome ("X (M)") ficam "X - M".
+    const nomeItem = item.produtoNome.replace(/\s*\((P|M|G)\)\s*$/i, " - $1");
     const titulo = item.pizza
-      ? `${item.quantidade}X ${item.produtoNome} - TAMANHO ${item.pizza.tamanhoNome}`
-      : `${item.quantidade}X ${categoria && !nomeSemCategoria ? `${categoria} - ` : ""}${item.produtoNome}`;
+      ? `${item.quantidade}X ${nomeItem} - ${item.pizza.tamanhoNome}`
+      : `${item.quantidade}X ${categoria && !nomeSemCategoria ? `${categoria} - ` : ""}${nomeItem}`;
     linhas.push("\x1D\x21\x01", "\x1B\x45\x01", ...linhaComValor(titulo, moedaTermica(item.precoUnitario * item.quantidade), largura), "\x1B\x45\x00", "\x1D\x21\x00");
     // Sabor(es) e tamanho da pizza, e as respostas das perguntas (pão, adicionais...),
     // em negrito e com altura dupla para a cozinha ler de longe.
