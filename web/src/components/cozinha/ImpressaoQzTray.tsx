@@ -49,12 +49,6 @@ function quebrarLinha(texto: string, largura = LARGURA_TICKET) {
   return linhas.length ? linhas : [""];
 }
 
-function centralizar(texto: string, largura = LARGURA_TICKET) {
-  const limpo = textoTermico(texto);
-  const espacos = Math.max(0, Math.floor((largura - limpo.length) / 2));
-  return `${" ".repeat(espacos)}${limpo}`;
-}
-
 function moedaTermica(valor: number) {
   return `R$ ${Number(valor || 0).toFixed(2).replace(".", ",")}`;
 }
@@ -95,9 +89,18 @@ function modalidadePedido(pedido: Pedido) {
 
 export function dadosEscPosPedido(pedido: Pedido, largura = LARGURA_TICKET) {
   const cabecalho = cabecalhoTermico(pedido, largura);
-  const contexto = `PEDIDO #${pedido.codigo} - ${modalidadePedido(pedido)}`;
-  const larguraCabecalho = Math.max(1, Math.floor(largura / 2));
-  const linhas = ["\x1B\x40", "\x1B\x61\x01", "\x1B\x45\x01", "\x1D\x21\x11", ...quebrarLinha(cabecalho, larguraCabecalho).map((linha) => `${centralizar(linha, larguraCabecalho)}\n`), ...quebrarLinha(contexto, larguraCabecalho).map((linha) => `${centralizar(linha, larguraCabecalho)}\n`), "\x1D\x21\x00", "\x1B\x45\x00", "\n", "\x1B\x61\x00", `${"-".repeat(largura)}\n`];
+  // Cabeçalho compacto: nome da loja em negrito (tamanho normal), só o número do
+  // pedido em fonte grande e a modalidade em negrito. Antes tudo saía em fonte dupla
+  // e quebrava em 4 linhas, gastando papel.
+  const numeroPedido = `PEDIDO #${pedido.codigo}`;
+  const larguraGrande = Math.max(1, Math.floor(largura / 2));
+  const linhas = [
+    "\x1B\x40", "\x1B\x61\x01", "\x1B\x45\x01",
+    ...quebrarLinha(cabecalho, largura).map((linha) => `${linha}\n`),
+    "\x1D\x21\x11", ...quebrarLinha(numeroPedido, larguraGrande).map((linha) => `${linha}\n`), "\x1D\x21\x00",
+    `${textoTermico(modalidadePedido(pedido))}\n`,
+    "\x1B\x45\x00", "\x1B\x61\x00", `${"-".repeat(largura)}\n`,
+  ];
 
   if (pedido.clienteNome?.trim()) {
     linhas.push(...quebrarLinha(`CLIENTE: ${pedido.clienteNome.trim()}`, largura).map((linha) => `${linha}\n`), "\n");
@@ -105,8 +108,14 @@ export function dadosEscPosPedido(pedido: Pedido, largura = LARGURA_TICKET) {
 
   for (const item of pedido.itens) {
     linhas.push("\x1D\x21\x10", "\x1B\x45\x01", ...linhaComValor(`${item.quantidade}X ${item.produtoNome}`, moedaTermica(item.precoUnitario * item.quantidade), largura), "\x1B\x45\x00");
-    if (item.pizza) linhas.push("\x1B\x21\x00", `  ${item.pizza.tamanhoNome}: ${item.pizza.saborDoisNome ? `1/2 ${item.pizza.saborUmNome} / 1/2 ${item.pizza.saborDoisNome}` : item.pizza.saborUmNome}`, "\n");
-    for (const opcao of item.opcoes ?? []) linhas.push("\x1B\x21\x00", `  ${opcao.grupoNome}: ${opcao.opcaoNome}`, "\n");
+    // Sabor(es) e tamanho da pizza, e as respostas das perguntas (pão, adicionais...),
+    // em negrito e com altura dupla para a cozinha ler de longe.
+    const destaque = (texto: string) => ["\x1B\x45\x01", "\x1D\x21\x01", ...quebrarLinha(texto, largura).map((linha) => `${linha}\n`), "\x1D\x21\x00", "\x1B\x45\x00"];
+    if (item.pizza) {
+      linhas.push(...destaque(`TAMANHO ${item.pizza.tamanhoNome}`));
+      linhas.push(...destaque(item.pizza.saborDoisNome ? `1/2 ${item.pizza.saborUmNome} + 1/2 ${item.pizza.saborDoisNome}` : `SABOR: ${item.pizza.saborUmNome}`));
+    }
+    for (const opcao of item.opcoes ?? []) linhas.push(...destaque(`${opcao.grupoNome}: ${opcao.opcaoNome}`));
     if (item.observacoes) linhas.push("\x1B\x45\x01", ...quebrarLinha(`  OBS: ${item.observacoes}`, largura).map((linha) => `${linha}\n`), "\x1B\x45\x00");
     linhas.push("\x1D\x21\x00");
   }
@@ -137,7 +146,7 @@ export function dadosEscPosPedido(pedido: Pedido, largura = LARGURA_TICKET) {
   }
 
   linhas.push(`${"-".repeat(largura)}\n`, ...quebrarLinha(`ORIGEM: ${pedido.origem === "app" ? "CARDAPIO DIGITAL" : pedido.usuarioNome || "ATENDIMENTO"}`, largura).map((linha) => `${linha}\n`));
-  linhas.push(`${new Date(pedido.createdAt).toLocaleString("pt-BR")}\n`, "\n\n", "\x1D\x56\x00");
+  linhas.push(`${new Date(pedido.createdAt).toLocaleString("pt-BR")}\n`, "\x1B\x64\x06", "\x1D\x56\x00");
   return linhas;
 }
 

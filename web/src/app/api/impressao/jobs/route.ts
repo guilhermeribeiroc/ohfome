@@ -35,7 +35,23 @@ const PEDIDO_IMPRESSAO_SELECT = `
           'quantidade', ip.quantidade,
           'precoUnitario', ip.preco_unitario,
           'observacoes', ip.observacoes,
-          'status', ip.status
+          'status', ip.status,
+          -- Sabor/tamanho da pizza e opções (pão, adicionais...) precisam ir para a comanda.
+          'pizza', (select json_build_object(
+            'tamanhoNome', ipp.tamanho_nome,
+            'saborUmNome', ipp.sabor_um_nome,
+            'saborDoisNome', ipp.sabor_dois_nome,
+            'regraMeioAMeio', ipp.regra_meio_a_meio
+          ) from itens_pedido_pizza ipp where ipp.item_pedido_id = ip.id),
+          'opcoes', coalesce((
+            select json_agg(json_build_object(
+              'grupoNome', ipo.grupo_nome,
+              'opcaoNome', ipo.opcao_nome,
+              'acrescimo', ipo.acrescimo
+            ) order by ipo.created_at)
+            from itens_pedido_opcoes ipo
+            where ipo.item_pedido_id = ip.id
+          ), '[]')
         ) order by ip.created_at)
         from itens_pedido ip
         join produtos pr on pr.id = ip.produto_id

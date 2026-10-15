@@ -41,6 +41,8 @@ export function PrecificacaoCalculadora() {
   const { dados, setDados, recarregar } = usePolling<Produto[]>("/api/produtos", 15000);
   const lista = dados ?? [];
   // Sabor de pizza aberto na ficha da direita (nome vazio = novo sabor).
+  // Só pizzas mostram a configuração de tamanhos e sabores; nos demais produtos ela fica escondida atrás de um botão.
+  const [pizzaLiberadaPara, setPizzaLiberadaPara] = useState<string | null>(null);
   const [saborAberto, setSaborAberto] = useState<{ produtoId: string; nome: string } | null>(null);
   const [categoriaFiltro, setCategoriaFiltro] = useState("");
   const [buscaProduto, setBuscaProduto] = useState("");
@@ -285,7 +287,9 @@ export function PrecificacaoCalculadora() {
 
             <FichaTecnica produtoId={selecionado.id} />
             <OpcoesProduto produtoId={selecionado.id} />
-            <PizzaConfiguracao produtoId={selecionado.id} tipoProduto={selecionado.tipoProduto} onSalvo={recarregar} />
+            {selecionado.tipoProduto === "pizza" || pizzaLiberadaPara === selecionado.id
+              ? <PizzaConfiguracao produtoId={selecionado.id} tipoProduto={selecionado.tipoProduto} onSalvo={recarregar} />
+              : <button type="button" onClick={() => setPizzaLiberadaPara(selecionado.id)} className="mt-4 w-full rounded-2xl border border-dashed border-cream-300 px-4 py-3 text-left text-xs text-ink-500 transition hover:border-coral-300 hover:text-ink-700"><b className="block text-sm text-ink-700">Este produto é uma pizza?</b>Toque aqui para configurar tamanhos (P, M, G) e sabores. Os outros produtos não precisam disso.</button>}
           </div>
           )}
         </div>
