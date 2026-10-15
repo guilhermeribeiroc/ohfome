@@ -9,6 +9,7 @@ interface ItemEntrada {
   precoVenda: number;
   categoriaNome: string;
   tiposPao: string[];
+  precosPorPao: { pao: string; preco: number }[];
 }
 interface PizzaEntrada {
   nome: string; categoriaNome: string; descricao: string; regraMeioAMeio: "maior_valor" | "media" | "preco_fixo";
@@ -40,6 +41,7 @@ export async function POST(request: NextRequest) {
     tiposPao: Array.isArray(item?.tiposPao)
       ? Array.from(new Set(item.tiposPao.map((tipo: unknown) => (typeof tipo === "string" ? tipo.trim() : "")).filter((tipo: string) => tipo.length >= 2)))
       : [],
+    precosPorPao: (Array.isArray(item?.precosPorPao) ? item.precosPorPao : []).map((entrada: Record<string, unknown>) => ({ pao: typeof entrada?.pao === "string" ? entrada.pao.trim() : "", preco: Number(entrada?.preco) })).filter((entrada: { pao: string; preco: number }) => entrada.pao && Number.isFinite(entrada.preco) && entrada.preco > 0),
   }));
 
   // A importação automática não tem uma confirmação humana para tamanhos em
@@ -127,7 +129,17 @@ export async function POST(request: NextRequest) {
            margem_percentual as "margemPercentual", preco_venda as "precoVenda", ativo`,
         [estabelecimentoId, catId, item.nome, item.tamanho, item.descricao || null, item.precoVenda]
       );
-      if (item.tiposPao.length > 0) {
+      // O pão define o preço (Bola R$ 8, Árabe R$ 9): pergunta obrigatória cujo valor é o preço completo.
+      if (item.precosPorPao.length > 0) {
+        const { rows: grupoPreco } = await client.query<{ id: string }>(
+          `insert into produto_grupos_opcoes (estabelecimento_id, produto_id, nome, minimo_selecoes, maximo_selecoes, define_preco, ativo, ordem) values ($1,$2,'Pão',1,1,true,true,0) returning id`,
+          [estabelecimentoId, rows[0].id]
+        );
+        for (const [ordem, entrada] of item.precosPorPao.entries()) {
+          await client.query(`insert into produto_opcoes (estabelecimento_id, grupo_id, nome, acrescimo, ativo, ordem) values ($1,$2,$3,$4,true,$5)`, [estabelecimentoId, grupoPreco[0].id, entrada.pao, entrada.preco, ordem]);
+        }
+        await client.query(`update produtos set preco_venda = $2 where id = $1`, [rows[0].id, Math.min(...item.precosPorPao.map((entrada) => entrada.preco))]);
+      } else if (item.tiposPao.length > 0) {
         const { rows: grupoRows } = await client.query<{ id: string }>(
           `insert into produto_grupos_opcoes (estabelecimento_id, produto_id, nome, minimo_selecoes, maximo_selecoes, ativo, ordem) values ($1,$2,'Pão',1,1,true,0) returning id`,
           [estabelecimentoId, rows[0].id]

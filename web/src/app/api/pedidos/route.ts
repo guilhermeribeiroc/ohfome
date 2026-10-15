@@ -318,31 +318,33 @@ export async function POST(request: NextRequest) {
           throw Object.assign(new Error("Não repita a mesma opção."), { status: 400 });
         }
         const { rows: grupos } = await client.query(
-          `select id, nome, minimo_selecoes as "minimoSelecoes", maximo_selecoes as "maximoSelecoes"
+          `select id, nome, minimo_selecoes as "minimoSelecoes", maximo_selecoes as "maximoSelecoes", define_preco as "definePreco"
            from produto_grupos_opcoes where produto_id = $1 and ativo order by ordem, nome`,
           [item.produtoId]
         );
         const { rows: opcoes } = opcaoIds.length ? await client.query(
-          `select o.id, o.grupo_id as "grupoId", o.nome, o.acrescimo, g.nome as "grupoNome"
+          `select o.id, o.grupo_id as "grupoId", o.nome, o.acrescimo, g.nome as "grupoNome", g.define_preco as "definePreco"
            from produto_opcoes o
            join produto_grupos_opcoes g on g.id = o.grupo_id
            where o.id = any($1::uuid[]) and o.ativo and g.ativo and g.produto_id = $2`,
           [opcaoIds, item.produtoId]
-        ) : { rows: [] as { id: string; grupoId: string; nome: string; acrescimo: number; grupoNome: string }[] };
+        ) : { rows: [] as { id: string; grupoId: string; nome: string; acrescimo: number; grupoNome: string; definePreco: boolean }[] };
         if (opcoes.length !== escolhas.length || opcoes.some((opcao) => !escolhas.some((escolha) => escolha.opcaoId === opcao.id && escolha.grupoId === opcao.grupoId))) {
           throw Object.assign(new Error("Uma opção não pertence a este produto."), { status: 400 });
         }
         for (const grupo of grupos) {
           const quantidade = opcoes.filter((opcao) => opcao.grupoId === grupo.id).length;
-          if (opcoesFornecidas && (quantidade < Number(grupo.minimoSelecoes) || quantidade > Number(grupo.maximoSelecoes))) {
+          if ((opcoesFornecidas || grupo.definePreco) && (quantidade < Number(grupo.minimoSelecoes) || quantidade > Number(grupo.maximoSelecoes))) {
             throw Object.assign(new Error(`Escolha entre ${grupo.minimoSelecoes} e ${grupo.maximoSelecoes} opção(ões) em ${grupo.nome}.`), { status: 400 });
           }
         }
+        // Pergunta que DEFINE o preço (pão Bola/Árabe): o preço da opção é o preço completo do item.
         const acrescimo = opcoes.reduce((total, opcao) => total + Number(opcao.acrescimo), 0);
+        const baseDoItem = opcoes.some((opcao) => opcao.definePreco) ? 0 : precoPizza;
         const { rows: itensCriados } = await client.query(
           `insert into itens_pedido (pedido_id, produto_id, quantidade, preco_unitario, observacoes)
            values ($1, $2, $3, $4, $5) returning id`,
-          [pedidoId, item.produtoId, item.quantidade, precoPizza + acrescimo, item.observacoes ?? null]
+          [pedidoId, item.produtoId, item.quantidade, baseDoItem + acrescimo, item.observacoes ?? null]
         );
         if (pizzaSnapshot) await client.query(`insert into itens_pedido_pizza (item_pedido_id, estabelecimento_id, tamanho_nome, sabor_um_nome, sabor_dois_nome, regra_meio_a_meio, preco_calculado) values ($1,$2,$3,$4,$5,$6,$7)`, [itensCriados[0].id, sessao.estabelecimentoId, pizzaSnapshot.tamanhoNome, pizzaSnapshot.saborUmNome, pizzaSnapshot.saborDoisNome, pizzaSnapshot.regraMeioAMeio, precoPizza]);
         for (const opcao of opcoes) {

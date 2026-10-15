@@ -41,6 +41,8 @@ interface GrupoOpcoesPublico {
   nome: string;
   minimoSelecoes: number;
   maximoSelecoes: number;
+  /** O preço da opção escolhida é o preço COMPLETO do item (ex.: pão Bola R$ 8, Árabe R$ 9). */
+  definePreco?: boolean;
   opcoes: OpcaoPublica[];
 }
 interface OpcaoEscolhida {
@@ -49,6 +51,7 @@ interface OpcaoEscolhida {
   opcaoId: string;
   opcaoNome: string;
   acrescimo: number;
+  definePreco?: boolean;
 }
 
 interface PizzaTamanhoPublico {
@@ -107,6 +110,17 @@ interface ItemCarrinho {
   opcoes: OpcaoEscolhida[];
   pizza?: PizzaEscolhida;
   observacao: string;
+}
+
+// Preço do item com as opções: se alguma pergunta define o preço (pão Bola/Árabe), o preço da
+// opção é o preço completo; senão é o preço do produto mais os acréscimos.
+function precoComOpcoes(base: number, opcoes: { acrescimo: number; definePreco?: boolean }[]) {
+  const soma = opcoes.reduce((total, opcao) => total + opcao.acrescimo, 0);
+  return opcoes.some((opcao) => opcao.definePreco) ? soma : base + soma;
+}
+
+function temPrecoPorOpcao(produto: ProdutoPublico) {
+  return Boolean(produto.grupoOpcoes?.some((grupo) => grupo.definePreco));
 }
 
 // Preço do sabor naquele tamanho: o da tabela do cardápio, quando existe; senão tamanho + acréscimo.
@@ -559,7 +573,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
   function precoDoItem(item: ItemCarrinho) {
     if (item.pizza) return item.pizza.preco;
     const base = dados?.produtos.find((produto) => produto.id === item.produtoId)?.precoVenda ?? 0;
-    return base + item.opcoes.reduce((total, opcao) => total + opcao.acrescimo, 0);
+    return precoComOpcoes(base, item.opcoes);
   }
 
   const totalItens = Object.values(carrinho).reduce(
@@ -811,7 +825,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
                         {nomeProdutoExibicao(produto)}
                       </strong>
                       <small className="text-[#0e7775]">
-                        {produto.tipoProduto === "pizza" ? `A partir de ${moeda(precoBaseProduto(produto))}` : moeda(produto.precoVenda)}
+                        {produto.tipoProduto === "pizza" || temPrecoPorOpcao(produto) ? `A partir de ${moeda(precoBaseProduto(produto))}` : moeda(produto.precoVenda)}
                       </small>
                     </span>
                     <ArrowRight size={15} className="text-black/30" />
@@ -1034,7 +1048,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
                         {nomeProdutoExibicao(produto)}
                       </strong>
                       <b className="mt-1.5 block text-sm font-semibold text-[#0e7775] sm:text-base">
-                        {produto.tipoProduto === "pizza" ? `A partir de ${moeda(precoBaseProduto(produto))}` : moeda(produto.precoVenda)}
+                        {produto.tipoProduto === "pizza" || temPrecoPorOpcao(produto) ? `A partir de ${moeda(precoBaseProduto(produto))}` : moeda(produto.precoVenda)}
                       </b>
                       {produto.controlaEstoqueUnidades && <span className={`mt-1.5 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[.08em] ${esgotado ? "bg-[#941c42]/10 text-[#941c42]" : "bg-[#0e7775]/10 text-[#0e7775]"}`}>{esgotado ? "Esgotado" : `${produto.estoqueDisponivel ?? 0} disponíveis`}</span>}
                       <small className="mt-2 block overflow-hidden text-[12px] leading-[1.55] text-black/65 sm:max-w-xl sm:text-sm">
@@ -1583,13 +1597,13 @@ function ProdutoDetalhe({
     (selecionadas[grupo.id] ?? [])
       .map((opcaoId) => grupo.opcoes.find((opcao) => opcao.id === opcaoId))
       .filter((opcao): opcao is GrupoOpcoesPublico["opcoes"][number] => Boolean(opcao))
-      .map((opcao) => ({ grupoId: grupo.id, grupoNome: grupo.nome, opcaoId: opcao.id, opcaoNome: opcao.nome, acrescimo: opcao.acrescimo })),
+      .map((opcao) => ({ grupoId: grupo.id, grupoNome: grupo.nome, opcaoId: opcao.id, opcaoNome: opcao.nome, acrescimo: opcao.acrescimo, definePreco: grupo.definePreco })),
   );
   const gruposPendentes = grupos.filter((grupo) => (selecionadas[grupo.id] ?? []).length < grupo.minimoSelecoes);
   const opcoesValidas = gruposPendentes.length === 0 && pizzaValida;
   const precoUnitario = ehPizza
     ? pizzaEscolhida?.preco ?? precoBaseProduto(produto)
-    : produto.precoVenda + opcoesEscolhidas.reduce((total, opcao) => total + opcao.acrescimo, 0);
+    : precoComOpcoes(produto.precoVenda, opcoesEscolhidas);
 
   function confirmar() {
     if (!opcoesValidas) return;
@@ -1757,7 +1771,7 @@ function ProdutoDetalhe({
                         </i>
                         {opcao.nome}
                       </span>
-                      {opcao.acrescimo > 0 && <span className="shrink-0 text-xs font-semibold text-black/50">+{moeda(opcao.acrescimo)}</span>}
+                      {opcao.acrescimo > 0 && <span className="shrink-0 text-xs font-semibold text-black/50">{grupo.definePreco ? moeda(opcao.acrescimo) : `+${moeda(opcao.acrescimo)}`}</span>}
                     </button>
                   );
                 })}
@@ -1928,7 +1942,7 @@ function CarrinhoSheet({
       opcoes: item.opcoes,
       pizza: item.pizza,
       observacoes: item.observacao.trim(),
-      precoUnitario: item.pizza ? item.pizza.preco : (dados.produtos.find((produto) => produto.id === item.produtoId)?.precoVenda ?? 0) + item.opcoes.reduce((total, opcao) => total + opcao.acrescimo, 0),
+      precoUnitario: item.pizza ? item.pizza.preco : precoComOpcoes(dados.produtos.find((produto) => produto.id === item.produtoId)?.precoVenda ?? 0, item.opcoes),
     }))
     .filter(
       (

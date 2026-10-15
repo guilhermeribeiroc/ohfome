@@ -326,6 +326,9 @@ create table produto_grupos_opcoes (
   produto_id uuid not null references produtos(id) on delete cascade, nome text not null,
   minimo_selecoes integer not null default 0 check (minimo_selecoes >= 0),
   maximo_selecoes integer not null default 1 check (maximo_selecoes >= 1 and maximo_selecoes >= minimo_selecoes),
+  -- Quando true, o preço da opção escolhida é o preço COMPLETO do item (ex.: pão Bola R$ 8, pão Árabe R$ 9),
+  -- em vez de um acréscimo sobre o preço do produto. Exige escolher exatamente uma opção.
+  define_preco boolean not null default false,
   ativo boolean not null default true, ordem integer not null default 0, created_at timestamptz not null default now(), unique (id, estabelecimento_id)
 );
 create table produto_opcoes (
@@ -1382,6 +1385,7 @@ as $$
             'nome', g.nome,
             'minimoSelecoes', g.minimo_selecoes,
             'maximoSelecoes', g.maximo_selecoes,
+            'definePreco', g.define_preco,
             'opcoes', coalesce((
               select jsonb_agg(jsonb_build_object('id', o.id, 'nome', o.nome, 'acrescimo', o.acrescimo) order by o.ordem, o.nome)
               from produto_opcoes o where o.grupo_id = g.id and o.ativo
@@ -1700,9 +1704,10 @@ begin
       raise exception 'Uma opção não pertence a este produto' using errcode = '22023';
     end if;
 
-    if v_opcoes_fornecidas and exists (
+    if exists (
       select 1 from produto_grupos_opcoes g
       where g.produto_id = v_produto_id and g.ativo
+        and (v_opcoes_fornecidas or g.define_preco)
         and (select count(*) from jsonb_array_elements(v_item_opcoes) elem where elem->>'grupoId' = g.id::text)
             not between g.minimo_selecoes and g.maximo_selecoes
     ) then
@@ -1714,7 +1719,9 @@ begin
     join produto_opcoes o on o.id = (elem->>'opcaoId')::uuid;
 
     insert into itens_pedido (pedido_id, produto_id, quantidade, preco_unitario, observacoes)
-    values (v_pedido_id, v_produto_id, v_quantidade, v_preco + v_acrescimo, v_item_observacoes)
+    values (v_pedido_id, v_produto_id, v_quantidade, (case when exists (select 1 from jsonb_array_elements(v_item_opcoes) elem
+      join produto_opcoes o on o.id = (elem->>'opcaoId')::uuid
+      join produto_grupos_opcoes g on g.id = o.grupo_id where g.define_preco) then 0 else v_preco end) + v_acrescimo, v_item_observacoes)
     returning id into v_item_pedido_id;
 
     if v_tipo_produto = 'pizza' then
@@ -1974,9 +1981,10 @@ begin
       raise exception 'Uma opção não pertence a este produto' using errcode = '22023';
     end if;
 
-    if v_opcoes_fornecidas and exists (
+    if exists (
       select 1 from produto_grupos_opcoes g
       where g.produto_id = v_produto_id and g.ativo
+        and (v_opcoes_fornecidas or g.define_preco)
         and (select count(*) from jsonb_array_elements(v_item_opcoes) elem where elem->>'grupoId' = g.id::text)
             not between g.minimo_selecoes and g.maximo_selecoes
     ) then
@@ -1988,7 +1996,9 @@ begin
     join produto_opcoes o on o.id = (elem->>'opcaoId')::uuid;
 
     insert into itens_pedido (pedido_id, produto_id, quantidade, preco_unitario, observacoes)
-    values (v_novo_pedido_id, v_produto_id, v_quantidade, v_preco + v_acrescimo, v_item_observacoes)
+    values (v_novo_pedido_id, v_produto_id, v_quantidade, (case when exists (select 1 from jsonb_array_elements(v_item_opcoes) elem
+      join produto_opcoes o on o.id = (elem->>'opcaoId')::uuid
+      join produto_grupos_opcoes g on g.id = o.grupo_id where g.define_preco) then 0 else v_preco end) + v_acrescimo, v_item_observacoes)
     returning id into v_item_pedido_id;
 
     insert into itens_pedido_opcoes (estabelecimento_id, item_pedido_id, grupo_nome, opcao_nome, acrescimo)
