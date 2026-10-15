@@ -80,7 +80,7 @@ export function imprimirPedido(pedido: Pedido, titulo = "Via do pedido") {
     pagamento: textoPagamento(pedido),
     pagamentoPartes: partesPagamento(pedido),
     observacoes: pedido.observacoes,
-    itens: pedido.itens.map((item) => ({ nome: `${item.produtoNome}${item.pizza ? `\n  ${item.pizza.tamanhoNome} · ${item.pizza.saborDoisNome ? `½ ${item.pizza.saborUmNome} / ½ ${item.pizza.saborDoisNome}` : item.pizza.saborUmNome}` : ""}${item.opcoes?.length ? `\n  ${item.opcoes.map((opcao) => `${opcao.grupoNome}: ${opcao.opcaoNome}`).join(" · ")}` : ""}`, quantidade: item.quantidade, valor: item.precoUnitario * item.quantidade })),
+    itens: pedido.itens.map((item) => ({ nome: `${item.pizza ? `${item.produtoNome} · Tamanho ${item.pizza.tamanhoNome}` : item.categoriaNome && !item.produtoNome.toLowerCase().startsWith(item.categoriaNome.trim().toLowerCase()) ? `${item.categoriaNome} · ${item.produtoNome}` : item.produtoNome}${item.pizza ? `\n  ${item.pizza.saborDoisNome ? `½ ${item.pizza.saborUmNome} / ½ ${item.pizza.saborDoisNome}` : item.pizza.saborUmNome}` : ""}${item.opcoes?.length ? `\n  ${item.opcoes.map((opcao) => `${opcao.grupoNome}: ${opcao.opcaoNome}`).join(" · ")}` : ""}`, quantidade: item.quantidade, valor: item.precoUnitario * item.quantidade })),
     total: pedido.total,
     cozinha: /cozinha/i.test(titulo),
   });

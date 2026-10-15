@@ -107,12 +107,19 @@ export function dadosEscPosPedido(pedido: Pedido, largura = LARGURA_TICKET) {
   }
 
   for (const item of pedido.itens) {
-    linhas.push("\x1D\x21\x10", "\x1B\x45\x01", ...linhaComValor(`${item.quantidade}X ${item.produtoNome}`, moedaTermica(item.precoUnitario * item.quantidade), largura), "\x1B\x45\x00");
+    // Título do item (negrito, altura dupla, preço na mesma linha quando couber):
+    //   pizza -> "1X PIZZA - TAMANHO G"   (os sabores vêm logo abaixo)
+    //   outros -> "1X SANDUICHE - AMERICANO" (a categoria vem antes do nome)
+    const categoria = item.categoriaNome?.trim() ?? "";
+    const nomeSemCategoria = textoTermico(item.produtoNome).startsWith(textoTermico(categoria));
+    const titulo = item.pizza
+      ? `${item.quantidade}X ${item.produtoNome} - TAMANHO ${item.pizza.tamanhoNome}`
+      : `${item.quantidade}X ${categoria && !nomeSemCategoria ? `${categoria} - ` : ""}${item.produtoNome}`;
+    linhas.push("\x1D\x21\x01", "\x1B\x45\x01", ...linhaComValor(titulo, moedaTermica(item.precoUnitario * item.quantidade), largura), "\x1B\x45\x00", "\x1D\x21\x00");
     // Sabor(es) e tamanho da pizza, e as respostas das perguntas (pão, adicionais...),
     // em negrito e com altura dupla para a cozinha ler de longe.
     const destaque = (texto: string) => ["\x1B\x45\x01", "\x1D\x21\x01", ...quebrarLinha(texto, largura).map((linha) => `${linha}\n`), "\x1D\x21\x00", "\x1B\x45\x00"];
     if (item.pizza) {
-      linhas.push(...destaque(`TAMANHO ${item.pizza.tamanhoNome}`));
       linhas.push(...destaque(item.pizza.saborDoisNome ? `1/2 ${item.pizza.saborUmNome} + 1/2 ${item.pizza.saborDoisNome}` : `SABOR: ${item.pizza.saborUmNome}`));
     }
     for (const opcao of item.opcoes ?? []) linhas.push(...destaque(`${opcao.grupoNome}: ${opcao.opcaoNome}`));

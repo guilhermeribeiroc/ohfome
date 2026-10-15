@@ -21,6 +21,7 @@ const PEDIDOS_ATIVOS_QUERY = `
           'produtoId', ip.produto_id,
           'produtoNome', pr.nome || case when ip.tamanho is not null then ' (' || ip.tamanho::text || ')' else '' end,
           'produtoTamanho', ip.tamanho,
+          'categoriaNome', (select cp.nome from categorias_produto cp where cp.id = pr.categoria_id),
           'quantidade', ip.quantidade,
           'precoUnitario', ip.preco_unitario,
           'observacoes', ip.observacoes,

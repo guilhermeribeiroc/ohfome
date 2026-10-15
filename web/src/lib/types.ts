@@ -116,6 +116,8 @@ export interface ItemPedido {
   produtoId: string;
   produtoNome: string;
   produtoTamanho?: TamanhoProduto | null;
+  /** Categoria do produto (Sanduíche, Salgado...), impressa antes do nome na comanda. */
+  categoriaNome?: string | null;
   quantidade: number;
   precoUnitario: number;
   observacoes?: string;
