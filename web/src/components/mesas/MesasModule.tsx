@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { ArrowRight, Banknote, Check, CreditCard, DoorOpen, Minus, Plus, Printer, QrCode, Search, Settings2, Users, X } from "lucide-react";
 import type { Mesa, MesaStatus, PagamentoParte, Pedido, Produto } from "@/lib/types";
 import { MESA_STATUS_LABEL, nomeProdutoComTamanho } from "@/lib/types";
+import { imprimirHtmlEmJanela } from "@/lib/impressao";
 import { mascararMoeda, numeroDaMoeda } from "@/lib/moeda";
 import { usePolling } from "@/lib/use-polling";
 
@@ -161,10 +162,7 @@ export function MesasModule() {
       ...pedidosDaMesa.flatMap((pedido) => pedido.itens.map((item) => ({ nome: item.produtoNome, quantidade: item.quantidade, valor: item.precoUnitario * item.quantidade }))),
       ...itensAtuais.map((item) => ({ nome: item.nome, quantidade: item.quantidade, valor: item.precoUnitario * item.quantidade })),
     ];
-    const janela = window.open("", "_blank", "width=420,height=700");
-    if (!janela) return;
-    janela.document.write(`<!doctype html><html><head><title>Comanda mesa ${mesaAberta.numero}</title><style>body{font:14px Arial,sans-serif;color:#171717;padding:20px}h1{font-size:22px;margin:0 0 4px}p{margin:0 0 16px;color:#666}.pagamento{display:inline-block;background:#f3eee7;border-radius:99px;padding:5px 12px;font-size:12px;font-weight:700;color:#8d3c29;margin-bottom:14px}.item{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px dashed #bbb}.total{display:flex;justify-content:space-between;font-size:18px;font-weight:700;margin-top:18px;padding-top:12px;border-top:2px solid #171717}@media print{body{padding:0}}</style></head><body><h1>Comanda · Mesa ${mesaAberta.numero}</h1><p>${new Date().toLocaleString("pt-BR")}</p>${pagamentoTexto ? `<span class="pagamento">Pagamento: ${escapar(pagamentoTexto)}</span>` : ""}${itens.length ? itens.map((item) => `<div class="item"><span>${item.quantidade}× ${escapar(item.nome)}</span><strong>R$ ${item.valor.toFixed(2).replace(".", ",")}</strong></div>`).join("") : "<p>Sem itens lançados.</p>"}<div class="total"><span>Total${pagamentoTexto ? "" : " parcial"}</span><span>R$ ${totalComanda.toFixed(2).replace(".", ",")}</span></div><script>window.onload=()=>window.print()<\/script></body></html>`);
-    janela.document.close();
+    imprimirHtmlEmJanela(`<!doctype html><html><head><title>Comanda mesa ${mesaAberta.numero}</title><style>body{font:14px Arial,sans-serif;color:#171717;padding:20px}h1{font-size:22px;margin:0 0 4px}p{margin:0 0 16px;color:#666}.pagamento{display:inline-block;background:#f3eee7;border-radius:99px;padding:5px 12px;font-size:12px;font-weight:700;color:#8d3c29;margin-bottom:14px}.item{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px dashed #bbb}.total{display:flex;justify-content:space-between;font-size:18px;font-weight:700;margin-top:18px;padding-top:12px;border-top:2px solid #171717}@media print{body{padding:0}}</style></head><body><h1>Comanda · Mesa ${mesaAberta.numero}</h1><p>${new Date().toLocaleString("pt-BR")}</p>${pagamentoTexto ? `<span class="pagamento">Pagamento: ${escapar(pagamentoTexto)}</span>` : ""}${itens.length ? itens.map((item) => `<div class="item"><span>${item.quantidade}× ${escapar(item.nome)}</span><strong>R$ ${item.valor.toFixed(2).replace(".", ",")}</strong></div>`).join("") : "<p>Sem itens lançados.</p>"}<div class="total"><span>Total${pagamentoTexto ? "" : " parcial"}</span><span>R$ ${totalComanda.toFixed(2).replace(".", ",")}</span></div></body></html>`, "width=420,height=700");
   }
 
   return (
