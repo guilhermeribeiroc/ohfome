@@ -232,6 +232,18 @@ export async function POST(request: NextRequest) {
           [sessao.estabelecimentoId, clienteNome, clienteTelefone, endereco ?? null]
         );
         clienteId = rows[0].id;
+      } else if (clienteNomeAvulso) {
+        // Nome digitado no balcão/mesa: vira (ou reaproveita) um cliente, sem telefone.
+        // Reaproveita o de mesmo nome sem telefone para não duplicar a cada pedido.
+        const { rows: existente } = await client.query(
+          `select id from clientes where estabelecimento_id = $1 and lower(nome) = lower($2) and telefone is null order by created_at limit 1`,
+          [sessao.estabelecimentoId, clienteNomeAvulso]
+        );
+        if (existente[0]) clienteId = existente[0].id;
+        else {
+          const { rows } = await client.query(`insert into clientes (estabelecimento_id, nome) values ($1, $2) returning id`, [sessao.estabelecimentoId, clienteNomeAvulso]);
+          clienteId = rows[0].id;
+        }
       }
 
       let bairroNome: string | null = null;
