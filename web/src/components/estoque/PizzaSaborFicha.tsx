@@ -29,7 +29,6 @@ export function PizzaSaborFicha({ produtoId, nomeSabor, onSalvo, onFechar }: { p
   const novo = !nomeSabor;
 
   useEffect(() => {
-    setCarregando(true); setErro(""); setSalvo(false);
     fetch(`/api/produtos/${produtoId}/pizza`)
       .then(async (resposta) => {
         const dados = await resposta.json();
