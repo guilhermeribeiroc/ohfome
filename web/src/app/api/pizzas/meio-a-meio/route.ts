@@ -14,16 +14,17 @@ export async function GET(request: NextRequest) {
   if (!sessao) return respostaNaoAutenticado();
   const resultado = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     const agrupar = (tabela: "pizza_tamanhos" | "pizza_sabores") => client.query(
-      `select min(nome) as nome, bool_and(permite_meio_a_meio) as permite, bool_or(permite_meio_a_meio) as algum, count(distinct produto_id)::int as pizzas
-       from ${tabela} where estabelecimento_id = $1 and ativo
-       group by lower(nome) order by min(ordem), min(nome)`,
+      `select min(t.nome) as nome, bool_and(t.permite_meio_a_meio) as permite, bool_or(t.permite_meio_a_meio) as algum, count(distinct t.produto_id)::int as pizzas
+       from ${tabela} t join produtos p on p.id = t.produto_id and p.ativo
+       where t.estabelecimento_id = $1 and t.ativo
+       group by lower(t.nome) order by min(t.ordem), min(t.nome)`,
       [sessao.estabelecimentoId]
     );
     const [tamanhos, sabores, regras, pizzas] = await Promise.all([
       agrupar("pizza_tamanhos"),
       agrupar("pizza_sabores"),
-      client.query(`select regra_meio_a_meio as regra from produto_configuracoes_pizza where estabelecimento_id = $1 group by regra_meio_a_meio`, [sessao.estabelecimentoId]),
-      client.query(`select count(*)::int as total from produto_configuracoes_pizza where estabelecimento_id = $1`, [sessao.estabelecimentoId]),
+      client.query(`select c.regra_meio_a_meio as regra from produto_configuracoes_pizza c join produtos p on p.id = c.produto_id and p.ativo where c.estabelecimento_id = $1 group by c.regra_meio_a_meio`, [sessao.estabelecimentoId]),
+      client.query(`select count(*)::int as total from produto_configuracoes_pizza c join produtos p on p.id = c.produto_id and p.ativo where c.estabelecimento_id = $1`, [sessao.estabelecimentoId]),
     ]);
     return {
       totalPizzas: pizzas.rows[0]?.total ?? 0,

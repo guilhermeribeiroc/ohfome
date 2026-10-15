@@ -45,7 +45,7 @@ export function PrecificacaoCalculadora() {
   // Agrupa por categoria (pizzas, calzones, pastéis...) para a lista ficar organizada.
   const listaFiltrada = lista
     .filter((produto) => !categoriaFiltro || (produto.categoriaNome || "Sem categoria") === categoriaFiltro)
-    .filter((produto) => nomeProdutoComTamanho(produto).toLowerCase().includes(buscaProduto.trim().toLowerCase()))
+    .filter((produto) => nomeProdutoComTamanho(produto).toLowerCase().includes(buscaProduto.trim().toLowerCase()) || (produto.pizzaSaboresLista ?? []).some((sabor) => sabor.nome.toLowerCase().includes(buscaProduto.trim().toLowerCase())))
     .sort((a, b) => (a.categoriaNome || "Sem categoria").localeCompare(b.categoriaNome || "Sem categoria", "pt-BR") || a.nome.localeCompare(b.nome, "pt-BR"));
   const [selecionadoIdManual, setSelecionadoIdManual] = useState("");
   const salvarTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -170,9 +170,24 @@ export function PrecificacaoCalculadora() {
                   >
                     <span>
                       {nomeProdutoComTamanho(produto)}
+                      {produto.tipoProduto === "pizza" && <span className="ml-2 text-xs font-medium text-ink-400">{produto.pizzaSabores ?? 0} sabores{produto.pizzaTamanhos ? ` · ${produto.pizzaTamanhos}` : ""}</span>}
                     </span>
                     <span className="font-medium">R$ {produto.precoVenda.toFixed(2).replace(".", ",")}</span>
                   </button>
+                  {produto.tipoProduto === "pizza" && !!produto.pizzaSaboresLista?.length && (
+                    <ul className="mb-2 ml-4 border-l border-cream-200 pl-2">
+                      {produto.pizzaSaboresLista
+                        .filter((sabor) => !buscaProduto.trim() || sabor.nome.toLowerCase().includes(buscaProduto.trim().toLowerCase()) || nomeProdutoComTamanho(produto).toLowerCase().includes(buscaProduto.trim().toLowerCase()))
+                        .map((sabor) => (
+                          <li key={sabor.nome}>
+                            <button onClick={() => setSelecionadoIdManual(produto.id)} className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left text-xs text-ink-600 hover:bg-cream-100">
+                              <span className="font-medium">{sabor.nome}</span>
+                              <span className="shrink-0 text-ink-400">{Object.entries(sabor.precos).map(([tamanho, preco]) => `${tamanho} ${preco.toFixed(0)}`).join(" · ")}</span>
+                            </button>
+                          </li>
+                        ))}
+                    </ul>
+                  )}
                 </li>
               ))}
             </ul>

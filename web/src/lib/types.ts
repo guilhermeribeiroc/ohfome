@@ -189,6 +189,10 @@ export interface Produto {
   controlaEstoqueUnidades?: boolean;
   estoqueDisponivel?: number | null;
   tipoProduto?: "padrao" | "pizza";
+  /** Só em pizza configurável: quantos sabores ativos e quais tamanhos tem. */
+  pizzaSabores?: number;
+  pizzaTamanhos?: string | null;
+  pizzaSaboresLista?: { nome: string; precos: Record<string, number> }[];
 }
 
 export interface Categoria {

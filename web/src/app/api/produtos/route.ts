@@ -22,6 +22,13 @@ export async function GET(request: NextRequest) {
          p.preco_venda as "precoVenda",
          p.ativo,
          p.controla_estoque_unidades as "controlaEstoqueUnidades",
+         case when p.tipo_produto = 'pizza' then (select count(*)::int from pizza_sabores ps where ps.produto_id = p.id and ps.ativo) end as "pizzaSabores",
+         case when p.tipo_produto = 'pizza' then (
+           select coalesce(jsonb_agg(jsonb_build_object('nome', ps.nome, 'precos', coalesce((
+             select jsonb_object_agg(pt.nome, sp.preco) from pizza_sabor_precos sp join pizza_tamanhos pt on pt.id = sp.tamanho_id where sp.sabor_id = ps.id
+           ), '{}'::jsonb)) order by ps.ordem, ps.nome), '[]'::jsonb)
+           from pizza_sabores ps where ps.produto_id = p.id and ps.ativo) end as "pizzaSaboresLista",
+         case when p.tipo_produto = 'pizza' then (select string_agg(pt.nome, ' · ' order by pt.ordem) from pizza_tamanhos pt where pt.produto_id = p.id and pt.ativo) end as "pizzaTamanhos",
          case when p.controla_estoque_unidades then fn_disponibilidade_produto(p.estabelecimento_id, p.id) else null end as "estoqueDisponivel"
        from produtos p
        left join categorias_produto c on c.id = p.categoria_id

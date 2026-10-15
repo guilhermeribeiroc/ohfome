@@ -10,6 +10,7 @@
 --      em P, M e G, para não quebrar pedidos antigos. Só mexe em produtos de
 --      categorias de pizza: pastéis, calzones, bebidas e o resto não são tocados.
 --
+-- Os nomes são comparados sem acento ("Califórnia" casa com "California").
 -- Requer a migração 046 aplicada. Pode ser rodado de novo sem duplicar nada.
 --
 -- Como usar (no console do Postgres):
@@ -88,7 +89,7 @@ begin
   perform set_config('app.estabelecimento_id', v_est::text, true);
   raise notice 'Estabelecimento: % (%)', v_nome_est, v_est;
 
-  select array_agg(lower(s->>'n')) into v_nomes_sabores
+  select array_agg(translate(lower(s->>'n'), 'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc')) into v_nomes_sabores
   from jsonb_array_elements(v_menu) g, jsonb_array_elements(g->'sabores') s;
 
   -- 2. Cada grupo vira UM produto de pizza com P, M, G.
@@ -165,7 +166,7 @@ begin
         and p.tipo_produto = 'padrao'
         and exists (select 1 from categorias_produto c where c.id = p.categoria_id and c.nome ilike '%pizza%')
         and (p.tamanho is not null or p.nome ~* '(^| )(p|m|g|pequena|média|media|grande)$')
-        and lower(regexp_replace(regexp_replace(p.nome, '^\s*pizza( doce)?\s+', '', 'i'), '\s*\(?\m(p|m|g|pequena|média|media|grande)\M\)?\s*$', '', 'i')) = any (v_nomes_sabores)
+        and translate(lower(regexp_replace(regexp_replace(p.nome, '^\s*pizza( doce)?\s+', '', 'i'), '\s*\(?\m(p|m|g|pequena|média|media|grande)\M\)?\s*$', '', 'i')), 'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc') = any (v_nomes_sabores)
     ) x
   loop
     raise notice '  - % (tamanho %, categoria %)', v_sabor->>'nome', coalesce(v_sabor->>'tamanho', '-'), v_sabor->>'categoria';
@@ -175,7 +176,7 @@ begin
   where p.estabelecimento_id = v_est and p.ativo and p.tipo_produto = 'padrao'
     and exists (select 1 from categorias_produto c where c.id = p.categoria_id and c.nome ilike '%pizza%')
     and (p.tamanho is not null or p.nome ~* '(^| )(p|m|g|pequena|média|media|grande)$')
-    and lower(regexp_replace(regexp_replace(p.nome, '^\s*pizza( doce)?\s+', '', 'i'), '\s*\(?\m(p|m|g|pequena|média|media|grande)\M\)?\s*$', '', 'i')) = any (v_nomes_sabores);
+    and translate(lower(regexp_replace(regexp_replace(p.nome, '^\s*pizza( doce)?\s+', '', 'i'), '\s*\(?\m(p|m|g|pequena|média|media|grande)\M\)?\s*$', '', 'i')), 'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc') = any (v_nomes_sabores);
   get diagnostics v_antigos = row_count;
   raise notice 'Total de produtos antigos desativados: %', v_antigos;
 
@@ -184,10 +185,10 @@ begin
   raise notice 'Pizzas configuráveis antigas (um produto por sabor) que serão DESATIVADAS: %',
     (select coalesce(string_agg(nome, ', '), 'nenhuma') from produtos
       where estabelecimento_id = v_est and ativo and tipo_produto = 'pizza'
-        and nome not in ('Pizza', 'Pizza Doce') and lower(nome) = any (v_nomes_sabores));
+        and nome not in ('Pizza', 'Pizza Doce') and translate(lower(nome), 'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc') = any (v_nomes_sabores));
   update produtos set ativo = false, updated_at = now()
   where estabelecimento_id = v_est and ativo and tipo_produto = 'pizza'
-    and nome not in ('Pizza', 'Pizza Doce') and lower(nome) = any (v_nomes_sabores);
+    and nome not in ('Pizza', 'Pizza Doce') and translate(lower(nome), 'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc') = any (v_nomes_sabores);
 
   -- Qualquer outra pizza configurável que não seja nenhuma das acima: só avisa.
   raise notice 'Outras pizzas configuráveis ativas (NÃO alteradas, confira): %',
