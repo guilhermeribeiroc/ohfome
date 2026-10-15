@@ -297,12 +297,14 @@ create table pizza_tamanhos (
   id uuid primary key default gen_random_uuid(), produto_id uuid not null references produto_configuracoes_pizza(produto_id) on delete cascade,
   estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade, nome text not null,
   preco_sabor_unico numeric(10,2) not null check (preco_sabor_unico >= 0), preco_meio_a_meio numeric(10,2) check (preco_meio_a_meio >= 0),
+  permite_meio_a_meio boolean not null default true,
   ativo boolean not null default true, ordem integer not null default 0, unique (id, estabelecimento_id)
 );
 create table pizza_sabores (
   id uuid primary key default gen_random_uuid(), produto_id uuid not null references produto_configuracoes_pizza(produto_id) on delete cascade,
   estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade, nome text not null, descricao text,
-  acrescimo numeric(10,2) not null default 0 check (acrescimo >= 0), ativo boolean not null default true, ordem integer not null default 0, unique (id, estabelecimento_id)
+  acrescimo numeric(10,2) not null default 0 check (acrescimo >= 0), permite_meio_a_meio boolean not null default true,
+  ativo boolean not null default true, ordem integer not null default 0, unique (id, estabelecimento_id)
 );
 create index idx_pizza_tamanhos_produto on pizza_tamanhos(produto_id, ordem);
 create index idx_pizza_sabores_produto on pizza_sabores(produto_id, ordem);
@@ -1379,11 +1381,11 @@ as $$
           select jsonb_build_object(
             'regraMeioAMeio', pcp.regra_meio_a_meio,
             'tamanhos', coalesce((
-              select jsonb_agg(jsonb_build_object('id', pt.id, 'nome', pt.nome, 'precoSaborUnico', pt.preco_sabor_unico, 'precoMeioAMeio', pt.preco_meio_a_meio) order by pt.ordem)
+              select jsonb_agg(jsonb_build_object('id', pt.id, 'nome', pt.nome, 'precoSaborUnico', pt.preco_sabor_unico, 'precoMeioAMeio', pt.preco_meio_a_meio, 'permiteMeioAMeio', pt.permite_meio_a_meio) order by pt.ordem)
               from pizza_tamanhos pt where pt.produto_id = p.id and pt.ativo
             ), '[]'::jsonb),
             'sabores', coalesce((
-              select jsonb_agg(jsonb_build_object('id', ps.id, 'nome', ps.nome, 'descricao', ps.descricao, 'acrescimo', ps.acrescimo) order by ps.ordem, ps.nome)
+              select jsonb_agg(jsonb_build_object('id', ps.id, 'nome', ps.nome, 'descricao', ps.descricao, 'acrescimo', ps.acrescimo, 'permiteMeioAMeio', ps.permite_meio_a_meio) order by ps.ordem, ps.nome)
               from pizza_sabores ps where ps.produto_id = p.id and ps.ativo
             ), '[]'::jsonb)
           )
@@ -1630,6 +1632,12 @@ begin
       v_pizza_valor_um := v_pizza_preco_sabor_unico + v_pizza_sabor_um_acrescimo;
 
       if v_pizza_sabor_dois_id is not null then
+        if not exists (select 1 from pizza_tamanhos where id = v_pizza_tamanho_id and permite_meio_a_meio) then
+          raise exception 'Este tamanho de pizza não aceita meio a meio' using errcode = '22023';
+        end if;
+        if exists (select 1 from pizza_sabores where id in (v_pizza_sabor_um_id, v_pizza_sabor_dois_id) and not permite_meio_a_meio) then
+          raise exception 'Um dos sabores não pode ser combinado no meio a meio' using errcode = '22023';
+        end if;
         select nome, acrescimo into v_pizza_sabor_dois_nome, v_pizza_sabor_dois_acrescimo
         from pizza_sabores where id = v_pizza_sabor_dois_id and produto_id = v_produto_id and ativo;
         if v_pizza_sabor_dois_nome is null then

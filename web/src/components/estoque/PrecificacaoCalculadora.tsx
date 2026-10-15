@@ -39,6 +39,14 @@ function calcular(produto: Produto): Produto {
 export function PrecificacaoCalculadora() {
   const { dados, setDados, recarregar } = usePolling<Produto[]>("/api/produtos", 15000);
   const lista = dados ?? [];
+  const [categoriaFiltro, setCategoriaFiltro] = useState("");
+  const [buscaProduto, setBuscaProduto] = useState("");
+  const categoriasDaLista = [...new Set(lista.map((produto) => produto.categoriaNome || "Sem categoria"))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  // Agrupa por categoria (pizzas, calzones, pastéis...) para a lista ficar organizada.
+  const listaFiltrada = lista
+    .filter((produto) => !categoriaFiltro || (produto.categoriaNome || "Sem categoria") === categoriaFiltro)
+    .filter((produto) => nomeProdutoComTamanho(produto).toLowerCase().includes(buscaProduto.trim().toLowerCase()))
+    .sort((a, b) => (a.categoriaNome || "Sem categoria").localeCompare(b.categoriaNome || "Sem categoria", "pt-BR") || a.nome.localeCompare(b.nome, "pt-BR"));
   const [selecionadoIdManual, setSelecionadoIdManual] = useState("");
   const salvarTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [salvando, setSalvando] = useState(false);
@@ -141,9 +149,19 @@ export function PrecificacaoCalculadora() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1.2fr]">
           <div className="of-panel overflow-hidden">
             <p className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-ink-400">Cardápio</p>
+            <div className="space-y-2 px-3 pb-2">
+              <input value={buscaProduto} onChange={(evento) => setBuscaProduto(evento.target.value)} placeholder="Buscar produto" aria-label="Buscar produto" className="of-field !min-h-10" />
+              <div className="flex flex-wrap gap-1.5">
+                {["", ...categoriasDaLista].map((categoria) => (
+                  <button key={categoria || "todas"} type="button" aria-pressed={categoriaFiltro === categoria} onClick={() => setCategoriaFiltro(categoria)} className={`min-h-8 rounded-full border px-3 text-xs font-semibold transition ${categoriaFiltro === categoria ? "border-coral-500 bg-coral-050 text-coral-700" : "border-cream-300 bg-white text-ink-600 hover:border-coral-300"}`}>{categoria || "Todas"}</button>
+                ))}
+              </div>
+            </div>
             <ul className="max-h-[420px] overflow-y-auto px-2 pb-2">
-              {lista.map((produto) => (
+              {!listaFiltrada.length && <li className="px-3 py-6 text-center text-xs text-ink-500">Nenhum produto encontrado. Tente outra categoria ou busca.</li>}
+              {listaFiltrada.map((produto, indice) => (
                 <li key={produto.id}>
+                  {(produto.categoriaNome || "Sem categoria") !== (listaFiltrada[indice - 1]?.categoriaNome || (indice ? "Sem categoria" : undefined)) && <p className="px-3 pb-1 pt-3 text-[10px] font-bold uppercase tracking-[.14em] text-coral-600">{produto.categoriaNome || "Sem categoria"}</p>}
                   <button
                     onClick={() => setSelecionadoIdManual(produto.id)}
                     className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition-all ${
@@ -152,7 +170,6 @@ export function PrecificacaoCalculadora() {
                   >
                     <span>
                       {nomeProdutoComTamanho(produto)}
-                      <span className="ml-2 text-xs text-ink-400">{produto.categoriaNome}</span>
                     </span>
                     <span className="font-medium">R$ {produto.precoVenda.toFixed(2).replace(".", ",")}</span>
                   </button>

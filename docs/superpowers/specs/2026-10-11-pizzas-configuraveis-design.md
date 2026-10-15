@@ -23,8 +23,11 @@ sabor inteiro ou dois sabores em metades, sem duplicar produtos como
 
 ## Pedido
 
-- Todo tamanho ativo aceita uma pizza de sabor único ou meio a meio; não há
-  configuração para bloquear a modalidade meio a meio.
+- Por padrão todo tamanho e todo sabor aceitam meio a meio, mas cada tamanho
+  (`pizza_tamanhos.permite_meio_a_meio`) e cada sabor
+  (`pizza_sabores.permite_meio_a_meio`) pode ser marcado como "só inteira"
+  (ex.: pizza P não aceita meio a meio). Se o tamanho ou qualquer um dos dois
+  sabores não aceitar, o servidor rejeita o pedido e as telas escondem a opção.
 - Para sabor único, o servidor usa o preço do tamanho com o ajuste do sabor,
   quando houver.
 - Para meio a meio, o estabelecimento escolhe uma regra de preço por pizza:

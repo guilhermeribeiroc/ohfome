@@ -56,12 +56,14 @@ interface PizzaTamanhoPublico {
   nome: string;
   precoSaborUnico: number;
   precoMeioAMeio: number | null;
+  permiteMeioAMeio?: boolean;
 }
 interface PizzaSaborPublico {
   id: string;
   nome: string;
   descricao: string;
   acrescimo: number;
+  permiteMeioAMeio?: boolean;
 }
 interface PizzaConfigPublica {
   regraMeioAMeio: "maior_valor" | "media" | "preco_fixo";
@@ -1488,9 +1490,28 @@ function ProdutoDetalhe({
   const pizzaTamanhos = produto.pizza?.tamanhos ?? [];
   const pizzaSabores = produto.pizza?.sabores ?? [];
 
+  const tamanhoEscolhido = pizzaTamanhos.find((item) => item.id === pizzaTamanhoId);
+  // Meio a meio só vale se o tamanho e os dois sabores forem liberados pela pizzaria.
+  const tamanhoAceitaMeio = tamanhoEscolhido ? tamanhoEscolhido.permiteMeioAMeio !== false : true;
+  const primeiroSaborId = pizzaSaboresEscolhidos[0];
+  const primeiroSabor = pizzaSabores.find((item) => item.id === primeiroSaborId);
+  const podeSerSegundoSabor = (sabor: PizzaSaborPublico) =>
+    tamanhoAceitaMeio && sabor.permiteMeioAMeio !== false && primeiroSabor?.permiteMeioAMeio !== false;
+
+  function escolherTamanhoPizza(tamanhoId: string) {
+    setPizzaTamanhoId(tamanhoId);
+    const tamanho = pizzaTamanhos.find((item) => item.id === tamanhoId);
+    // Trocou para um tamanho que não aceita meio a meio: mantém só o primeiro sabor.
+    if (tamanho?.permiteMeioAMeio === false) setPizzaSaboresEscolhidos((atuais) => atuais.slice(0, 1));
+  }
+
   function alternarSaborPizza(saborId: string) {
     setPizzaSaboresEscolhidos((atuais) => {
       if (atuais.includes(saborId)) return atuais.filter((id) => id !== saborId);
+      const sabor = pizzaSabores.find((item) => item.id === saborId);
+      const primeiro = pizzaSabores.find((item) => item.id === atuais[0]);
+      const combina = tamanhoAceitaMeio && sabor?.permiteMeioAMeio !== false && primeiro?.permiteMeioAMeio !== false;
+      if (atuais.length === 0 || !combina) return [saborId];
       if (atuais.length >= 2) return [atuais[1], saborId];
       return [...atuais, saborId];
     });
@@ -1597,11 +1618,12 @@ function ProdutoDetalhe({
                     <button
                       key={tamanho.id}
                       type="button"
-                      onClick={() => setPizzaTamanhoId(tamanho.id)}
+                      onClick={() => escolherTamanhoPizza(tamanho.id)}
                       className={`rounded-xl border px-2 py-3 text-center text-sm font-semibold transition ${pizzaTamanhoId === tamanho.id ? "border-[#0e7775] bg-[#0e7775]/[.07] text-[#0e7775]" : "border-black/[.08] bg-white text-[#181714]"}`}
                     >
                       {tamanho.nome}
                       <span className="mt-0.5 block text-[11px] font-medium text-black/45">{moeda(tamanho.precoSaborUnico)}</span>
+                      {tamanho.permiteMeioAMeio === false && <span className="mt-0.5 block text-[10px] font-medium text-black/40">1 sabor</span>}
                     </button>
                   ))}
                 </div>
@@ -1610,8 +1632,8 @@ function ProdutoDetalhe({
                 <div className="flex items-baseline justify-between gap-3">
                   <span className="text-sm font-semibold text-[#181714]">Sabor</span>
                   <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[.08em] text-black/40">
-                    {pizzaSaboresEscolhidos.length === 0 && "Escolha 1 ou 2 (meio a meio)"}
-                    {pizzaSaboresEscolhidos.length === 1 && "Toque em outro pra meio a meio"}
+                    {pizzaSaboresEscolhidos.length === 0 && (tamanhoAceitaMeio ? "Escolha 1 ou 2 (meio a meio)" : "Escolha 1 sabor")}
+                    {pizzaSaboresEscolhidos.length === 1 && (tamanhoAceitaMeio && primeiroSabor?.permiteMeioAMeio !== false ? "Toque em outro pra meio a meio" : "Este sabor vai inteiro")}
                     {pizzaSaboresEscolhidos.length === 2 && "Meio a meio selecionado"}
                   </span>
                 </div>
@@ -1619,12 +1641,13 @@ function ProdutoDetalhe({
                   {pizzaSabores.map((sabor) => {
                     const posicao = pizzaSaboresEscolhidos.indexOf(sabor.id);
                     const marcado = posicao !== -1;
+                    const semCombinar = pizzaSaboresEscolhidos.length === 1 && !marcado && !podeSerSegundoSabor(sabor);
                     return (
                       <button
                         key={sabor.id}
                         type="button"
                         onClick={() => alternarSaborPizza(sabor.id)}
-                        className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-3 text-left text-sm transition ${marcado ? "border-[#0e7775] bg-[#0e7775]/[.07]" : "border-black/[.08] bg-white"}`}
+                        className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-3 text-left text-sm transition ${marcado ? "border-[#0e7775] bg-[#0e7775]/[.07]" : semCombinar ? "border-black/[.06] bg-white/60 text-black/45" : "border-black/[.08] bg-white"}`}
                       >
                         <span className="flex items-center gap-2.5">
                           <i className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-bold ${marcado ? "border-[#0e7775] bg-[#0e7775] text-white" : "border-black/20"}`}>
@@ -1635,7 +1658,7 @@ function ProdutoDetalhe({
                             {sabor.descricao && <span className="block text-[11px] font-normal text-black/45">{sabor.descricao}</span>}
                           </span>
                         </span>
-                        {sabor.acrescimo > 0 && <span className="shrink-0 text-xs font-semibold text-black/50">+{moeda(sabor.acrescimo)}</span>}
+                        {semCombinar ? <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[.06em] text-black/40">Não combina</span> : sabor.acrescimo > 0 && <span className="shrink-0 text-xs font-semibold text-black/50">+{moeda(sabor.acrescimo)}</span>}
                       </button>
                     );
                   })}

@@ -271,14 +271,15 @@ export async function POST(request: NextRequest) {
           const pizza = item.pizza;
           if (!pizza || typeof pizza.tamanhoId !== "string" || typeof pizza.saborUmId !== "string" || (pizza.saborDoisId !== undefined && typeof pizza.saborDoisId !== "string")) throw Object.assign(new Error("Escolha tamanho e sabor da pizza."), { status: 400 });
           const { rows: configuracao } = await client.query(`select regra_meio_a_meio as "regraMeioAMeio" from produto_configuracoes_pizza where produto_id = $1`, [item.produtoId]);
-          const { rows: tamanhos } = await client.query(`select id, nome, preco_sabor_unico as "precoSaborUnico", preco_meio_a_meio as "precoMeioAMeio" from pizza_tamanhos where id = $1 and produto_id = $2 and ativo`, [pizza.tamanhoId, item.produtoId]);
+          const { rows: tamanhos } = await client.query(`select id, nome, preco_sabor_unico as "precoSaborUnico", preco_meio_a_meio as "precoMeioAMeio", permite_meio_a_meio as "permiteMeioAMeio" from pizza_tamanhos where id = $1 and produto_id = $2 and ativo`, [pizza.tamanhoId, item.produtoId]);
           const idsSabores = [pizza.saborUmId, pizza.saborDoisId].filter((valor): valor is string => typeof valor === "string");
           if (!configuracao[0] || !tamanhos[0] || new Set(idsSabores).size !== idsSabores.length) throw Object.assign(new Error("Configuração de pizza inválida."), { status: 400 });
-          const { rows: sabores } = await client.query(`select id, nome, acrescimo from pizza_sabores where id = any($1::uuid[]) and produto_id = $2 and ativo`, [idsSabores, item.produtoId]);
+          const { rows: sabores } = await client.query(`select id, nome, acrescimo, permite_meio_a_meio as "permiteMeioAMeio" from pizza_sabores where id = any($1::uuid[]) and produto_id = $2 and ativo`, [idsSabores, item.produtoId]);
           if (sabores.length !== idsSabores.length) throw Object.assign(new Error("Sabor de pizza inválido."), { status: 400 });
           const saborUm = sabores.find((sabor) => sabor.id === pizza.saborUmId)!;
           const saborDois = pizza.saborDoisId ? sabores.find((sabor) => sabor.id === pizza.saborDoisId)! : null;
           const tamanho = tamanhos[0]; const regra = configuracao[0].regraMeioAMeio as string;
+          if (saborDois && (!tamanho.permiteMeioAMeio || !saborUm.permiteMeioAMeio || !saborDois.permiteMeioAMeio)) throw Object.assign(new Error(!tamanho.permiteMeioAMeio ? "Este tamanho de pizza não aceita meio a meio." : "Um dos sabores não pode ser combinado no meio a meio."), { status: 400 });
           const valorUm = Number(tamanho.precoSaborUnico) + Number(saborUm.acrescimo);
           const valorDois = saborDois ? Number(tamanho.precoSaborUnico) + Number(saborDois.acrescimo) : null;
           precoPizza = !saborDois ? valorUm : regra === "maior_valor" ? Math.max(valorUm, valorDois!) : regra === "media" ? (valorUm + valorDois!) / 2 : Number(tamanho.precoMeioAMeio);
