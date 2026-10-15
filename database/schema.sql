@@ -564,6 +564,8 @@ create table pedidos (
   ),
   constraint uq_pedidos_id_estabelecimento unique (id, estabelecimento_id)
 );
+-- Nome do cliente digitado no balcão/mesa, sem cadastro (opcional).
+alter table pedidos add column cliente_nome_avulso text;
 
 -- codigo reinicia por dia (fuso America/Fortaleza), entao a unicidade vale
 -- por dia, nao pra sempre — ver fn_atribuir_codigo_pedido.

@@ -9,7 +9,7 @@ const PEDIDOS_ATIVOS_QUERY = `
     p.id, p.codigo, p.tipo, p.origem, p.status, p.total, p.observacoes, p.forma_recebimento as "formaRecebimento", p.forma_pagamento as "formaPagamento", p.tipo_cartao as "tipoCartao", p.troco_para as "trocoPara", p.pagamento_dividido as "pagamentoDividido", p.pagamento_status as "pagamentoStatus", p.created_at as "createdAt", p.notificado_em as "notificadoEm",
     (p.whatsapp_consentimento and exists (select 1 from estabelecimentos ew where ew.id = p.estabelecimento_id and ew.whatsapp_automacao_ativa and ew.whatsapp_instancia is not null)) as "notificacaoAutomatica",
     m.numero as "mesaNumero",
-    c.nome as "clienteNome",
+    coalesce(c.nome, p.cliente_nome_avulso) as "clienteNome",
     c.telefone as "clienteTelefone",
     e.endereco as "enderecoEntrega",
     u.nome as "usuarioNome",
@@ -99,6 +99,7 @@ export async function POST(request: NextRequest) {
   const tipo = body?.tipo;
   const mesaId = body?.mesaId;
   const clienteNome = typeof body?.clienteNome === "string" ? body.clienteNome.trim() : undefined;
+  const clienteNomeAvulso = typeof body?.clienteNomeAvulso === "string" ? body.clienteNomeAvulso.trim().slice(0, 80) || null : null;
   const clienteIdInformado = typeof body?.clienteId === "string" ? body.clienteId : undefined;
   const clienteTelefone = typeof body?.clienteTelefone === "string" ? body.clienteTelefone.replace(/\D/g, "") || null : null;
   const endereco = typeof body?.endereco === "string" ? body.endereco.trim() : undefined;
@@ -161,7 +162,7 @@ export async function POST(request: NextRequest) {
   try {
     const criado = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
       const hashConteudo = createHash("sha256").update(JSON.stringify({
-        tipo, mesaId, clienteIdInformado, clienteNome, clienteTelefone, endereco, bairroId, itens: itensValidos,
+        tipo, mesaId, clienteIdInformado, clienteNome, clienteNomeAvulso, clienteTelefone, endereco, bairroId, itens: itensValidos,
         formaPagamento, tipoCartao, trocoPara: Number.isFinite(trocoPara) ? trocoPara : null, modalidade,
         formaRecebimento, whatsappConsentimento, pixAutomatico,
       })).digest("hex");
@@ -246,8 +247,8 @@ export async function POST(request: NextRequest) {
       }
 
       const { rows: pedidoRows } = await client.query(
-        `insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, comanda_id, cliente_id, usuario_id, taxa_entrega, forma_pagamento, tipo_cartao, troco_para, modalidade_atendimento, pagamento_status, forma_recebimento, whatsapp_consentimento)
-         values ($1, $2, 'presencial', $3, $4, case when $4 then now() else null end, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        `insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, comanda_id, cliente_id, usuario_id, taxa_entrega, forma_pagamento, tipo_cartao, troco_para, modalidade_atendimento, pagamento_status, forma_recebimento, whatsapp_consentimento, cliente_nome_avulso)
+         values ($1, $2, 'presencial', $3, $4, case when $4 then now() else null end, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
          returning id`,
         [
           sessao.estabelecimentoId, tipo,
@@ -258,6 +259,7 @@ export async function POST(request: NextRequest) {
           formaPagamento === "dinheiro" && trocoPara > 0 ? trocoPara : null,
           modalidade, modalidade === "imediata" && !pixAutomatico ? "pago" : "pendente",
           formaRecebimento, whatsappConsentimento && clienteId !== null,
+          clienteId ? null : clienteNomeAvulso,
         ]
       );
       const pedidoId = pedidoRows[0].id;

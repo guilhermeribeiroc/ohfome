@@ -21,7 +21,7 @@ const PEDIDO_IMPRESSAO_SELECT = `
       'pagamentoStatus', p.pagamento_status,
       'createdAt', p.created_at,
       'mesaNumero', m.numero,
-      'clienteNome', c.nome,
+      'clienteNome', coalesce(c.nome, p.cliente_nome_avulso),
       'clienteTelefone', c.telefone,
       'enderecoEntrega', e.endereco,
       'estabelecimentoNome', est.nome,

@@ -93,17 +93,13 @@ function modalidadePedido(pedido: Pedido) {
   return "CENTRAL DE PEDIDOS";
 }
 
-function exibeClienteNaComanda(pedido: Pedido) {
-  return pedido.formaRecebimento === "entrega" || pedido.formaRecebimento === "retirada" || pedido.tipo === "delivery";
-}
-
 export function dadosEscPosPedido(pedido: Pedido, largura = LARGURA_TICKET) {
   const cabecalho = cabecalhoTermico(pedido, largura);
   const contexto = `PEDIDO #${pedido.codigo} - ${modalidadePedido(pedido)}`;
   const larguraCabecalho = Math.max(1, Math.floor(largura / 2));
   const linhas = ["\x1B\x40", "\x1B\x61\x01", "\x1B\x45\x01", "\x1D\x21\x11", ...quebrarLinha(cabecalho, larguraCabecalho).map((linha) => `${centralizar(linha, larguraCabecalho)}\n`), ...quebrarLinha(contexto, larguraCabecalho).map((linha) => `${centralizar(linha, larguraCabecalho)}\n`), "\x1D\x21\x00", "\x1B\x45\x00", "\n", "\x1B\x61\x00", `${"-".repeat(largura)}\n`];
 
-  if (exibeClienteNaComanda(pedido) && pedido.clienteNome?.trim()) {
+  if (pedido.clienteNome?.trim()) {
     linhas.push(...quebrarLinha(`CLIENTE: ${pedido.clienteNome.trim()}`, largura).map((linha) => `${linha}\n`), "\n");
   }
 

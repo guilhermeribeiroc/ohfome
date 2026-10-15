@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState, type DragEvent } from "react";
+import { NovoPedidoCentralModal } from "@/components/pedidos/KanbanBoard";
+import { useState, type DragEvent } from "react";
 import { Check, MapPin, MapPinned, Plus, Printer, Trash2, UserRoundPlus, X } from "lucide-react";
-import type { BairroEntrega, Entrega, Entregador, EntregaStatus, Produto } from "@/lib/types";
-import { ENTREGA_STATUS_LABEL, nomeProdutoComTamanho } from "@/lib/types";
+import type { BairroEntrega, Entrega, Entregador, EntregaStatus } from "@/lib/types";
+import { ENTREGA_STATUS_LABEL } from "@/lib/types";
 import { usePolling } from "@/lib/use-polling";
 import { imprimirEntrega, textoPagamento } from "@/lib/impressao";
 import { useTenant } from "@/lib/tenant-context";
 
 const COLUNAS: EntregaStatus[] = ["aguardando", "em_rota", "entregue"];
-const GRADIENTE_CORAL = "linear-gradient(120deg, var(--color-coral-600), var(--color-coral-500), var(--color-mango-500))";
 const CAMPO_CLASSE =
   "w-full rounded-xl bg-cream-50 px-3.5 py-3 text-sm text-ink-900 outline-none transition focus:ring-4 focus:ring-coral-100";
 
@@ -215,7 +215,9 @@ export function DeliveryModule() {
       )}
 
       {modalAberto && (
-        <NovoPedidoDeliveryModal
+        <NovoPedidoCentralModal
+          tipoInicial="delivery"
+          travarTipo
           onFechar={() => setModalAberto(false)}
           onCriado={() => {
             setModalAberto(false);
@@ -342,156 +344,6 @@ function EntregaDetalheModal({ entrega, entregadorNome, onFechar }: { entrega: E
       <footer className="flex items-center justify-between gap-3 border-t border-cream-200 bg-surface p-5"><button onClick={() => imprimirEntrega(entrega, entregadorNome)} className="of-btn-secondary min-h-11 px-3"><Printer size={16} /> Imprimir</button><div className="text-right"><span className="block text-xs text-ink-400">{ENTREGA_STATUS_LABEL[entrega.status]}</span><strong className="font-display text-xl font-bold text-ink-900">R$ {entrega.total.toFixed(2).replace(".", ",")}</strong></div></footer>
     </section>
   </div>;
-}
-
-function NovoPedidoDeliveryModal({ onFechar, onCriado }: { onFechar: () => void; onCriado: () => void }) {
-  const { dados: produtos } = usePolling<Produto[]>("/api/produtos", 60000);
-  const { dados: bairros } = usePolling<BairroEntrega[]>("/api/entrega/bairros", 60000);
-  const [clienteNome, setClienteNome] = useState("");
-  const [clienteId, setClienteId] = useState("");
-  const [clientesEncontrados, setClientesEncontrados] = useState<{ id: string; nome: string; telefone?: string | null; endereco?: string | null }[]>([]);
-  const [endereco, setEndereco] = useState("");
-  const [bairroId, setBairroId] = useState("");
-  const [itens, setItens] = useState<Record<string, number>>({});
-  const [enviando, setEnviando] = useState(false);
-  const [erro, setErro] = useState("");
-  const [chaveIdempotencia] = useState(() => crypto.randomUUID());
-
-  useEffect(() => {
-    if (clienteNome.trim().length < 2 || clienteId) return;
-    const controlador = new AbortController();
-    const temporizador = window.setTimeout(async () => {
-      try {
-        const resposta = await fetch(`/api/clientes/busca?q=${encodeURIComponent(clienteNome)}`, { signal: controlador.signal });
-        if (resposta.ok) setClientesEncontrados(await resposta.json());
-      } catch { /* busca é opcional; não interrompe o novo atendimento */ }
-    }, 250);
-    return () => { controlador.abort(); window.clearTimeout(temporizador); };
-  }, [clienteNome, clienteId]);
-
-  const bairrosAtivos = useMemo(() => (bairros ?? []).filter((b) => b.ativo), [bairros]);
-  const taxaEntrega = bairrosAtivos.find((b) => b.id === bairroId)?.taxa ?? 0;
-  const subtotal = useMemo(() => {
-    if (!produtos) return 0;
-    return Object.entries(itens).reduce((soma, [produtoId, qtd]) => {
-      const produto = produtos.find((p) => p.id === produtoId);
-      return soma + (produto?.precoVenda ?? 0) * qtd;
-    }, 0);
-  }, [itens, produtos]);
-  const total = subtotal + taxaEntrega;
-
-  function ajustar(produtoId: string, delta: number) {
-    setItens((atual) => {
-      const novaQtd = (atual[produtoId] ?? 0) + delta;
-      const produto = (produtos ?? []).find((item) => item.id === produtoId);
-      if (delta > 0 && produto?.controlaEstoqueUnidades && novaQtd > (produto.estoqueDisponivel ?? 0)) {
-        setErro(`${nomeProdutoComTamanho(produto)} está esgotado ou sem saldo suficiente.`);
-        return atual;
-      }
-      if (novaQtd <= 0) {
-        return Object.fromEntries(Object.entries(atual).filter(([chave]) => chave !== produtoId));
-      }
-      return { ...atual, [produtoId]: novaQtd };
-    });
-  }
-
-  async function criar() {
-    if (!clienteNome.trim() || !endereco.trim() || !bairroId || Object.keys(itens).length === 0) {
-      setErro("Informe cliente, bairro, endereço e ao menos um item.");
-      return;
-    }
-    setEnviando(true);
-    setErro("");
-    const res = await fetch("/api/pedidos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Idempotency-Key": chaveIdempotencia },
-      body: JSON.stringify({
-        tipo: "delivery",
-        clienteId: clienteId || undefined,
-        clienteNome,
-        endereco,
-        bairroId: bairroId || undefined,
-        itens: Object.entries(itens).map(([produtoId, quantidade]) => ({ produtoId, quantidade })),
-      }),
-    });
-    setEnviando(false);
-    if (!res.ok) {
-      const dados = await res.json().catch(() => null);
-      setErro(dados?.erro ?? "Não foi possível criar o pedido.");
-      return;
-    }
-    onCriado();
-  }
-
-  return (
-    <div className="of-modal-backdrop">
-      <div className="of-modal-panel flex h-[min(90dvh,760px)] max-w-md flex-col">
-        <div className="flex items-center justify-between p-5">
-          <p className="font-display text-lg font-bold text-ink-900">Novo pedido — Delivery</p>
-          <button onClick={onFechar} className="of-icon-btn" aria-label="Fechar"><X size={17} /></button>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-5">
-          <div className="mb-4 space-y-2">
-            <input value={clienteNome} onChange={(e) => { setClienteNome(e.target.value); setClienteId(""); setClientesEncontrados([]); }} placeholder="Buscar ou informar cliente" className={CAMPO_CLASSE} />
-            {clientesEncontrados.length > 0 && <div className="max-h-36 overflow-y-auto rounded-xl border border-cream-200 bg-surface p-1">{clientesEncontrados.map((cliente) => <button type="button" key={cliente.id} onClick={() => { setClienteId(cliente.id); setClienteNome(cliente.nome); setEndereco(cliente.endereco ?? ""); setClientesEncontrados([]); }} className="block w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-cream-50"><b>{cliente.nome}</b><span className="ml-2 text-ink-400">{cliente.telefone || "sem telefone"}{cliente.endereco ? ` · ${cliente.endereco}` : ""}</span></button>)}</div>}
-            <select value={bairroId} onChange={(e) => setBairroId(e.target.value)} className={CAMPO_CLASSE}>
-              <option value="">Bairro de entrega</option>
-              {bairrosAtivos.map((b) => <option key={b.id} value={b.id}>{b.nome} · R$ {b.taxa.toFixed(2).replace(".", ",")}</option>)}
-            </select>
-            <input value={endereco} onChange={(e) => setEndereco(e.target.value)} placeholder="Endereço de entrega" className={CAMPO_CLASSE} />
-          </div>
-
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-400">Itens</p>
-          <div className="grid grid-cols-1 gap-2">
-            {(produtos ?? []).map((produto) => {
-              const qtd = itens[produto.id] ?? 0;
-              return (
-                <div key={produto.id} className="flex items-center justify-between rounded-2xl bg-cream-50 p-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-ink-900">{nomeProdutoComTamanho(produto)}</p>
-                    <p className="text-xs text-ink-400">R$ {produto.precoVenda.toFixed(2).replace(".", ",")}{produto.controlaEstoqueUnidades ? ` · ${(produto.estoqueDisponivel ?? 0) > 0 ? `${produto.estoqueDisponivel} disponíveis` : "esgotado"}` : ""}</p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <button
-                      onClick={() => ajustar(produto.id, -1)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-ink-600 shadow-sm active:scale-90"
-                    >
-                      −
-                    </button>
-                    <span className="w-4 text-center text-sm font-bold text-ink-900">{qtd}</span>
-                    <button
-                      onClick={() => ajustar(produto.id, 1)}
-                      disabled={produto.controlaEstoqueUnidades && (produto.estoqueDisponivel ?? 0) <= qtd}
-                      className="flex h-8 w-8 items-center justify-center rounded-full text-white shadow-sm active:scale-90 disabled:opacity-35"
-                      style={{ background: GRADIENTE_CORAL }}
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="p-5">
-          {erro && <p className="mb-2 text-xs font-medium text-danger-600">{erro}</p>}
-          <div className="mb-3 flex items-center justify-between">
-            <span className="text-sm text-ink-400">{Object.keys(itens).length} item(ns){taxaEntrega > 0 ? ` · taxa R$ ${taxaEntrega.toFixed(2).replace(".", ",")}` : ""}</span>
-            <span className="font-display text-lg font-bold text-ink-900">R$ {total.toFixed(2).replace(".", ",")}</span>
-          </div>
-          <button
-            onClick={criar}
-            disabled={enviando || !clienteNome.trim() || !endereco.trim() || Object.keys(itens).length === 0}
-            className="of-btn-primary w-full"
-          >
-            {enviando ? "Criando..." : "Criar pedido"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function NovoEntregadorModal({ onFechar, onCriado }: { onFechar: () => void; onCriado: () => void }) {
