@@ -34,13 +34,13 @@ declare
   v_total int := 0;
   v_menu jsonb := $json$
 [
-  {"n": "Hambúrguer", "d": "Carne e salada", "bola": 8, "arabe": 9},
+  {"n": "Hamburgue", "d": "Carne e salada", "bola": 8, "arabe": 9},
   {"n": "Americano", "d": "Presunto, ovo e queijo", "bola": 8, "arabe": 10},
   {"n": "Califórnia", "d": "Carne, ovo, presunto, queijo e salada", "bola": 13, "arabe": 15},
   {"n": "Frango", "d": "Frango, milho e salada", "bola": 10, "arabe": 12},
   {"n": "Frango c/ Catupiry", "d": "Frango, catupiry, milho, queijo e salada", "bola": 10, "arabe": 12},
   {"n": "X-Frango", "d": "Frango, queijo, milho e salada", "bola": 10, "arabe": 12},
-  {"n": "X-Burguer", "d": "Carne, queijo e salada", "bola": 10, "arabe": 12},
+  {"n": "X-Burgue", "d": "Carne, queijo e salada", "bola": 10, "arabe": 12},
   {"n": "X-Eggs", "d": "Carne, ovo, queijo e salada", "bola": 11, "arabe": 13},
   {"n": "X-Ovo", "d": "Ovo, queijo e salada", "bola": 8, "arabe": 10},
   {"n": "X-Bacon", "d": "Carne, bacon, queijo e salada", "bola": 12, "arabe": 14},
@@ -74,19 +74,20 @@ begin
   end if;
   raise notice 'Categoria: %', (select nome from categorias_produto where id = v_cat);
 
+  create temp table _cand (id uuid, nome text, exato boolean) on commit drop;
+
   for v_item in select * from jsonb_array_elements(v_menu) loop
-    v_norm := translate(lower(v_item->>'n'), 'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc');
+    v_norm := regexp_replace(translate(lower(v_item->>'n'), 'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc'), '\s*-\s*', '-', 'g');
     v_prod := null;
 
     -- Cadastros desta categoria que são o mesmo sanduíche (com ou sem sufixo de pão).
-    create temp table if not exists _cand (id uuid, nome text, exato boolean) on commit drop;
     delete from _cand;
     insert into _cand
     select p.id, p.nome,
-           translate(lower(p.nome), 'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc') = v_norm
+           regexp_replace(translate(lower(p.nome), 'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc'), '\s*-\s*', '-', 'g') = v_norm
     from produtos p
     where p.estabelecimento_id = v_est and p.categoria_id = v_cat and p.tipo_produto = 'padrao'
-      and regexp_replace(translate(lower(p.nome), 'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc'),
+      and regexp_replace(regexp_replace(translate(lower(p.nome), 'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc'), '\s*-\s*', '-', 'g'),
                          '\s*\(?\s*(pao\s+)?(bola|arabe)\s*\)?\s*$', '') = v_norm;
 
     select id into v_prod from _cand order by exato desc, nome limit 1;
