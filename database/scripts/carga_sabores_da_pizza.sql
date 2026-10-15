@@ -7,7 +7,8 @@
 --   2. Meio a meio: tamanho P NÃO aceita; M e G aceitam, cobrando a média dos
 --      dois sabores (metade de cada).
 --   3. Desativa (não apaga) os produtos antigos que eram a mesma pizza repetida
---      em P, M e G, para não quebrar pedidos antigos.
+--      em P, M e G, para não quebrar pedidos antigos. Só mexe em produtos de
+--      categorias de pizza: pastéis, calzones, bebidas e o resto não são tocados.
 --
 -- Requer a migração 046 aplicada. Pode ser rodado de novo sem duplicar nada.
 --
@@ -158,25 +159,37 @@ begin
   raise notice 'Produtos antigos que serão DESATIVADOS:';
   for v_sabor in
     select to_jsonb(x) from (
-      select p.id, p.nome, p.tamanho
+      select p.id, p.nome, p.tamanho, (select c.nome from categorias_produto c where c.id = p.categoria_id) as categoria
       from produtos p
       where p.estabelecimento_id = v_est and p.ativo
         and p.tipo_produto = 'padrao'
+        and exists (select 1 from categorias_produto c where c.id = p.categoria_id and c.nome ilike '%pizza%')
         and (p.tamanho is not null or p.nome ~* '(^| )(p|m|g|pequena|média|media|grande)$')
         and lower(regexp_replace(regexp_replace(p.nome, '^\s*pizza( doce)?\s+', '', 'i'), '\s*\(?\m(p|m|g|pequena|média|media|grande)\M\)?\s*$', '', 'i')) = any (v_nomes_sabores)
     ) x
   loop
-    raise notice '  - % (tamanho %)', v_sabor->>'nome', coalesce(v_sabor->>'tamanho', '-');
+    raise notice '  - % (tamanho %, categoria %)', v_sabor->>'nome', coalesce(v_sabor->>'tamanho', '-'), v_sabor->>'categoria';
   end loop;
 
   update produtos p set ativo = false, updated_at = now()
   where p.estabelecimento_id = v_est and p.ativo and p.tipo_produto = 'padrao'
+    and exists (select 1 from categorias_produto c where c.id = p.categoria_id and c.nome ilike '%pizza%')
     and (p.tamanho is not null or p.nome ~* '(^| )(p|m|g|pequena|média|media|grande)$')
     and lower(regexp_replace(regexp_replace(p.nome, '^\s*pizza( doce)?\s+', '', 'i'), '\s*\(?\m(p|m|g|pequena|média|media|grande)\M\)?\s*$', '', 'i')) = any (v_nomes_sabores);
   get diagnostics v_antigos = row_count;
   raise notice 'Total de produtos antigos desativados: %', v_antigos;
 
-  -- Outras pizzas configuráveis que não sejam as duas novas (ex.: um teste anterior): só avisa.
+  -- Pizzas configuráveis antigas, uma por sabor (ex.: "4 Queijos", "A Moda"): agora esses
+  -- sabores ficam dentro de "Pizza" / "Pizza Doce", então as antigas são desativadas.
+  raise notice 'Pizzas configuráveis antigas (um produto por sabor) que serão DESATIVADAS: %',
+    (select coalesce(string_agg(nome, ', '), 'nenhuma') from produtos
+      where estabelecimento_id = v_est and ativo and tipo_produto = 'pizza'
+        and nome not in ('Pizza', 'Pizza Doce') and lower(nome) = any (v_nomes_sabores));
+  update produtos set ativo = false, updated_at = now()
+  where estabelecimento_id = v_est and ativo and tipo_produto = 'pizza'
+    and nome not in ('Pizza', 'Pizza Doce') and lower(nome) = any (v_nomes_sabores);
+
+  -- Qualquer outra pizza configurável que não seja nenhuma das acima: só avisa.
   raise notice 'Outras pizzas configuráveis ativas (NÃO alteradas, confira): %',
     (select coalesce(string_agg(nome, ', '), 'nenhuma') from produtos
       where estabelecimento_id = v_est and ativo and tipo_produto = 'pizza' and nome not in ('Pizza', 'Pizza Doce'));
