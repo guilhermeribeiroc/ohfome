@@ -22,31 +22,44 @@ export interface ContextoSessao {
 
 export async function buscarContexto(estabelecimentoId: string, usuarioId: string): Promise<ContextoSessao | null> {
   return comEstabelecimento(estabelecimentoId, async (client) => {
-    const { rows: estRows } = await client.query(
-      `select id, nome, tipo, tipo_comida as "tipoComida", slug, demonstracao,
-          onboarding_concluido as "onboardingConcluido"
-         from estabelecimentos where id = $1 and ativo`,
-      [estabelecimentoId]
+    // Uma unica query com LEFT JOIN + agregação no lugar de 3 round-trips
+    // sequenciais — isso roda em toda requisição autenticada do sistema
+    // (inclusive cada tick de polling), então o custo por round-trip conta.
+    const { rows } = await client.query(
+      `select e.id, e.nome, e.tipo, e.tipo_comida as "tipoComida", e.slug, e.demonstracao,
+              e.onboarding_concluido as "onboardingConcluido",
+              coalesce(
+                array_agg(em.modulo) filter (where em.modulo is not null),
+                array[]::text[]
+              ) as "modulosAtivos",
+              u.id as "usuarioId", u.nome as "usuarioNome", u.usuario as "usuarioUsuario", u.role as "usuarioRole"
+         from estabelecimentos e
+         left join estabelecimento_modulos em on em.estabelecimento_id = e.id
+         left join usuarios u on u.id = $2 and u.ativo
+        where e.id = $1 and e.ativo
+        group by e.id, u.id, u.nome, u.usuario, u.role`,
+      [estabelecimentoId, usuarioId]
     );
-    if (estRows.length === 0) return null;
-
-    const { rows: modRows } = await client.query(
-      `select modulo from estabelecimento_modulos where estabelecimento_id = $1`,
-      [estabelecimentoId]
-    );
-
-    const { rows: userRows } = await client.query(
-      `select id, nome, usuario, role from usuarios where id = $1 and ativo`,
-      [usuarioId]
-    );
-    if (userRows.length === 0) return null;
+    const linha = rows[0];
+    if (!linha || !linha.usuarioId) return null;
 
     return {
       estabelecimento: {
-        ...estRows[0],
-        modulosAtivos: modRows.map((r) => r.modulo as ModuloSistema),
+        id: linha.id,
+        nome: linha.nome,
+        tipo: linha.tipo,
+        tipoComida: linha.tipoComida,
+        slug: linha.slug,
+        demonstracao: linha.demonstracao,
+        onboardingConcluido: linha.onboardingConcluido,
+        modulosAtivos: linha.modulosAtivos as ModuloSistema[],
       },
-      usuario: userRows[0],
+      usuario: {
+        id: linha.usuarioId,
+        nome: linha.usuarioNome,
+        usuario: linha.usuarioUsuario,
+        role: linha.usuarioRole,
+      },
     };
   });
 }

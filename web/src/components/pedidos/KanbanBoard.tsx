@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type DragEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { ArrowRight, Bell, BellOff, BellRing, Check, ChefHat, Clock3, Copy, Loader2, MapPin, MessageSquareText, Minus, PackageCheck, PackageSearch, Plus, Printer, QrCode, Search, ShoppingBag, Store, Trash2, Truck, UtensilsCrossed, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { BairroEntrega, Cliente, Entregador, Mesa, Pedido, PedidoStatus, Produto } from "@/lib/types";
@@ -58,6 +58,52 @@ function resumoDoAtendimento(pedido: Pedido) {
   return "Atendimento presencial";
 }
 
+interface PedidoCardProps {
+  pedido: Pedido;
+  status: PedidoStatus;
+  arrastando: boolean;
+  permiteCancelar: boolean;
+  onAbrir: (pedido: Pedido) => void;
+  onDragStart: (evento: DragEvent<HTMLElement>, pedidoId: string) => void;
+  onDragEnd: () => void;
+  onCancelar: (pedidoId: string) => void;
+  onAvancar: (pedidoId: string, status: PedidoStatus) => void;
+}
+
+// Comparação por conteúdo (não por referência) — o poller recria o array
+// inteiro de pedidos a cada tick com qualquer mudança, então sem isso TODOS
+// os cards re-renderizariam mesmo quando só 1 pedido muda. Os callbacks
+// (useCallback no KanbanBoard) já são estáveis, então não entram na conta.
+function pedidoCardIgual(anterior: PedidoCardProps, atual: PedidoCardProps) {
+  return (
+    anterior.status === atual.status &&
+    anterior.arrastando === atual.arrastando &&
+    anterior.permiteCancelar === atual.permiteCancelar &&
+    JSON.stringify(anterior.pedido) === JSON.stringify(atual.pedido)
+  );
+}
+
+const PedidoCard = memo(function PedidoCard({
+  pedido,
+  status,
+  arrastando,
+  permiteCancelar,
+  onAbrir,
+  onDragStart,
+  onDragEnd,
+  onCancelar,
+  onAvancar,
+}: PedidoCardProps) {
+  return (
+    <article draggable onClick={() => onAbrir(pedido)} onKeyDown={(evento) => { if (evento.key === "Enter") onAbrir(pedido); }} tabIndex={0} role="button" onDragStart={(evento) => onDragStart(evento, pedido.id)} onDragEnd={onDragEnd} className={`group cursor-grab rounded-2xl border border-cream-200/80 bg-surface p-3.5 shadow-sm transition-all duration-200 active:cursor-grabbing hover:-translate-y-0.5 hover:border-cream-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-coral-400 ${arrastando ? "opacity-45" : ""}`}>
+      <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="font-display text-base font-bold tracking-tight text-ink-900">#{pedido.codigo}</span><PedidoCanalBadge pedido={pedido} />{pedido.pedidoPaiCodigo && <span className="inline-flex items-center rounded-full bg-coral-050 px-2 py-0.5 text-[10px] font-bold text-coral-600">Adicional #{pedido.pedidoPaiCodigo}</span>}</div><p className="mt-1 truncate text-[11px] font-medium text-ink-500">{resumoDoAtendimento(pedido)}</p></div><span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-medium text-ink-400"><Clock3 size={12} />{tempoDecorrido(pedido.createdAt)}</span></div>
+      <ul className="my-3 space-y-1.5 border-y border-cream-100 py-3">{pedido.itens.map((item) => <li key={item.id} className="flex gap-2 text-xs leading-5 text-ink-600"><b className="font-semibold text-ink-900">{item.quantidade}×</b><span>{item.produtoNome}{item.pizza && <small className="block text-coral-600">{item.pizza.tamanhoNome} · {item.pizza.saborDoisNome ? `½ ${item.pizza.saborUmNome} / ½ ${item.pizza.saborDoisNome}` : item.pizza.saborUmNome}</small>}{item.opcoes?.map((opcao) => <small key={`${opcao.grupoNome}-${opcao.opcaoNome}`} className="block text-ink-500">{opcao.grupoNome}: {opcao.opcaoNome}</small>)}</span></li>)}</ul>
+      {(pedido.enderecoEntrega || pedido.observacoes) && <div className="mb-3 space-y-1.5 rounded-xl bg-cream-50 p-2.5 text-[11px] leading-4 text-ink-600">{pedido.enderecoEntrega && <p className="flex gap-1.5"><MapPin size={13} className="mt-0.5 shrink-0 text-coral-600" /><span><b className="font-semibold text-ink-800">Entrega:</b> {pedido.enderecoEntrega}</span></p>}{pedido.observacoes && <p className="flex gap-1.5"><MessageSquareText size={13} className="mt-0.5 shrink-0 text-coral-600" /><span><b className="font-semibold text-ink-800">Obs.:</b> {pedido.observacoes}</span></p>}</div>}
+      <div className="flex items-center justify-between gap-2"><strong className="whitespace-nowrap font-display text-sm font-bold text-ink-900">R$ {pedido.total.toFixed(2).replace(".", ",")}</strong>{permiteCancelar && status === "novo" && <button onClick={(evento) => { evento.stopPropagation(); void onCancelar(pedido.id); }} className="flex h-10 w-10 items-center justify-center rounded-xl text-danger-600 transition hover:bg-danger-050" aria-label={`Cancelar pedido ${pedido.codigo}`}><X size={15} /></button>}</div>{status !== "finalizado" && <button onClick={(evento) => { evento.stopPropagation(); void onAvancar(pedido.id, pedido.status); }} className="mt-2 flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-ink-900 px-3 text-[11px] font-semibold text-white transition active:scale-95">{pedido.tipo === "delivery" && status === "pronto" ? "Selecionar entregador" : "Avançar"} <ArrowRight size={13} /></button>}
+    </article>
+  );
+}, pedidoCardIgual);
+
 function PedidoCanalBadge({ pedido }: { pedido: Pedido }) {
   const canal = canalDoPedido(pedido);
   const { icon: Icon, tone } = CANAL_CONFIG[canal];
@@ -105,8 +151,15 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Central
   }, [pedidos]);
   const mostrarFiltrosDeCanal = !modoCozinha && !origem;
 
-  async function moverPedido(pedidoId: string, status: PedidoStatus) {
-    const pedidoAtual = pedidos.find((pedido) => pedido.id === pedidoId);
+  // Ref em vez de closure direta sobre `pedidos` — assim os handlers abaixo
+  // (useCallback com deps estaveis) sempre leem o pedido mais recente sem
+  // precisar trocar de referencia a cada poll, o que permite memoizar
+  // PedidoCard por conteudo sem arriscar usar dados desatualizados.
+  const pedidosRef = useRef(pedidos);
+  useEffect(() => { pedidosRef.current = pedidos; }, [pedidos]);
+
+  const moverPedido = useCallback(async (pedidoId: string, status: PedidoStatus) => {
+    const pedidoAtual = pedidosRef.current.find((pedido) => pedido.id === pedidoId);
     if (!pedidoAtual || pedidoAtual.status === status) return;
     if (pedidoAtual.tipo === "delivery" && status === "saiu_para_entrega") {
       setPedidoParaDespachar(pedidoAtual);
@@ -120,7 +173,7 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Central
     } else if (pedidoAtual.clienteTelefone && status !== "cancelado") {
       setPromptNotificar({ pedido: { ...pedidoAtual, status }, status });
     }
-  }
+  }, [setDados, recarregar]);
 
   async function despacharPedido(entregadorId: string) {
     if (!pedidoParaDespachar) return { erro: "Pedido não encontrado." };
@@ -158,16 +211,20 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Central
     recarregar();
   }
 
-  async function avancarStatus(pedidoId: string, atual: PedidoStatus) {
+  const avancarStatus = useCallback(async (pedidoId: string, atual: PedidoStatus) => {
     const proximo = PROXIMO_STATUS[atual]; if (!proximo) return;
     await moverPedido(pedidoId, proximo);
-  }
+  }, [moverPedido]);
 
-  function iniciarArraste(evento: DragEvent<HTMLElement>, pedidoId: string) {
+  const iniciarArraste = useCallback((evento: DragEvent<HTMLElement>, pedidoId: string) => {
     evento.dataTransfer.setData("text/ohfome-pedido", pedidoId);
     evento.dataTransfer.effectAllowed = "move";
     setPedidoArrastado(pedidoId);
-  }
+  }, []);
+
+  const finalizarArraste = useCallback(() => {
+    setPedidoArrastado(null); setColunaDestino(null);
+  }, []);
 
   async function soltarPedido(evento: DragEvent<HTMLElement>, status: PedidoStatus) {
     evento.preventDefault();
@@ -176,11 +233,11 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Central
     if (pedidoId) await moverPedido(pedidoId, status);
   }
 
-  async function cancelarPedido(pedidoId: string) {
+  const cancelarPedido = useCallback(async (pedidoId: string) => {
     setDados((lista) => (lista ?? []).map((pedido) => pedido.id === pedidoId ? { ...pedido, status: "cancelado" } : pedido));
     await fetch(`/api/pedidos/${pedidoId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "cancelado" }) });
     recarregar();
-  }
+  }, [setDados, recarregar]);
 
   async function excluirPedido(pedido: Pedido) {
     if (!confirm(`Excluir o pedido #${pedido.codigo} definitivamente? Esta ação não pode ser desfeita.`)) return;
@@ -223,12 +280,18 @@ export function KanbanBoard({ titulo = "Painel de pedidos", subtitulo = "Central
               <div className="flex min-h-36 flex-col gap-2.5 p-2.5">
                 {itens.length === 0 && <div className="flex min-h-32 flex-col items-center justify-center rounded-2xl border border-dashed border-cream-300 text-center"><ShoppingBag size={20} className="mb-2 text-ink-400" /><p className="text-xs font-medium text-ink-400">Nenhum pedido aqui</p></div>}
                 {itens.map((pedido) => (
-                  <article key={pedido.id} draggable onClick={() => setPedidoDetalhe(pedido)} onKeyDown={(evento) => { if (evento.key === "Enter") setPedidoDetalhe(pedido); }} tabIndex={0} role="button" onDragStart={(evento) => iniciarArraste(evento, pedido.id)} onDragEnd={() => { setPedidoArrastado(null); setColunaDestino(null); }} className={`group cursor-grab rounded-2xl border border-cream-200/80 bg-surface p-3.5 shadow-sm transition-all duration-200 active:cursor-grabbing hover:-translate-y-0.5 hover:border-cream-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-coral-400 ${pedidoArrastado === pedido.id ? "opacity-45" : ""}`}>
-                    <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="font-display text-base font-bold tracking-tight text-ink-900">#{pedido.codigo}</span><PedidoCanalBadge pedido={pedido} />{pedido.pedidoPaiCodigo && <span className="inline-flex items-center rounded-full bg-coral-050 px-2 py-0.5 text-[10px] font-bold text-coral-600">Adicional #{pedido.pedidoPaiCodigo}</span>}</div><p className="mt-1 truncate text-[11px] font-medium text-ink-500">{resumoDoAtendimento(pedido)}</p></div><span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-medium text-ink-400"><Clock3 size={12} />{tempoDecorrido(pedido.createdAt)}</span></div>
-                    <ul className="my-3 space-y-1.5 border-y border-cream-100 py-3">{pedido.itens.map((item) => <li key={item.id} className="flex gap-2 text-xs leading-5 text-ink-600"><b className="font-semibold text-ink-900">{item.quantidade}×</b><span>{item.produtoNome}{item.pizza && <small className="block text-coral-600">{item.pizza.tamanhoNome} · {item.pizza.saborDoisNome ? `½ ${item.pizza.saborUmNome} / ½ ${item.pizza.saborDoisNome}` : item.pizza.saborUmNome}</small>}{item.opcoes?.map((opcao) => <small key={`${opcao.grupoNome}-${opcao.opcaoNome}`} className="block text-ink-500">{opcao.grupoNome}: {opcao.opcaoNome}</small>)}</span></li>)}</ul>
-                    {(pedido.enderecoEntrega || pedido.observacoes) && <div className="mb-3 space-y-1.5 rounded-xl bg-cream-50 p-2.5 text-[11px] leading-4 text-ink-600">{pedido.enderecoEntrega && <p className="flex gap-1.5"><MapPin size={13} className="mt-0.5 shrink-0 text-coral-600" /><span><b className="font-semibold text-ink-800">Entrega:</b> {pedido.enderecoEntrega}</span></p>}{pedido.observacoes && <p className="flex gap-1.5"><MessageSquareText size={13} className="mt-0.5 shrink-0 text-coral-600" /><span><b className="font-semibold text-ink-800">Obs.:</b> {pedido.observacoes}</span></p>}</div>}
-                    <div className="flex items-center justify-between gap-2"><strong className="whitespace-nowrap font-display text-sm font-bold text-ink-900">R$ {pedido.total.toFixed(2).replace(".", ",")}</strong>{permiteCancelar && status === "novo" && <button onClick={(evento) => { evento.stopPropagation(); void cancelarPedido(pedido.id); }} className="flex h-10 w-10 items-center justify-center rounded-xl text-danger-600 transition hover:bg-danger-050" aria-label={`Cancelar pedido ${pedido.codigo}`}><X size={15} /></button>}</div>{status !== "finalizado" && <button onClick={(evento) => { evento.stopPropagation(); void avancarStatus(pedido.id, pedido.status); }} className="mt-2 flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-ink-900 px-3 text-[11px] font-semibold text-white transition active:scale-95">{pedido.tipo === "delivery" && status === "pronto" ? "Selecionar entregador" : "Avançar"} <ArrowRight size={13} /></button>}
-                  </article>
+                  <PedidoCard
+                    key={pedido.id}
+                    pedido={pedido}
+                    status={status}
+                    arrastando={pedidoArrastado === pedido.id}
+                    permiteCancelar={permiteCancelar}
+                    onAbrir={setPedidoDetalhe}
+                    onDragStart={iniciarArraste}
+                    onDragEnd={finalizarArraste}
+                    onCancelar={cancelarPedido}
+                    onAvancar={avancarStatus}
+                  />
                 ))}
               </div>
             </section>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { ArrowRight, Banknote, Check, CreditCard, DoorOpen, Minus, Plus, Printer, QrCode, Search, Settings2, Users, X } from "lucide-react";
 import type { Mesa, MesaStatus, PagamentoParte, Pedido, Produto } from "@/lib/types";
 import { MESA_STATUS_LABEL, nomeProdutoComTamanho } from "@/lib/types";
@@ -36,6 +36,23 @@ interface ItemLancado {
   precoUnitario: number;
   quantidade: number;
 }
+
+const MesaCard = memo(function MesaCard({ mesa, onAbrir }: { mesa: Mesa; onAbrir: (mesa: Mesa) => void }) {
+  return (
+    <button
+      onClick={() => onAbrir(mesa)}
+      className={`group relative flex min-h-36 flex-col items-start justify-between overflow-hidden rounded-[1.35rem] border border-cream-200 p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-[.98] ${STATUS_STYLE[mesa.status]}`}
+    >
+      <div className="flex w-full items-center justify-between"><span className={`h-2.5 w-2.5 rounded-full ${STATUS_DOT[mesa.status]}`} /><ArrowRight size={15} className="opacity-35 transition-transform group-hover:translate-x-0.5" /></div>
+      <div><span className="block font-display text-3xl font-bold tracking-[-.06em]">{String(mesa.numero).padStart(2, "0")}</span><span className="mt-1 block text-[11px] font-semibold">{MESA_STATUS_LABEL[mesa.status]}</span></div>
+      <span className="inline-flex items-center gap-1.5 text-[10px] opacity-65"><Users size={12} />{mesa.capacidade} lugares</span>
+    </button>
+  );
+}, (anterior, atual) =>
+  anterior.mesa.id === atual.mesa.id &&
+  anterior.mesa.numero === atual.mesa.numero &&
+  anterior.mesa.status === atual.mesa.status &&
+  anterior.mesa.capacidade === atual.mesa.capacidade);
 
 export function MesasModule() {
   const { dados: mesas, recarregar: recarregarMesas } = usePolling<Mesa[]>("/api/mesas", 5000);
@@ -75,11 +92,15 @@ export function MesasModule() {
     () => pedidosDaMesa.reduce((soma, pedido) => soma + Number(pedido.total), 0) + totalAtual,
     [pedidosDaMesa, totalAtual]
   );
+  const produtosFiltrados = useMemo(
+    () => (produtos ?? []).filter((produto) => produto.nome.toLowerCase().includes(busca.toLowerCase())),
+    [produtos, busca]
+  );
 
-  function abrirMesa(mesa: Mesa) {
+  const abrirMesa = useCallback((mesa: Mesa) => {
     navigator.vibrate?.(12);
     setMesaAbertaId(mesa.id);
-  }
+  }, []);
 
   function ajustarItem(produto: Produto, delta: number) {
     if (!mesaAbertaId) return;
@@ -184,15 +205,7 @@ export function MesasModule() {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {(mesas ?? []).map((mesa) => (
-          <button
-            key={mesa.id}
-            onClick={() => abrirMesa(mesa)}
-            className={`group relative flex min-h-36 flex-col items-start justify-between overflow-hidden rounded-[1.35rem] border border-cream-200 p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-[.98] ${STATUS_STYLE[mesa.status]}`}
-          >
-            <div className="flex w-full items-center justify-between"><span className={`h-2.5 w-2.5 rounded-full ${STATUS_DOT[mesa.status]}`} /><ArrowRight size={15} className="opacity-35 transition-transform group-hover:translate-x-0.5" /></div>
-            <div><span className="block font-display text-3xl font-bold tracking-[-.06em]">{String(mesa.numero).padStart(2, "0")}</span><span className="mt-1 block text-[11px] font-semibold">{MESA_STATUS_LABEL[mesa.status]}</span></div>
-            <span className="inline-flex items-center gap-1.5 text-[10px] opacity-65"><Users size={12} />{mesa.capacidade} lugares</span>
-          </button>
+          <MesaCard key={mesa.id} mesa={mesa} onAbrir={abrirMesa} />
         ))}
       </div>
 
@@ -228,7 +241,7 @@ export function MesasModule() {
           <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
             <div className="mx-auto max-w-5xl">{pedidosDaMesa.length > 0 && <section className="mb-5 rounded-2xl border border-cream-200 bg-surface p-4"><div className="mb-3 flex items-center justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-ink-400">Comanda em aberto</p><p className="mt-1 text-sm font-semibold text-ink-900">{pedidosDaMesa.length} lançamento(s) já enviado(s)</p></div><strong className="font-display text-lg text-ink-900">R$ {pedidosDaMesa.reduce((soma, pedido) => soma + Number(pedido.total), 0).toFixed(2).replace(".", ",")}</strong></div><div className="space-y-4">{pedidosDaMesa.map((pedido) => <div key={pedido.id}><p className="mb-1.5 text-[11px] font-bold uppercase tracking-[.08em] text-coral-600">Pedido #{pedido.codigo}</p><div className="space-y-2">{pedido.itens.map((item, indice) => <div key={`${item.id}-${indice}`} className="flex justify-between gap-3 text-sm"><span className="text-ink-600"><b className="mr-2 text-ink-900">{item.quantidade}×</b>{item.produtoNome}</span><span className="font-medium text-ink-800">R$ {(item.precoUnitario * item.quantidade).toFixed(2).replace(".", ",")}</span></div>)}</div></div>)}</div></section>}<div className="sticky top-0 z-10 -mx-1 mb-4 bg-cream-50/95 px-1 pb-3 backdrop-blur"><p className="mb-2 text-[10px] font-semibold uppercase tracking-[.16em] text-ink-400">Adicionar nova rodada</p><div className="relative"><Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" /><input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar item do cardápio" className="of-field pl-10" /></div></div>
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-              {(produtos ?? []).filter((produto) => produto.nome.toLowerCase().includes(busca.toLowerCase())).map((produto) => {
+              {produtosFiltrados.map((produto) => {
                 const qtd = itensAtuais.find((i) => i.produtoId === produto.id)?.quantidade ?? 0;
                 return (
                   <div

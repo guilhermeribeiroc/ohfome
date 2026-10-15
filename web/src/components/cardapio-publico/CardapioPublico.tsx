@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import Lenis from "@studio-freight/lenis";
 import {
   ArrowLeft,
@@ -219,6 +219,48 @@ function fotoDoProduto(produto: ProdutoPublico): CSSProperties {
   };
 }
 
+// So aplica o background-image quando o card entra (ou esta perto de entrar)
+// na viewport — o cardapio publico lista dezenas de produtos e cada foto e
+// servida bem maior que a miniatura exibida, carregar tudo de uma vez pesa
+// no 4G do cliente so pra abrir o link.
+function FotoProduto({
+  produto,
+  className,
+  children,
+}: {
+  produto: ProdutoPublico;
+  className?: string;
+  children?: ReactNode;
+}) {
+  const elementoRef = useRef<HTMLSpanElement | null>(null);
+  const [visivel, setVisivel] = useState(false);
+
+  useEffect(() => {
+    const elemento = elementoRef.current;
+    if (!elemento || typeof IntersectionObserver === "undefined") {
+      setVisivel(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entradas) => {
+        if (entradas.some((entrada) => entrada.isIntersecting)) {
+          setVisivel(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(elemento);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <span ref={elementoRef} className={className} style={visivel ? fotoDoProduto(produto) : undefined}>
+      {children}
+    </span>
+  );
+}
+
 function detalhesItemTexto(item: { opcoes: OpcaoEscolhida[]; pizza?: PizzaEscolhida }) {
   if (item.pizza) {
     const sabor = item.pizza.saborDoisId ? `½ ${item.pizza.saborUmNome} / ½ ${item.pizza.saborDoisNome}` : item.pizza.saborUmNome;
@@ -307,13 +349,22 @@ export function CardapioPublico({ slug }: { slug: string }) {
         if (!resposta.ok) return;
         const corpo = await resposta.json() as { disponibilidade?: Record<string, number | null> };
         if (!ativo || !corpo.disponibilidade) return;
-        setDados((atual) => atual ? {
-          ...atual,
-          produtos: atual.produtos.map((produto) => ({
-            ...produto,
-            estoqueDisponivel: produto.controlaEstoqueUnidades ? corpo.disponibilidade?.[produto.id] ?? 0 : produto.estoqueDisponivel,
-          })),
-        } : atual);
+        const disponibilidade = corpo.disponibilidade;
+        setDados((atual) => {
+          if (!atual) return atual;
+          // So troca a referencia do array (e dispara re-render/invalida memos
+          // downstream) quando algum valor de estoque realmente mudou — sem
+          // isso, o array inteiro era remontado a cada 10s mesmo sem mudanca.
+          let mudou = false;
+          const produtos = atual.produtos.map((produto) => {
+            if (!produto.controlaEstoqueUnidades) return produto;
+            const novoValor = disponibilidade[produto.id] ?? 0;
+            if (novoValor === produto.estoqueDisponivel) return produto;
+            mudou = true;
+            return { ...produto, estoqueDisponivel: novoValor };
+          });
+          return mudou ? { ...atual, produtos } : atual;
+        });
       } catch { /* a validação final permanece no banco ao confirmar */ }
     }
     const aoVisivel = () => void atualizarDisponibilidade();
@@ -769,10 +820,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
                     onClick={() => abrirProduto(produto)}
                     className="flex items-center gap-3 rounded-2xl bg-white p-2 text-left"
                   >
-                    <span
-                      className="h-14 w-14 shrink-0 rounded-xl bg-cover"
-                      style={fotoDoProduto(produto)}
-                    />
+                    <FotoProduto produto={produto} className="h-14 w-14 shrink-0 rounded-xl bg-cover" />
                     <span className="min-w-0 flex-1">
                       <strong className="block truncate font-display text-sm">
                         {nomeProdutoExibicao(produto)}
@@ -986,16 +1034,16 @@ export function CardapioPublico({ slug }: { slug: string }) {
                     onClick={() => abrirProduto(produto)}
                     className={`group grid w-full grid-cols-[112px_1fr] gap-4 border-b border-black/[.09] py-5 text-left transition active:scale-[.99] sm:grid-cols-[148px_1fr] sm:gap-6 sm:py-6 lg:grid-cols-[126px_1fr] lg:gap-5 lg:py-5 ${esgotado ? "opacity-60" : ""}`}
                   >
-                    <span
+                    <FotoProduto
+                      produto={produto}
                       className="relative aspect-square overflow-hidden rounded-2xl bg-[#d8d0c6] bg-cover transition-transform duration-300 group-hover:scale-[1.015]"
-                      style={fotoDoProduto(produto)}
                     >
                       {quantidade > 0 && (
                         <i className="absolute right-2 top-2 flex h-7 min-w-7 items-center justify-center rounded-full bg-[#941c42] px-2 text-[11px] font-semibold not-italic text-white shadow-md">
                           {quantidade}
                         </i>
                       )}
-                    </span>
+                    </FotoProduto>
                     <span className="min-w-0 self-center">
                       <strong className="block font-display text-[17px] font-semibold leading-[1.08] tracking-[-.035em] text-[#181714] sm:text-[21px]">
                         {nomeProdutoExibicao(produto)}
@@ -2091,10 +2139,7 @@ function CarrinhoSheet({
                         key={chave}
                         className="grid grid-cols-[76px_1fr_auto] items-start gap-3 border-b border-black/[.08] py-4"
                       >
-                        <span
-                          className="aspect-square rounded-xl bg-cover"
-                          style={fotoDoProduto(produto)}
-                        />
+                        <FotoProduto produto={produto} className="aspect-square rounded-xl bg-cover" />
                         <span className="min-w-0">
                           <strong className="block truncate font-display text-base">
                             {nomeProdutoExibicao(produto)}

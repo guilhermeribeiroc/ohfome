@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useCallback, useState } from "react";
 import { AlertTriangle, Check, PackagePlus, Plus, Trash2, X } from "lucide-react";
 import type { Insumo, UnidadeMedida } from "@/lib/types";
 import { usePolling } from "@/lib/use-polling";
@@ -10,6 +10,84 @@ const UNIDADES: UnidadeMedida[] = ["kg", "g", "l", "ml", "un", "cx", "pct"];
 const CAMPO_CLASSE =
   "w-full rounded-xl border border-cream-200 bg-surface px-3.5 py-3 text-sm text-ink-900 outline-none transition placeholder:text-ink-400 focus:border-coral-400 focus:ring-4 focus:ring-coral-100";
 
+interface InsumoRowProps {
+  insumo: Insumo;
+  aberto: boolean;
+  entradaQtd: string;
+  onAbrirEntrada: (id: string) => void;
+  onFecharEntrada: () => void;
+  onEntradaQtdChange: (valor: string) => void;
+  onConfirmarEntrada: (id: string, quantidadeTexto: string) => void;
+  onExcluir: (id: string, nome: string) => void;
+}
+
+const InsumoRow = memo(function InsumoRow({
+  insumo,
+  aberto,
+  entradaQtd,
+  onAbrirEntrada,
+  onFecharEntrada,
+  onEntradaQtdChange,
+  onConfirmarEntrada,
+  onExcluir,
+}: InsumoRowProps) {
+  const baixo = insumo.quantidadeEstoque <= insumo.quantidadeMinima;
+  return (
+    <tr>
+      <td className="px-4 py-3 font-medium text-ink-900">{insumo.nome}</td>
+      <td className={`px-4 py-3 font-semibold ${baixo ? "text-danger-600" : "text-ink-600"}`}>
+        {insumo.quantidadeEstoque} {insumo.unidadeMedida}
+      </td>
+      <td className="px-4 py-3 text-ink-400">
+        {insumo.quantidadeMinima} {insumo.unidadeMedida}
+      </td>
+      <td className="px-4 py-3 text-ink-400">R$ {insumo.custoUnitario.toFixed(2).replace(".", ",")}</td>
+      <td className="px-4 py-3 text-ink-400">{insumo.fornecedor ?? "—"}</td>
+      <td className="px-4 py-3">
+        {aberto ? (
+          <div className="flex items-center gap-1.5">
+            <input
+              type="number"
+              step="0.001"
+              min={0}
+              autoFocus
+              value={entradaQtd}
+              onChange={(e) => onEntradaQtdChange(e.target.value)}
+              className="w-16 rounded-lg bg-cream-100 px-1.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-coral-200"
+            />
+            <button
+              onClick={() => onConfirmarEntrada(insumo.id, entradaQtd)}
+              className="flex h-10 w-10 items-center justify-center rounded-xl bg-basil-050 text-basil-600 ring-1 ring-basil-400/20"
+              aria-label="Confirmar entrada"
+            >
+              <Check size={15} />
+            </button>
+            <button onClick={onFecharEntrada} className="flex h-10 w-10 items-center justify-center rounded-xl text-ink-400 hover:bg-cream-100" aria-label="Cancelar entrada">
+              <X size={15} />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-end gap-3 whitespace-nowrap">
+            <button
+              onClick={() => onAbrirEntrada(insumo.id)}
+              className="of-btn-secondary !min-h-10 !px-2.5 !text-[11px]"
+            >
+              <PackagePlus size={14} /> Estoque
+            </button>
+            <button onClick={() => onExcluir(insumo.id, insumo.nome)} className="flex h-10 w-10 items-center justify-center rounded-xl text-danger-600 hover:bg-danger-050" aria-label={`Excluir ${insumo.nome}`}>
+              <Trash2 size={15} />
+            </button>
+          </div>
+        )}
+      </td>
+    </tr>
+  );
+}, (anterior, atual) => {
+  if (anterior.aberto !== atual.aberto) return false;
+  if (anterior.aberto && anterior.entradaQtd !== atual.entradaQtd) return false;
+  return JSON.stringify(anterior.insumo) === JSON.stringify(atual.insumo);
+});
+
 export function InsumosTable() {
   const { dados, recarregar } = usePolling<Insumo[]>("/api/insumos", 15000);
   const insumos = dados ?? [];
@@ -18,7 +96,7 @@ export function InsumosTable() {
   const [entradaAberta, setEntradaAberta] = useState<string | null>(null);
   const [entradaQtd, setEntradaQtd] = useState("");
 
-  async function excluir(id: string, nome: string) {
+  const excluir = useCallback(async (id: string, nome: string) => {
     if (!confirm(`Excluir o insumo "${nome}"?`)) return;
     const res = await fetch(`/api/insumos/${id}`, { method: "DELETE" });
     if (!res.ok) {
@@ -27,10 +105,15 @@ export function InsumosTable() {
       return;
     }
     recarregar();
-  }
+  }, [recarregar]);
 
-  async function registrarEntrada(id: string) {
-    const quantidade = Number(entradaQtd);
+  // O React Compiler nao esta habilitado neste projeto (sem reactCompiler em
+  // next.config.ts) — a regra abaixo e so o lint do eslint-plugin-react-hooks
+  // tentando inferir deps para um compilador que nao roda aqui, e erra ao ver
+  // 2 setters de useState diferentes no mesmo callback.
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
+  const registrarEntrada = useCallback(async (id: string, quantidadeTexto: string) => {
+    const quantidade = Number(quantidadeTexto);
     if (!Number.isFinite(quantidade) || quantidade <= 0) return;
     await fetch(`/api/insumos/${id}/movimentacoes`, {
       method: "POST",
@@ -40,7 +123,10 @@ export function InsumosTable() {
     setEntradaAberta(null);
     setEntradaQtd("");
     recarregar();
-  }
+  }, [recarregar]);
+
+  const abrirEntrada = useCallback((id: string) => setEntradaAberta(id), []);
+  const fecharEntrada = useCallback(() => setEntradaAberta(null), []);
 
   return (
     <div>
@@ -72,59 +158,19 @@ export function InsumosTable() {
             </tr>
           </thead>
           <tbody className="divide-y divide-cream-100">
-            {insumos.map((insumo) => {
-              const baixo = insumo.quantidadeEstoque <= insumo.quantidadeMinima;
-              return (
-                <tr key={insumo.id}>
-                  <td className="px-4 py-3 font-medium text-ink-900">{insumo.nome}</td>
-                  <td className={`px-4 py-3 font-semibold ${baixo ? "text-danger-600" : "text-ink-600"}`}>
-                    {insumo.quantidadeEstoque} {insumo.unidadeMedida}
-                  </td>
-                  <td className="px-4 py-3 text-ink-400">
-                    {insumo.quantidadeMinima} {insumo.unidadeMedida}
-                  </td>
-                  <td className="px-4 py-3 text-ink-400">R$ {insumo.custoUnitario.toFixed(2).replace(".", ",")}</td>
-                  <td className="px-4 py-3 text-ink-400">{insumo.fornecedor ?? "—"}</td>
-                  <td className="px-4 py-3">
-                    {entradaAberta === insumo.id ? (
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="number"
-                          step="0.001"
-                          min={0}
-                          autoFocus
-                          value={entradaQtd}
-                          onChange={(e) => setEntradaQtd(e.target.value)}
-                          className="w-16 rounded-lg bg-cream-100 px-1.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-coral-200"
-                        />
-                        <button
-                          onClick={() => registrarEntrada(insumo.id)}
-                          className="flex h-10 w-10 items-center justify-center rounded-xl bg-basil-050 text-basil-600 ring-1 ring-basil-400/20"
-                          aria-label="Confirmar entrada"
-                        >
-                          <Check size={15} />
-                        </button>
-                        <button onClick={() => setEntradaAberta(null)} className="flex h-10 w-10 items-center justify-center rounded-xl text-ink-400 hover:bg-cream-100" aria-label="Cancelar entrada">
-                          <X size={15} />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-end gap-3 whitespace-nowrap">
-                        <button
-                          onClick={() => setEntradaAberta(insumo.id)}
-                          className="of-btn-secondary !min-h-10 !px-2.5 !text-[11px]"
-                        >
-                          <PackagePlus size={14} /> Estoque
-                        </button>
-                        <button onClick={() => excluir(insumo.id, insumo.nome)} className="flex h-10 w-10 items-center justify-center rounded-xl text-danger-600 hover:bg-danger-050" aria-label={`Excluir ${insumo.nome}`}>
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
+            {insumos.map((insumo) => (
+              <InsumoRow
+                key={insumo.id}
+                insumo={insumo}
+                aberto={entradaAberta === insumo.id}
+                entradaQtd={entradaQtd}
+                onAbrirEntrada={abrirEntrada}
+                onFecharEntrada={fecharEntrada}
+                onEntradaQtdChange={setEntradaQtd}
+                onConfirmarEntrada={registrarEntrada}
+                onExcluir={excluir}
+              />
+            ))}
           </tbody>
         </table>
       </div>
