@@ -95,6 +95,9 @@ interface ProdutoPublico {
   grupoOpcoes?: GrupoOpcoesPublico[];
   tipoProduto?: "padrao" | "pizza";
   pizza?: PizzaConfigPublica;
+  /** Vitrine: cada sabor de pizza vira um item; este é o sabor do item (o produto real é o mesmo). */
+  saborFixoId?: string;
+  chaveVitrine?: string;
 }
 
 interface ItemCarrinho {
@@ -244,7 +247,26 @@ function nomeProdutoExibicao(produto: ProdutoPublico) {
   return produto.tamanho ? `${produto.nome} (${produto.tamanho})` : produto.nome;
 }
 
+// Um item de vitrine por sabor: "Calabresa", "Maravilha"... em vez de um único "Pizza".
+function expandirPizzas(produtos: ProdutoPublico[]): ProdutoPublico[] {
+  return produtos.flatMap((produto) => {
+    if (produto.tipoProduto !== "pizza" || !produto.pizza?.sabores.length) return [produto];
+    return produto.pizza.sabores.map((sabor) => ({ ...produto, nome: sabor.nome, descricao: sabor.descricao || produto.descricao, saborFixoId: sabor.id, chaveVitrine: `${produto.id}:${sabor.id}` }));
+  });
+}
+
+// Tamanhos em que o sabor é vendido: os que têm preço na tabela dele (ou todos, se o sabor não tem tabela).
+function tamanhosDoSabor(pizza: PizzaConfigPublica, sabor: PizzaSaborPublico | undefined) {
+  if (!sabor || !sabor.precos || !Object.keys(sabor.precos).length) return pizza.tamanhos;
+  return pizza.tamanhos.filter((tamanho) => sabor.precos?.[tamanho.id] !== undefined);
+}
+
 function precoBaseProduto(produto: ProdutoPublico) {
+  if (produto.saborFixoId && produto.pizza) {
+    const sabor = produto.pizza.sabores.find((item) => item.id === produto.saborFixoId);
+    const valores = tamanhosDoSabor(produto.pizza, sabor).map((tamanho) => (sabor ? valorSaborNoTamanho(tamanho, sabor) : tamanho.precoSaborUnico));
+    if (valores.length) return Math.min(...valores);
+  }
   if (produto.tipoProduto === "pizza" && produto.pizza?.tamanhos.length) {
     return Math.min(...produto.pizza.tamanhos.map((tamanho) => tamanho.precoSaborUnico));
   }
@@ -431,17 +453,19 @@ export function CardapioPublico({ slug }: { slug: string }) {
     else lenisRef.current.start();
   }, [overlay]);
 
+  const produtosVitrine = useMemo(() => (dados ? expandirPizzas(dados.produtos) : []), [dados]);
+
   const categorias = useMemo(() => {
     if (!dados) return [];
     const nomes = [
-      ...new Set(dados.produtos.map((produto) => produto.categoriaNome)),
+      ...new Set(produtosVitrine.map((produto) => produto.categoriaNome)),
     ];
     return nomes.map((nome) => ({
       nome,
       grupo: grupoDaCategoria(nome),
-      itens: dados.produtos.filter((produto) => produto.categoriaNome === nome),
+      itens: produtosVitrine.filter((produto) => produto.categoriaNome === nome),
     }));
-  }, [dados]);
+  }, [dados, produtosVitrine]);
 
   const gruposDisponiveis = useMemo(
     () => ({
@@ -525,12 +549,12 @@ export function CardapioPublico({ slug }: { slug: string }) {
   const produtosEncontrados = useMemo(() => {
     const termo = busca.trim().toLocaleLowerCase("pt-BR");
     if (!termo || !dados) return [];
-    return dados.produtos.filter((produto) =>
+    return produtosVitrine.filter((produto) =>
       `${produto.nome} ${produto.descricao ?? ""} ${produto.categoriaNome}`
         .toLocaleLowerCase("pt-BR")
         .includes(termo),
     );
-  }, [busca, dados]);
+  }, [busca, dados, produtosVitrine]);
 
   function precoDoItem(item: ItemCarrinho) {
     if (item.pizza) return item.pizza.preco;
@@ -774,7 +798,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
               <div className="grid gap-2">
                 {produtosEncontrados.slice(0, 6).map((produto) => (
                   <button
-                    key={produto.id}
+                    key={produto.chaveVitrine ?? produto.id}
                     onClick={() => abrirProduto(produto)}
                     className="flex items-center gap-3 rounded-2xl bg-white p-2 text-left"
                   >
@@ -987,11 +1011,11 @@ export function CardapioPublico({ slug }: { slug: string }) {
             </div>
             <div className="lg:grid lg:grid-cols-2 lg:gap-x-10">
               {categoria.itens.map((produto) => {
-                const quantidade = quantidadePorProduto[produto.id] ?? 0;
+                const quantidade = produto.saborFixoId ? Object.values(carrinho).filter((linha) => linha.produtoId === produto.id && linha.pizza && (linha.pizza.saborUmId === produto.saborFixoId || linha.pizza.saborDoisId === produto.saborFixoId)).reduce((total, linha) => total + linha.quantidade, 0) : (quantidadePorProduto[produto.id] ?? 0);
                 const esgotado = produto.controlaEstoqueUnidades && (produto.estoqueDisponivel ?? 0) <= 0;
                 return (
                   <button
-                    key={produto.id}
+                    key={produto.chaveVitrine ?? produto.id}
                     onClick={() => abrirProduto(produto)}
                     className={`group grid w-full grid-cols-[112px_1fr] gap-4 border-b border-black/[.09] py-5 text-left transition active:scale-[.99] sm:grid-cols-[148px_1fr] sm:gap-6 sm:py-6 lg:grid-cols-[126px_1fr] lg:gap-5 lg:py-5 ${esgotado ? "opacity-60" : ""}`}
                   >
@@ -1493,10 +1517,13 @@ function ProdutoDetalhe({
   const grupos = produto.grupoOpcoes ?? [];
   const ehPizza = produto.tipoProduto === "pizza" && Boolean(produto.pizza);
   const [pizzaTamanhoId, setPizzaTamanhoId] = useState("");
-  const [pizzaSaboresEscolhidos, setPizzaSaboresEscolhidos] = useState<string[]>([]);
+  const [pizzaSaboresEscolhidos, setPizzaSaboresEscolhidos] = useState<string[]>(produto.saborFixoId ? [produto.saborFixoId] : []);
+  const [querMeio, setQuerMeio] = useState(false);
   const pizzaTamanhos = produto.pizza?.tamanhos ?? [];
   const pizzaSabores = produto.pizza?.sabores ?? [];
 
+  const saborFixo = pizzaSabores.find((item) => item.id === produto.saborFixoId);
+  const tamanhosVenda = produto.saborFixoId && produto.pizza ? tamanhosDoSabor(produto.pizza, saborFixo) : pizzaTamanhos;
   const tamanhoEscolhido = pizzaTamanhos.find((item) => item.id === pizzaTamanhoId);
   // Meio a meio só vale se o tamanho e os dois sabores forem liberados pela pizzaria.
   const tamanhoAceitaMeio = tamanhoEscolhido ? tamanhoEscolhido.permiteMeioAMeio !== false : true;
@@ -1509,7 +1536,7 @@ function ProdutoDetalhe({
     setPizzaTamanhoId(tamanhoId);
     const tamanho = pizzaTamanhos.find((item) => item.id === tamanhoId);
     // Trocou para um tamanho que não aceita meio a meio: mantém só o primeiro sabor.
-    if (tamanho?.permiteMeioAMeio === false) setPizzaSaboresEscolhidos((atuais) => atuais.slice(0, 1));
+    if (tamanho?.permiteMeioAMeio === false) { setPizzaSaboresEscolhidos((atuais) => atuais.slice(0, 1)); setQuerMeio(false); }
   }
 
   function alternarSaborPizza(saborId: string) {
@@ -1536,7 +1563,7 @@ function ProdutoDetalhe({
     const preco = !saborDois ? valorUm : regra === "maior_valor" ? Math.max(valorUm, valorDois!) : regra === "media" ? (valorUm + valorDois!) / 2 : (tamanho.precoMeioAMeio ?? Math.max(valorUm, valorDois!));
     return { tamanhoId: tamanho.id, tamanhoNome: tamanho.nome, saborUmId: saborUm.id, saborUmNome: saborUm.nome, saborDoisId: saborDois?.id, saborDoisNome: saborDois?.nome, preco };
   })();
-  const pizzaValida = !ehPizza || pizzaEscolhida !== null;
+  const pizzaValida = !ehPizza || (pizzaEscolhida !== null && !(querMeio && pizzaSaboresEscolhidos.length < 2));
 
   function alternarOpcao(grupo: GrupoOpcoesPublico, opcaoId: string) {
     setSelecionadas((atual) => {
@@ -1621,7 +1648,7 @@ function ProdutoDetalhe({
               <div>
                 <span className="text-sm font-semibold text-[#181714]">Tamanho</span>
                 <div className="mt-2 grid grid-cols-3 gap-2">
-                  {pizzaTamanhos.map((tamanho) => (
+                  {tamanhosVenda.map((tamanho) => (
                     <button
                       key={tamanho.id}
                       type="button"
@@ -1629,12 +1656,13 @@ function ProdutoDetalhe({
                       className={`rounded-xl border px-2 py-3 text-center text-sm font-semibold transition ${pizzaTamanhoId === tamanho.id ? "border-[#0e7775] bg-[#0e7775]/[.07] text-[#0e7775]" : "border-black/[.08] bg-white text-[#181714]"}`}
                     >
                       {tamanho.nome}
-                      <span className="mt-0.5 block text-[11px] font-medium text-black/45">{pizzaSabores.some((sabor) => sabor.precos && Object.keys(sabor.precos).length > 0) ? `a partir de ${moeda(tamanho.precoSaborUnico)}` : moeda(tamanho.precoSaborUnico)}</span>
+                      <span className="mt-0.5 block text-[11px] font-medium text-black/45">{saborFixo ? moeda(valorSaborNoTamanho(tamanho, saborFixo)) : pizzaSabores.some((sabor) => sabor.precos && Object.keys(sabor.precos).length > 0) ? `a partir de ${moeda(tamanho.precoSaborUnico)}` : moeda(tamanho.precoSaborUnico)}</span>
                       {tamanho.permiteMeioAMeio === false && <span className="mt-0.5 block text-[10px] font-medium text-black/40">1 sabor</span>}
                     </button>
                   ))}
                 </div>
               </div>
+              {!produto.saborFixoId && (
               <div>
                 <div className="flex items-baseline justify-between gap-3">
                   <span className="text-sm font-semibold text-[#181714]">Sabor</span>
@@ -1671,6 +1699,38 @@ function ProdutoDetalhe({
                   })}
                 </div>
               </div>
+              )}
+              {produto.saborFixoId && tamanhoEscolhido && (
+                <div>
+                  {tamanhoAceitaMeio && saborFixo?.permiteMeioAMeio !== false ? (
+                    <>
+                      <label className="flex cursor-pointer items-center justify-between gap-3 text-sm font-semibold text-[#181714]">
+                        <span>Quero meio a meio<span className="block text-[11px] font-normal text-black/45">Metade {produto.nome}, metade de outro sabor</span></span>
+                        <input type="checkbox" checked={querMeio} onChange={(evento) => { setQuerMeio(evento.target.checked); if (!evento.target.checked) setPizzaSaboresEscolhidos((atuais) => atuais.slice(0, 1)); }} className="h-5 w-5 accent-[#0e7775]" />
+                      </label>
+                      {querMeio && (
+                        <div className="mt-3 space-y-2">
+                          <span className="text-[10px] font-semibold uppercase tracking-[.08em] text-black/40">Escolha a outra metade</span>
+                          {pizzaSabores.filter((sabor) => sabor.id !== produto.saborFixoId && sabor.permiteMeioAMeio !== false && produto.pizza && tamanhosDoSabor(produto.pizza, sabor).some((tamanho) => tamanho.id === tamanhoEscolhido.id)).map((sabor) => {
+                            const marcado = pizzaSaboresEscolhidos[1] === sabor.id;
+                            return (
+                              <button key={sabor.id} type="button" onClick={() => setPizzaSaboresEscolhidos(produto.saborFixoId ? [produto.saborFixoId, sabor.id] : [sabor.id])} className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-3 text-left text-sm transition ${marcado ? "border-[#0e7775] bg-[#0e7775]/[.07]" : "border-black/[.08] bg-white"}`}>
+                                <span className="flex items-center gap-2.5">
+                                  <i className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-bold ${marcado ? "border-[#0e7775] bg-[#0e7775] text-white" : "border-black/20"}`}>{marcado && <Check size={12} strokeWidth={3} />}</i>
+                                  <span>{sabor.nome}{sabor.descricao && <span className="block text-[11px] font-normal text-black/45">{sabor.descricao}</span>}</span>
+                                </span>
+                                <span className="shrink-0 text-xs font-semibold text-black/50">{moeda(valorSaborNoTamanho(tamanhoEscolhido, sabor))}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-[11px] font-medium text-black/45">{!tamanhoAceitaMeio ? `O tamanho ${tamanhoEscolhido.nome} é só de um sabor.` : "Este sabor vai sempre inteiro."}</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
           {grupos.map((grupo) => (

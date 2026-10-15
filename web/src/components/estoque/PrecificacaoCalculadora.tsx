@@ -8,6 +8,7 @@ import { mascararMoeda, moedaComCentavos, numeroDaMoeda } from "@/lib/moeda";
 import { FichaTecnica } from "./FichaTecnica";
 import { OpcoesProduto } from "./OpcoesProduto";
 import { PizzaConfiguracao } from "./PizzaConfiguracao";
+import { PizzaSaborFicha } from "./PizzaSaborFicha";
 
 const GRADIENTE_CORAL = "linear-gradient(120deg, var(--color-coral-600), var(--color-coral-500), var(--color-mango-500))";
 const CAMPO_CLASSE =
@@ -39,6 +40,8 @@ function calcular(produto: Produto): Produto {
 export function PrecificacaoCalculadora() {
   const { dados, setDados, recarregar } = usePolling<Produto[]>("/api/produtos", 15000);
   const lista = dados ?? [];
+  // Sabor de pizza aberto na ficha da direita (nome vazio = novo sabor).
+  const [saborAberto, setSaborAberto] = useState<{ produtoId: string; nome: string } | null>(null);
   const [categoriaFiltro, setCategoriaFiltro] = useState("");
   const [buscaProduto, setBuscaProduto] = useState("");
   const categoriasDaLista = [...new Set(lista.map((produto) => produto.categoriaNome || "Sem categoria"))].sort((a, b) => a.localeCompare(b, "pt-BR"));
@@ -163,7 +166,7 @@ export function PrecificacaoCalculadora() {
                 <li key={produto.id}>
                   {(produto.categoriaNome || "Sem categoria") !== (listaFiltrada[indice - 1]?.categoriaNome || (indice ? "Sem categoria" : undefined)) && <p className="px-3 pb-1 pt-3 text-[10px] font-bold uppercase tracking-[.14em] text-coral-600">{produto.categoriaNome || "Sem categoria"}</p>}
                   <button
-                    onClick={() => setSelecionadoIdManual(produto.id)}
+                    onClick={() => { setSelecionadoIdManual(produto.id); setSaborAberto(null); }}
                     className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition-all ${
                       produto.id === selecionadoId ? "bg-coral-050 font-semibold text-coral-600" : "text-ink-600 hover:bg-cream-100"
                     }`}
@@ -180,12 +183,13 @@ export function PrecificacaoCalculadora() {
                         .filter((sabor) => !buscaProduto.trim() || sabor.nome.toLowerCase().includes(buscaProduto.trim().toLowerCase()) || nomeProdutoComTamanho(produto).toLowerCase().includes(buscaProduto.trim().toLowerCase()))
                         .map((sabor) => (
                           <li key={sabor.nome}>
-                            <button onClick={() => setSelecionadoIdManual(produto.id)} className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left text-xs text-ink-600 hover:bg-cream-100">
+                            <button onClick={() => { setSelecionadoIdManual(produto.id); setSaborAberto({ produtoId: produto.id, nome: sabor.nome }); }} className={`flex w-full items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left text-xs transition ${saborAberto?.produtoId === produto.id && saborAberto.nome.toLowerCase() === sabor.nome.toLowerCase() ? "bg-coral-050 font-semibold text-coral-700" : "text-ink-600 hover:bg-cream-100"}`}>
                               <span className="font-medium">{sabor.nome}</span>
                               <span className="shrink-0 text-ink-400">{Object.entries(sabor.precos).map(([tamanho, preco]) => `${tamanho} ${preco.toFixed(0)}`).join(" · ")}</span>
                             </button>
                           </li>
                         ))}
+                      <li><button onClick={() => { setSelecionadoIdManual(produto.id); setSaborAberto({ produtoId: produto.id, nome: "" }); }} className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-coral-600 hover:bg-coral-050"><Plus size={13} /> Novo sabor</button></li>
                     </ul>
                   )}
                 </li>
@@ -193,6 +197,9 @@ export function PrecificacaoCalculadora() {
             </ul>
           </div>
 
+          {saborAberto && saborAberto.produtoId === selecionado.id ? (
+            <PizzaSaborFicha key={`${saborAberto.produtoId}:${saborAberto.nome}`} produtoId={saborAberto.produtoId} nomeSabor={saborAberto.nome} onFechar={() => setSaborAberto(null)} onSalvo={(nomeFinal) => { recarregar(); setSaborAberto(nomeFinal ? { produtoId: saborAberto.produtoId, nome: nomeFinal } : null); }} />
+          ) : (
           <div className="of-panel p-4 sm:p-5">
             <div className="mb-4 flex items-start justify-between">
               <div>
@@ -280,6 +287,7 @@ export function PrecificacaoCalculadora() {
             <OpcoesProduto produtoId={selecionado.id} />
             <PizzaConfiguracao produtoId={selecionado.id} tipoProduto={selecionado.tipoProduto} onSalvo={recarregar} />
           </div>
+          )}
         </div>
       )}
 

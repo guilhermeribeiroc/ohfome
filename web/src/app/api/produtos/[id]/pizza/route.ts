@@ -51,8 +51,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       await client.query(`insert into produto_configuracoes_pizza (produto_id, estabelecimento_id, regra_meio_a_meio) values ($1,$2,$3) on conflict (produto_id) do update set regra_meio_a_meio = excluded.regra_meio_a_meio, updated_at = now()`, [produtoId, sessao.estabelecimentoId, regra]);
       await client.query(`delete from pizza_tamanhos where produto_id = $1`, [produtoId]);
       await client.query(`delete from pizza_sabores where produto_id = $1`, [produtoId]);
+      // Com preço por sabor, o preço base do tamanho é o menor preço dele entre os sabores ("a partir de").
+      const menorPrecoPorTamanho = new Map<string, number>();
+      for (const sabor of sabores) for (const [nomeTamanho, preco] of Object.entries(sabor.precos && typeof sabor.precos === "object" ? sabor.precos as Record<string, unknown> : {})) {
+        const valor = Number(preco); const chave = nomeTamanho.trim().toLowerCase();
+        if (Number.isFinite(valor) && valor > 0) menorPrecoPorTamanho.set(chave, Math.min(menorPrecoPorTamanho.get(chave) ?? Infinity, valor));
+      }
+      const baseDoTamanho = (tamanho: TamanhoInput) => menorPrecoPorTamanho.get((tamanho.nome as string).trim().toLowerCase()) ?? Number(tamanho.precoSaborUnico);
       const tamanhosCriados: { id: string; nome: string }[] = [];
-      for (const [ordem, tamanho] of tamanhos.entries()) { const { rows: tamanhoCriado } = await client.query(`insert into pizza_tamanhos (produto_id, estabelecimento_id, nome, preco_sabor_unico, preco_meio_a_meio, permite_meio_a_meio, ativo, ordem) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id, nome`, [produtoId, sessao.estabelecimentoId, (tamanho.nome as string).trim(), Number(tamanho.precoSaborUnico), tamanho.precoMeioAMeio === null || tamanho.precoMeioAMeio === undefined || tamanho.precoMeioAMeio === "" ? null : Number(tamanho.precoMeioAMeio), tamanho.permiteMeioAMeio !== false, tamanho.ativo !== false, ordem]); tamanhosCriados.push(tamanhoCriado[0]); }
+      for (const [ordem, tamanho] of tamanhos.entries()) { const { rows: tamanhoCriado } = await client.query(`insert into pizza_tamanhos (produto_id, estabelecimento_id, nome, preco_sabor_unico, preco_meio_a_meio, permite_meio_a_meio, ativo, ordem) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id, nome`, [produtoId, sessao.estabelecimentoId, (tamanho.nome as string).trim(), baseDoTamanho(tamanho), tamanho.precoMeioAMeio === null || tamanho.precoMeioAMeio === undefined || tamanho.precoMeioAMeio === "" ? null : Number(tamanho.precoMeioAMeio), tamanho.permiteMeioAMeio !== false, tamanho.ativo !== false, ordem]); tamanhosCriados.push(tamanhoCriado[0]); }
       for (const [ordem, sabor] of sabores.entries()) {
         const { rows: saborCriado } = await client.query(`insert into pizza_sabores (produto_id, estabelecimento_id, nome, descricao, acrescimo, permite_meio_a_meio, ativo, ordem) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id`, [produtoId, sessao.estabelecimentoId, (sabor.nome as string).trim(), typeof sabor.descricao === "string" ? sabor.descricao.trim() || null : null, Number(sabor.acrescimo ?? 0), sabor.permiteMeioAMeio !== false, sabor.ativo !== false, ordem]);
         const precosSabor = sabor.precos && typeof sabor.precos === "object" ? Object.entries(sabor.precos as Record<string, unknown>) : [];

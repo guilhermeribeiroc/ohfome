@@ -282,6 +282,9 @@ export async function POST(request: NextRequest) {
           if (saborDois && (!tamanho.permiteMeioAMeio || !saborUm.permiteMeioAMeio || !saborDois.permiteMeioAMeio)) throw Object.assign(new Error(!tamanho.permiteMeioAMeio ? "Este tamanho de pizza não aceita meio a meio." : "Um dos sabores não pode ser combinado no meio a meio."), { status: 400 });
           // Preço próprio do sabor naquele tamanho (tabela do cardápio) sobrepõe tamanho + acréscimo.
           const { rows: precosSabor } = await client.query(`select sabor_id as "saborId", preco from pizza_sabor_precos where tamanho_id = $1 and sabor_id = any($2::uuid[])`, [tamanho.id, idsSabores]);
+          // Sabor com tabela de preços só é vendido nos tamanhos em que tem preço.
+          const { rows: saboresComTabela } = await client.query(`select distinct sabor_id as "saborId" from pizza_sabor_precos where sabor_id = any($1::uuid[])`, [idsSabores]);
+          for (const sabor of [saborUm, saborDois]) if (sabor && saboresComTabela.some((linha) => linha.saborId === sabor.id) && !precosSabor.some((linha) => linha.saborId === sabor.id)) throw Object.assign(new Error(`${sabor.nome} não é vendido no tamanho ${tamanho.nome}.`), { status: 400 });
           const valorDoSabor = (sabor: { id: string; acrescimo: unknown }) => { const proprio = precosSabor.find((linha) => linha.saborId === sabor.id); return proprio ? Number(proprio.preco) : Number(tamanho.precoSaborUnico) + Number(sabor.acrescimo); };
           const valorUm = valorDoSabor(saborUm);
           const valorDois = saborDois ? valorDoSabor(saborDois) : null;

@@ -1641,6 +1641,10 @@ begin
         raise exception 'Sabor de pizza inválido' using errcode = '22023';
       end if;
 
+      if exists (select 1 from pizza_sabor_precos where sabor_id = v_pizza_sabor_um_id)
+         and not exists (select 1 from pizza_sabor_precos where sabor_id = v_pizza_sabor_um_id and tamanho_id = v_pizza_tamanho_id) then
+        raise exception 'Este sabor não é vendido neste tamanho' using errcode = '22023';
+      end if;
       v_pizza_valor_um := coalesce(
         (select preco from pizza_sabor_precos where sabor_id = v_pizza_sabor_um_id and tamanho_id = v_pizza_tamanho_id),
         v_pizza_preco_sabor_unico + v_pizza_sabor_um_acrescimo);
@@ -1656,6 +1660,10 @@ begin
         from pizza_sabores where id = v_pizza_sabor_dois_id and produto_id = v_produto_id and ativo;
         if v_pizza_sabor_dois_nome is null then
           raise exception 'Sabor de pizza inválido' using errcode = '22023';
+        end if;
+        if exists (select 1 from pizza_sabor_precos where sabor_id = v_pizza_sabor_dois_id)
+           and not exists (select 1 from pizza_sabor_precos where sabor_id = v_pizza_sabor_dois_id and tamanho_id = v_pizza_tamanho_id) then
+          raise exception 'Este sabor não é vendido neste tamanho' using errcode = '22023';
         end if;
         v_pizza_valor_dois := coalesce(
           (select preco from pizza_sabor_precos where sabor_id = v_pizza_sabor_dois_id and tamanho_id = v_pizza_tamanho_id),
