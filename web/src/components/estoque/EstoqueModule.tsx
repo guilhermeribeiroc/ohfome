@@ -4,12 +4,14 @@ import { useState } from "react";
 import { InsumosTable } from "./InsumosTable";
 import { PrecificacaoCalculadora } from "./PrecificacaoCalculadora";
 import { EstoqueProdutosUnidades } from "./EstoqueProdutosUnidades";
-import { Boxes, Calculator, PackagePlus } from "lucide-react";
+import { MeioAMeioGlobal } from "./MeioAMeioGlobal";
+import { Boxes, Calculator, PackagePlus, Pizza } from "lucide-react";
 
 const ABAS = [
   { id: "precificacao", label: "Precificação" },
   { id: "insumos", label: "Estoque de insumos" },
   { id: "produtos", label: "Produtos por unidade" },
+  { id: "meio", label: "Meio a meio" },
 ] as const;
 
 export function EstoqueModule() {
@@ -23,7 +25,7 @@ export function EstoqueModule() {
         <p className="of-subtitle">Ficha técnica, saldo de insumos e cálculo automático de preços.</p></div>
       </div>
 
-      <div className="of-tabs mb-5 max-w-xl">
+      <div className="of-tabs mb-5 max-w-2xl">
         {ABAS.map((item) => (
           <button
             key={item.id}
@@ -31,12 +33,12 @@ export function EstoqueModule() {
             data-active={aba === item.id}
             className="of-tab inline-flex items-center justify-center gap-2"
           >
-            {item.id === "precificacao" ? <Calculator size={15} /> : item.id === "insumos" ? <Boxes size={15} /> : <PackagePlus size={15} />}{item.label}
+            {item.id === "precificacao" ? <Calculator size={15} /> : item.id === "insumos" ? <Boxes size={15} /> : item.id === "meio" ? <Pizza size={15} /> : <PackagePlus size={15} />}{item.label}
           </button>
         ))}
       </div>
 
-      {aba === "precificacao" ? <PrecificacaoCalculadora /> : aba === "insumos" ? <InsumosTable /> : <EstoqueProdutosUnidades />}
+      {aba === "precificacao" ? <PrecificacaoCalculadora /> : aba === "insumos" ? <InsumosTable /> : aba === "meio" ? <MeioAMeioGlobal /> : <EstoqueProdutosUnidades />}
     </div>
   );
 }

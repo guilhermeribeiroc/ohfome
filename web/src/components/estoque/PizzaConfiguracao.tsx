@@ -24,7 +24,7 @@ const novoTamanho = (nome: string): Tamanho => ({ nome, precoSaborUnico: 0, prec
 const novoSabor = (nome: string): Sabor => ({ nome, acrescimo: 0, permiteMeioAMeio: true, ativo: true });
 const dinheiro = (valor: number) => `R$ ${valor.toFixed(2).replace(".", ",")}`;
 
-function Interruptor({ marcado, onChange, rotulo }: { marcado: boolean; onChange: (valor: boolean) => void; rotulo: string }) {
+export function Interruptor({ marcado, onChange, rotulo }: { marcado: boolean; onChange: (valor: boolean) => void; rotulo: string }) {
   return <button type="button" role="switch" aria-checked={marcado} aria-label={rotulo} onClick={() => onChange(!marcado)} className={`relative h-6 w-11 shrink-0 rounded-full transition ${marcado ? "bg-emerald-500" : "bg-ink-200"}`}>
     <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${marcado ? "left-[22px]" : "left-0.5"}`} />
   </button>;
