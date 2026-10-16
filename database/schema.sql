@@ -1641,6 +1641,10 @@ create table pagamentos_pix (
   detalhe_erro text,
   expira_em timestamptz not null,
   confirmado_em timestamptz,
+  -- Taxa do Mercado Pago e valor líquido recebido (migration 052).
+  taxa numeric(10, 2) check (taxa is null or taxa >= 0),
+  valor_liquido numeric(10, 2) check (valor_liquido is null or valor_liquido >= 0),
+  taxa_tentativas smallint not null default 0,
   created_at timestamptz not null default now()
 );
 

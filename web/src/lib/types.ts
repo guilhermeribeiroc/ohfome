@@ -76,6 +76,7 @@ export interface ResumoFinanceiro {
   entradasAvulsas: number;
   saidasAvulsas: number;
   custosFixosPeriodo: number;
+  taxasPix: number;
   resultadoOperacional: number;
 }
 
@@ -91,6 +92,8 @@ export interface VendaFinanceira {
   pagamentoDividido?: [PagamentoParte, PagamentoParte];
   total: number;
   custoProdutos: number;
+  taxaPix?: number | null;
+  valorLiquidoPix?: number | null;
   lucroBruto: number;
   createdAt: string;
   itens: { produtoNome: string; produtoTamanho?: TamanhoProduto | null; quantidade: number; precoUnitario: number; custoUnitario: number }[];

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { autenticarRequisicao, respostaNaoAutenticado } from "@/lib/api-auth";
 import { comEstabelecimento } from "@/lib/db";
+import { completarTaxasPix } from "@/lib/mercado-pago";
 import type { SessionPayload } from "@/lib/session";
 
 const TIPOS = ["entrada", "saida"] as const;
@@ -71,6 +72,9 @@ export async function GET(request: NextRequest) {
 
   const hoje = dataNaZonaAtual();
 
+  // Preenche a taxa dos Pix já pagos que ainda não a têm. Falha aqui não pode derrubar o financeiro.
+  await comEstabelecimento(sessao.estabelecimentoId, (client) => completarTaxasPix(client, sessao.estabelecimentoId)).catch(() => undefined);
+
   const dados = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     const [movimentos, custosFixos, resumo, resumoHoje, vendasFinalizadas] = await Promise.all([
       client.query(`select id, tipo, categoria, descricao, valor, data_movimento as "dataMovimento"
@@ -91,6 +95,12 @@ export async function GET(request: NextRequest) {
           left join produtos pr on pr.id = i.produto_id
           where p.status = 'finalizado'
             and (p.created_at at time zone 'America/Fortaleza')::date between $1::date and $2::date
+        ), taxas_pix as (
+          select coalesce(sum(px.taxa), 0) as taxa
+          from pagamentos_pix px
+          join pedidos p on p.id = px.pedido_id
+          where px.status = 'pago' and p.status = 'finalizado'
+            and (p.created_at at time zone 'America/Fortaleza')::date between $1::date and $2::date
         ), avulsos as (
           select coalesce(sum(valor) filter (where tipo = 'entrada'), 0) as entradas,
                  coalesce(sum(valor) filter (where tipo = 'saida'), 0) as saidas
@@ -103,8 +113,8 @@ export async function GET(request: NextRequest) {
           where cf.ativo
         ) select vendas.vendas as "vendasFinalizadas", custo_vendido.custo as "custoProdutosVendidos",
                  avulsos.entradas as "entradasAvulsas", avulsos.saidas as "saidasAvulsas",
-                 fixos.total as "custosFixosPeriodo"
-        from vendas cross join custo_vendido cross join avulsos cross join fixos`, [periodo.inicio, periodo.fim]),
+                 fixos.total as "custosFixosPeriodo", taxas_pix.taxa as "taxasPix"
+        from vendas cross join custo_vendido cross join taxas_pix cross join avulsos cross join fixos`, [periodo.inicio, periodo.fim]),
       client.query(`with vendas as (
           select coalesce(sum(total), 0) as vendas
           from pedidos
@@ -117,6 +127,12 @@ export async function GET(request: NextRequest) {
           left join produtos pr on pr.id = i.produto_id
           where p.status = 'finalizado'
             and (p.created_at at time zone 'America/Fortaleza')::date = $1::date
+        ), taxas_pix as (
+          select coalesce(sum(px.taxa), 0) as taxa
+          from pagamentos_pix px
+          join pedidos p on p.id = px.pedido_id
+          where px.status = 'pago' and p.status = 'finalizado'
+            and (p.created_at at time zone 'America/Fortaleza')::date = $1::date
         ), avulsos as (
           select coalesce(sum(valor) filter (where tipo = 'entrada'), 0) as entradas,
                  coalesce(sum(valor) filter (where tipo = 'saida'), 0) as saidas
@@ -128,12 +144,13 @@ export async function GET(request: NextRequest) {
           where cf.ativo
         ) select vendas.vendas as "vendasFinalizadas", custo_vendido.custo as "custoProdutosVendidos",
                  avulsos.entradas as "entradasAvulsas", avulsos.saidas as "saidasAvulsas",
-                 fixos.total as "custosFixosPeriodo"
-        from vendas cross join custo_vendido cross join avulsos cross join fixos`, [hoje]),
+                 fixos.total as "custosFixosPeriodo", taxas_pix.taxa as "taxasPix"
+        from vendas cross join custo_vendido cross join taxas_pix cross join avulsos cross join fixos`, [hoje]),
       client.query(`select
           p.id, p.codigo, p.tipo, p.total, p.created_at as "createdAt",
           m.numero as "mesaNumero", c.nome as "clienteNome",
           p.forma_pagamento as "formaPagamento", p.tipo_cartao as "tipoCartao", p.troco_para as "trocoPara", p.pagamento_dividido as "pagamentoDividido",
+          px.taxa as "taxaPix", px.valor_liquido as "valorLiquidoPix",
           coalesce(sum(ip.quantidade * coalesce(pr.preco_custo, 0)), 0) as "custoProdutos",
           coalesce(json_agg(json_build_object(
             'produtoNome', pr.nome || case when ip.tamanho is not null then ' (' || ip.tamanho::text || ')' else '' end,
@@ -146,11 +163,12 @@ export async function GET(request: NextRequest) {
         left join comandas cm on cm.id = p.comanda_id
         left join mesas m on m.id = cm.mesa_id
         left join clientes c on c.id = p.cliente_id
+        left join pagamentos_pix px on px.pedido_id = p.id and px.status = 'pago'
         left join itens_pedido ip on ip.pedido_id = p.id
         left join produtos pr on pr.id = ip.produto_id
         where p.status = 'finalizado'
           and (p.created_at at time zone 'America/Fortaleza')::date between $1::date and $2::date
-        group by p.id, p.codigo, p.tipo, p.total, p.created_at, m.numero, c.nome, p.forma_pagamento, p.tipo_cartao, p.troco_para, p.pagamento_dividido
+        group by p.id, p.codigo, p.tipo, p.total, p.created_at, m.numero, c.nome, p.forma_pagamento, p.tipo_cartao, p.troco_para, p.pagamento_dividido, px.taxa, px.valor_liquido
         order by p.created_at desc
         limit 80`, [periodo.inicio, periodo.fim]),
     ]);
@@ -164,10 +182,11 @@ export async function GET(request: NextRequest) {
       entradasAvulsas: Number(resumo.entradasAvulsas),
       saidasAvulsas: Number(resumo.saidasAvulsas),
       custosFixosPeriodo: Number(resumo.custosFixosPeriodo),
+      taxasPix: Number(resumo.taxasPix),
     };
     return {
       ...resumoNormalizado,
-      resultadoOperacional: resumoNormalizado.vendasFinalizadas - resumoNormalizado.custoProdutosVendidos + resumoNormalizado.entradasAvulsas - resumoNormalizado.saidasAvulsas - resumoNormalizado.custosFixosPeriodo,
+      resultadoOperacional: resumoNormalizado.vendasFinalizadas - resumoNormalizado.custoProdutosVendidos + resumoNormalizado.entradasAvulsas - resumoNormalizado.saidasAvulsas - resumoNormalizado.custosFixosPeriodo - resumoNormalizado.taxasPix,
     };
   }
 
@@ -178,7 +197,9 @@ export async function GET(request: NextRequest) {
     vendasFinalizadas: dados.vendasFinalizadas.map((venda) => ({
       ...venda,
       custoProdutos: Number(venda.custoProdutos),
-      lucroBruto: Number(venda.total) - Number(venda.custoProdutos),
+      taxaPix: venda.taxaPix === null ? null : Number(venda.taxaPix),
+      valorLiquidoPix: venda.valorLiquidoPix === null ? null : Number(venda.valorLiquidoPix),
+      lucroBruto: Number(venda.total) - Number(venda.custoProdutos) - (venda.taxaPix === null ? 0 : Number(venda.taxaPix)),
     })),
     resumo: normalizarResumo(dados.resumo),
     resumoHoje: normalizarResumo(dados.resumoHoje),

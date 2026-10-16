@@ -21,6 +21,7 @@ type OrdemMercadoPago = {
   transactions?: {
     payments?: Array<{
       id?: string;
+      reference_id?: string;
       amount?: string;
       status?: string;
       status_detail?: string;
@@ -267,6 +268,9 @@ export async function sincronizarCobrancaPixMercadoPago(
         local.pedidoId,
       ]);
     }
+    // Nunca deve impedir a liberação do pedido: se o Mercado Pago não responder
+    // agora, o financeiro tenta de novo depois.
+    await tentarRegistrarTaxaPix(client, estabelecimentoId, orderId, ordem);
     return { status: "pago", pedidoId: local.pedidoId };
   }
 
@@ -296,6 +300,75 @@ export async function sincronizarCobrancaPixMercadoPago(
   }
 
   return { status: "pendente", pedidoId: local.pedidoId };
+}
+
+type PagamentoV1 = {
+  transaction_amount?: number;
+  fee_details?: Array<{ amount?: number }>;
+  transaction_details?: { net_received_amount?: number };
+};
+
+// A Orders API não devolve a tarifa; ela vem do pagamento "clássico" (/v1/payments).
+// O id desse pagamento aparece como reference_id na order (quando existe), então
+// tentamos os dois ids conhecidos.
+async function consultarTaxaPagamento(accessToken: string, ordem: OrdemMercadoPago) {
+  const pagamento = ordem.transactions?.payments?.[0];
+  const ids = [pagamento?.reference_id, pagamento?.id].filter((id): id is string => Boolean(id));
+  for (const id of ids) {
+    const resposta = await fetch(`${MP_API}/v1/payments/${encodeURIComponent(id)}`, {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(5000),
+    }).catch(() => null);
+    if (!resposta?.ok) continue;
+    const dados = await resposta.json().catch(() => null) as PagamentoV1 | null;
+    const liquido = dados?.transaction_details?.net_received_amount;
+    if (typeof liquido !== "number" || !Number.isFinite(liquido)) continue;
+    const bruto = Number(dados?.transaction_amount ?? pagamento?.amount ?? 0);
+    const somaTarifas = (dados?.fee_details ?? []).reduce((soma, tarifa) => soma + Number(tarifa.amount ?? 0), 0);
+    const taxa = somaTarifas > 0 ? somaTarifas : Math.max(0, bruto - liquido);
+    return { taxa: Math.round(taxa * 100) / 100, liquido: Math.round(liquido * 100) / 100 };
+  }
+  return null;
+}
+
+// Guarda a tarifa cobrada e o valor líquido de um Pix confirmado. Devolve false
+// quando o Mercado Pago ainda não informou (o financeiro tenta de novo, no máximo 3 vezes).
+export async function registrarTaxaPix(client: PoolClient, estabelecimentoId: string, orderId: string, ordemConhecida?: OrdemMercadoPago) {
+  const accessToken = await accessTokenDoEstabelecimento(client, estabelecimentoId);
+  const ordem = ordemConhecida ?? await buscarOrdem(accessToken, orderId);
+  const resultado = await consultarTaxaPagamento(accessToken, ordem);
+  await client.query(
+    resultado
+      ? `update pagamentos_pix set taxa = $2, valor_liquido = $3, taxa_tentativas = taxa_tentativas + 1 where order_id = $1`
+      : `update pagamentos_pix set taxa_tentativas = taxa_tentativas + 1 where order_id = $1`,
+    resultado ? [orderId, resultado.taxa, resultado.liquido] : [orderId],
+  );
+  return resultado !== null;
+}
+
+// Savepoint: uma falha aqui (rede, Mercado Pago, coluna ainda inexistente) não pode
+// abortar a transação que está confirmando o pagamento do pedido.
+async function tentarRegistrarTaxaPix(client: PoolClient, estabelecimentoId: string, orderId: string, ordemConhecida?: OrdemMercadoPago) {
+  await client.query("savepoint taxa_pix");
+  try {
+    await registrarTaxaPix(client, estabelecimentoId, orderId, ordemConhecida);
+    await client.query("release savepoint taxa_pix");
+  } catch {
+    await client.query("rollback to savepoint taxa_pix").catch(() => undefined);
+  }
+}
+
+// Preenche as taxas dos Pix já pagos que ainda não têm (pagamentos anteriores a
+// esta coluna ou cuja consulta falhou). Limitado para não atrasar a tela.
+export async function completarTaxasPix(client: PoolClient, estabelecimentoId: string, limite = 5) {
+  const { rows } = await client.query<{ orderId: string }>(
+    `select order_id as "orderId" from pagamentos_pix
+      where status = 'pago' and provedor = 'mercado_pago' and taxa is null and taxa_tentativas < 3 and order_id is not null
+      order by confirmado_em desc nulls last limit $1`,
+    [limite],
+  );
+  for (const { orderId } of rows) await tentarRegistrarTaxaPix(client, estabelecimentoId, orderId);
 }
 
 export function pagamentoAprovado(ordem: OrdemMercadoPago) {
