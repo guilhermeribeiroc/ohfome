@@ -83,3 +83,28 @@ export function CategoriaChips({ itens, valor, onChange, rotulo = "Filtrar por c
     </>}
   </div>;
 }
+
+/**
+ * Categorias em coluna (lista vertical): varre-se com o olho bem mais rápido que botões soltos, e a coluna
+ * fica parada enquanto os itens rolam ao lado. Pensada para telas largas; no celular use CategoriaChips.
+ */
+export function CategoriaColuna({ itens, valor, onChange, rotulo = "Categorias" }: { itens: CategoriaChip[]; valor: string; onChange: (valor: string) => void; rotulo?: string }) {
+  if (itens.length < 2) return null;
+  return <nav aria-label={rotulo}>
+    <p className="px-3 pb-1.5 text-[10px] font-bold uppercase tracking-[.14em] text-ink-400">{rotulo}</p>
+    <ul className="space-y-0.5">
+      {itens.map((item) => {
+        const ativo = item.valor === valor;
+        const Icone = iconeDaCategoria(item.rotulo, item.valor === "");
+        return <li key={item.valor || "todas"}>
+          <button type="button" aria-pressed={ativo} onClick={() => onChange(item.valor)}
+            className={`flex min-h-10 w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13px] font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-coral-400 ${ativo ? "bg-ink-900 text-white shadow-sm" : "text-ink-600 hover:bg-cream-100 hover:text-ink-900"}`}>
+            <Icone size={15} strokeWidth={2.2} className={`shrink-0 ${ativo ? "text-white" : "text-ink-400"}`} aria-hidden />
+            <span className="min-w-0 flex-1 break-words leading-tight">{item.rotulo}</span>
+            {item.quantidade !== undefined && <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-bold tabular-nums ${ativo ? "bg-white/20 text-white" : "bg-cream-100 text-ink-500"}`}>{item.quantidade}</span>}
+          </button>
+        </li>;
+      })}
+    </ul>
+  </nav>;
+}

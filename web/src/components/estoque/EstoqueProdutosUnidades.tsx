@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Minus, PackagePlus, Plus, RefreshCw } from "lucide-react";
 import { usePolling } from "@/lib/use-polling";
-import { CategoriaChips } from "@/components/ui/CategoriaChips";
+import { CategoriaChips, CategoriaColuna } from "@/components/ui/CategoriaChips";
 
 type ProdutoEstoque = {
   produtoId: string;
@@ -27,6 +27,7 @@ export function EstoqueProdutosUnidades() {
   const [categoriaFiltro, setCategoriaFiltro] = useState("");
 
   const categorias = Array.from(new Set((dados ?? []).map((produto) => produto.categoriaNome))).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const itensCategorias = [{ valor: "", rotulo: "Todas", quantidade: (dados ?? []).length }, ...categorias.map((nome) => ({ valor: nome, rotulo: nome, quantidade: (dados ?? []).filter((produto) => produto.categoriaNome === nome).length }))];
   const listaFiltrada = (dados ?? []).filter((produto) =>
     (mostrarTodos || produto.controlaEstoqueUnidades) && (!categoriaFiltro || produto.categoriaNome === categoriaFiltro)
   );
@@ -68,8 +69,11 @@ export function EstoqueProdutosUnidades() {
           <button type="button" onClick={() => setMostrarTodos(true)} className={`rounded-[10px] px-3 py-1.5 transition ${mostrarTodos ? "bg-surface text-coral-600 shadow-sm" : "text-ink-500"}`}>Todos os produtos</button>
         </div>
       </div>
-      <div className="mt-3"><CategoriaChips valor={categoriaFiltro} onChange={setCategoriaFiltro} itens={[{ valor: "", rotulo: "Todas", quantidade: (dados ?? []).length }, ...categorias.map((nome) => ({ valor: nome, rotulo: nome, quantidade: (dados ?? []).filter((produto) => produto.categoriaNome === nome).length }))]} /></div>
+      <div className="mt-3 lg:hidden"><CategoriaChips valor={categoriaFiltro} onChange={setCategoriaFiltro} itens={itensCategorias} /></div>
     </header>
+    <div className="lg:flex">
+      <aside className="hidden w-52 shrink-0 border-r border-cream-100 p-3 lg:block"><div className="sticky top-3 max-h-[70dvh] overflow-y-auto"><CategoriaColuna itens={itensCategorias} valor={categoriaFiltro} onChange={setCategoriaFiltro} /></div></aside>
+      <div className="min-w-0 flex-1">
     {erro && <p className="mx-4 mt-4 rounded-xl bg-danger-050 px-3 py-2 text-xs font-medium text-danger-600">{erro}</p>}
     <div className="divide-y divide-cream-100">{listaFiltrada.map((produto) => {
       const valor = edicoes[produto.produtoId] ?? "";
@@ -82,5 +86,7 @@ export function EstoqueProdutosUnidades() {
         ? <p className="p-6 text-center text-sm text-ink-400">Nenhum produto com controle de unidades ativo{categoriaFiltro ? ` em "${categoriaFiltro}"` : ""} ainda. Toque em &quot;Todos os produtos&quot; pra escolher quais controlar.</p>
         : <p className="p-6 text-center text-sm text-ink-400">Nenhum produto {categoriaFiltro ? `em "${categoriaFiltro}"` : "cadastrado"}.</p>
     )}</div>
+      </div>
+    </div>
   </section>;
 }

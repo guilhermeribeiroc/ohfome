@@ -9,7 +9,7 @@ import { FichaTecnica } from "./FichaTecnica";
 import { OpcoesProduto } from "./OpcoesProduto";
 import { PizzaConfiguracao } from "./PizzaConfiguracao";
 import { PizzaSaborFicha } from "./PizzaSaborFicha";
-import { CategoriaChips } from "@/components/ui/CategoriaChips";
+import { CategoriaChips, CategoriaColuna } from "@/components/ui/CategoriaChips";
 
 const GRADIENTE_CORAL = "linear-gradient(120deg, var(--color-coral-600), var(--color-coral-500), var(--color-mango-500))";
 const CAMPO_CLASSE =
@@ -49,6 +49,7 @@ export function PrecificacaoCalculadora() {
   const [buscaProduto, setBuscaProduto] = useState("");
   // Na ordem do cardápio (a API já traz os produtos pela ordem das categorias), não em ordem alfabética.
   const categoriasDaLista = [...new Set(lista.map((produto) => produto.categoriaNome || "Sem categoria"))];
+  const itensCategorias = [{ valor: "", rotulo: "Todas", quantidade: lista.length }, ...categoriasDaLista.map((nome) => ({ valor: nome, rotulo: nome, quantidade: lista.filter((produto) => (produto.categoriaNome || "Sem categoria") === nome).length }))];
   // Agrupa por categoria (pizzas, calzones, pastéis...) para a lista ficar organizada.
   const listaFiltrada = lista
     .filter((produto) => !categoriaFiltro || (produto.categoriaNome || "Sem categoria") === categoriaFiltro)
@@ -158,9 +159,11 @@ export function PrecificacaoCalculadora() {
             <p className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-ink-400">Cardápio</p>
             <div className="space-y-2 px-3 pb-2">
               <input value={buscaProduto} onChange={(evento) => setBuscaProduto(evento.target.value)} placeholder="Buscar produto" aria-label="Buscar produto" className="of-field !min-h-10" />
-              <CategoriaChips valor={categoriaFiltro} onChange={setCategoriaFiltro} itens={[{ valor: "", rotulo: "Todas", quantidade: lista.length }, ...categoriasDaLista.map((nome) => ({ valor: nome, rotulo: nome, quantidade: lista.filter((produto) => (produto.categoriaNome || "Sem categoria") === nome).length }))]} />
+              <div className="lg:hidden"><CategoriaChips valor={categoriaFiltro} onChange={setCategoriaFiltro} itens={itensCategorias} /></div>
             </div>
-            <ul className="max-h-[420px] overflow-y-auto px-2 pb-2">
+            <div className="lg:flex">
+            <aside className="hidden max-h-[520px] w-44 shrink-0 overflow-y-auto border-r border-cream-100 p-2 lg:block"><CategoriaColuna itens={itensCategorias} valor={categoriaFiltro} onChange={setCategoriaFiltro} /></aside>
+            <ul className="max-h-[420px] min-w-0 flex-1 overflow-y-auto px-2 pb-2 lg:max-h-[520px]">
               {!listaFiltrada.length && <li className="px-3 py-6 text-center text-xs text-ink-500">Nenhum produto encontrado. Tente outra categoria ou busca.</li>}
               {listaFiltrada.map((produto, indice) => (
                 <li key={produto.id}>
@@ -195,6 +198,7 @@ export function PrecificacaoCalculadora() {
                 </li>
               ))}
             </ul>
+            </div>
           </div>
 
           {saborAberto && saborAberto.produtoId === selecionado.id ? (
