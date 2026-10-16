@@ -9,6 +9,7 @@ import { usePolling } from "@/lib/use-polling";
 import { imprimirPedido, textoPagamento } from "@/lib/impressao";
 import { useTenant } from "@/lib/tenant-context";
 import { ClienteRapido } from "@/components/clientes/ClienteRapido";
+import { CategoriaChips } from "@/components/ui/CategoriaChips";
 
 const TODAS_COLUNAS: PedidoStatus[] = ["novo", "em_preparo", "pronto", "saiu_para_entrega", "finalizado"];
 const PROXIMO_STATUS: Partial<Record<PedidoStatus, PedidoStatus>> = { novo: "em_preparo", em_preparo: "pronto", pronto: "saiu_para_entrega", saiu_para_entrega: "finalizado" };
@@ -300,15 +301,12 @@ const precoComOpcoes = (base: number, opcoes: EscolhaOpcao[]) => {
 // Chips de categoria no topo da lista de produtos (Pizzas, Calzones, Pastéis...):
 // junto com a busca, evitam rolar o cardápio inteiro para achar um item.
 function FiltroCategorias({ produtos, valor, onChange }: { produtos: Produto[]; valor: string; onChange: (categoria: string) => void }) {
-  const categorias = useMemo(() => {
+  const itens = useMemo(() => {
     const contagem = new Map<string, number>();
     for (const produto of produtos) { const nome = produto.categoriaNome || "Sem categoria"; contagem.set(nome, (contagem.get(nome) ?? 0) + 1); }
-    return [...contagem.entries()].sort((a, b) => a[0].localeCompare(b[0], "pt-BR"));
+    return [{ valor: "", rotulo: "Todas", quantidade: produtos.length }, ...[...contagem.entries()].sort((a, b) => a[0].localeCompare(b[0], "pt-BR")).map(([nome, quantidade]) => ({ valor: nome, rotulo: nome, quantidade }))];
   }, [produtos]);
-  if (categorias.length < 2) return null;
-  return <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar por categoria">
-    {[["", produtos.length] as const, ...categorias].map(([nome, quantidade]) => <button key={nome || "todas"} type="button" aria-pressed={valor === nome} onClick={() => onChange(nome)} className={`min-h-9 rounded-full border px-3 text-xs font-semibold transition ${valor === nome ? "border-coral-500 bg-coral-050 text-coral-700" : "border-cream-300 bg-white text-ink-600 hover:border-coral-300"}`}>{nome || "Todas"} <span className="opacity-60">{quantidade}</span></button>)}
-  </div>;
+  return <CategoriaChips itens={itens} valor={valor} onChange={onChange} />;
 }
 
 export function NovoPedidoModal({ onFechar, onCriado }: { onFechar: () => void; onCriado: () => void }) {

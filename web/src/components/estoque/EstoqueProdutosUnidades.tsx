@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Minus, PackagePlus, Plus, RefreshCw } from "lucide-react";
 import { usePolling } from "@/lib/use-polling";
+import { CategoriaChips } from "@/components/ui/CategoriaChips";
 
 type ProdutoEstoque = {
   produtoId: string;
@@ -66,11 +67,8 @@ export function EstoqueProdutosUnidades() {
           <button type="button" onClick={() => setMostrarTodos(false)} className={`rounded-[10px] px-3 py-1.5 transition ${!mostrarTodos ? "bg-surface text-coral-600 shadow-sm" : "text-ink-500"}`}>Ativos</button>
           <button type="button" onClick={() => setMostrarTodos(true)} className={`rounded-[10px] px-3 py-1.5 transition ${mostrarTodos ? "bg-surface text-coral-600 shadow-sm" : "text-ink-500"}`}>Todos os produtos</button>
         </div>
-        <select value={categoriaFiltro} onChange={(evento) => setCategoriaFiltro(evento.target.value)} className="of-field !min-h-9 !w-auto !py-0 text-xs">
-          <option value="">Todas as categorias</option>
-          {categorias.map((categoria) => <option key={categoria} value={categoria}>{categoria}</option>)}
-        </select>
       </div>
+      <div className="mt-3"><CategoriaChips valor={categoriaFiltro} onChange={setCategoriaFiltro} itens={[{ valor: "", rotulo: "Todas", quantidade: (dados ?? []).length }, ...categorias.map((nome) => ({ valor: nome, rotulo: nome, quantidade: (dados ?? []).filter((produto) => produto.categoriaNome === nome).length }))]} /></div>
     </header>
     {erro && <p className="mx-4 mt-4 rounded-xl bg-danger-050 px-3 py-2 text-xs font-medium text-danger-600">{erro}</p>}
     <div className="divide-y divide-cream-100">{listaFiltrada.map((produto) => {

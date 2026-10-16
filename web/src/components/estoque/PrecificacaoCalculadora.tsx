@@ -9,6 +9,7 @@ import { FichaTecnica } from "./FichaTecnica";
 import { OpcoesProduto } from "./OpcoesProduto";
 import { PizzaConfiguracao } from "./PizzaConfiguracao";
 import { PizzaSaborFicha } from "./PizzaSaborFicha";
+import { CategoriaChips } from "@/components/ui/CategoriaChips";
 
 const GRADIENTE_CORAL = "linear-gradient(120deg, var(--color-coral-600), var(--color-coral-500), var(--color-mango-500))";
 const CAMPO_CLASSE =
@@ -156,11 +157,7 @@ export function PrecificacaoCalculadora() {
             <p className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-ink-400">Cardápio</p>
             <div className="space-y-2 px-3 pb-2">
               <input value={buscaProduto} onChange={(evento) => setBuscaProduto(evento.target.value)} placeholder="Buscar produto" aria-label="Buscar produto" className="of-field !min-h-10" />
-              <div className="flex flex-wrap gap-1.5">
-                {["", ...categoriasDaLista].map((categoria) => (
-                  <button key={categoria || "todas"} type="button" aria-pressed={categoriaFiltro === categoria} onClick={() => setCategoriaFiltro(categoria)} className={`min-h-8 rounded-full border px-3 text-xs font-semibold transition ${categoriaFiltro === categoria ? "border-coral-500 bg-coral-050 text-coral-700" : "border-cream-300 bg-white text-ink-600 hover:border-coral-300"}`}>{categoria || "Todas"}</button>
-                ))}
-              </div>
+              <CategoriaChips valor={categoriaFiltro} onChange={setCategoriaFiltro} itens={[{ valor: "", rotulo: "Todas", quantidade: lista.length }, ...categoriasDaLista.map((nome) => ({ valor: nome, rotulo: nome, quantidade: lista.filter((produto) => (produto.categoriaNome || "Sem categoria") === nome).length }))]} />
             </div>
             <ul className="max-h-[420px] overflow-y-auto px-2 pb-2">
               {!listaFiltrada.length && <li className="px-3 py-6 text-center text-xs text-ink-500">Nenhum produto encontrado. Tente outra categoria ou busca.</li>}
