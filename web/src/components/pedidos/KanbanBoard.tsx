@@ -304,7 +304,7 @@ function FiltroCategorias({ produtos, valor, onChange }: { produtos: Produto[]; 
   const itens = useMemo(() => {
     const contagem = new Map<string, number>();
     for (const produto of produtos) { const nome = produto.categoriaNome || "Sem categoria"; contagem.set(nome, (contagem.get(nome) ?? 0) + 1); }
-    return [{ valor: "", rotulo: "Todas", quantidade: produtos.length }, ...[...contagem.entries()].sort((a, b) => a[0].localeCompare(b[0], "pt-BR")).map(([nome, quantidade]) => ({ valor: nome, rotulo: nome, quantidade }))];
+    return [{ valor: "", rotulo: "Todas", quantidade: produtos.length }, ...[...contagem.entries()].map(([nome, quantidade]) => ({ valor: nome, rotulo: nome, quantidade }))];
   }, [produtos]);
   return <CategoriaChips itens={itens} valor={valor} onChange={onChange} />;
 }

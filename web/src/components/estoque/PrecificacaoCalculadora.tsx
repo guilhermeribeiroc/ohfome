@@ -47,12 +47,13 @@ export function PrecificacaoCalculadora() {
   const [saborAberto, setSaborAberto] = useState<{ produtoId: string; nome: string } | null>(null);
   const [categoriaFiltro, setCategoriaFiltro] = useState("");
   const [buscaProduto, setBuscaProduto] = useState("");
-  const categoriasDaLista = [...new Set(lista.map((produto) => produto.categoriaNome || "Sem categoria"))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  // Na ordem do cardápio (a API já traz os produtos pela ordem das categorias), não em ordem alfabética.
+  const categoriasDaLista = [...new Set(lista.map((produto) => produto.categoriaNome || "Sem categoria"))];
   // Agrupa por categoria (pizzas, calzones, pastéis...) para a lista ficar organizada.
   const listaFiltrada = lista
     .filter((produto) => !categoriaFiltro || (produto.categoriaNome || "Sem categoria") === categoriaFiltro)
     .filter((produto) => nomeProdutoComTamanho(produto).toLowerCase().includes(buscaProduto.trim().toLowerCase()) || (produto.pizzaSaboresLista ?? []).some((sabor) => sabor.nome.toLowerCase().includes(buscaProduto.trim().toLowerCase())))
-    .sort((a, b) => (a.categoriaNome || "Sem categoria").localeCompare(b.categoriaNome || "Sem categoria", "pt-BR") || a.nome.localeCompare(b.nome, "pt-BR"));
+    .sort((a, b) => categoriasDaLista.indexOf(a.categoriaNome || "Sem categoria") - categoriasDaLista.indexOf(b.categoriaNome || "Sem categoria") || a.nome.localeCompare(b.nome, "pt-BR"));
   const [selecionadoIdManual, setSelecionadoIdManual] = useState("");
   const salvarTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [salvando, setSalvando] = useState(false);
