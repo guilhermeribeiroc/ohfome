@@ -5,7 +5,7 @@ import { ArrowLeft, Check, Loader2, Save, Trash2 } from "lucide-react";
 import { Interruptor } from "./PizzaConfiguracao";
 
 type Tamanho = { id?: string; nome: string; precoSaborUnico: number; precoMeioAMeio: number | null; permiteMeioAMeio: boolean; ativo: boolean };
-type Sabor = { id?: string; nome: string; descricao?: string | null; acrescimo: number; permiteMeioAMeio: boolean; ativo: boolean; precos?: Record<string, number> };
+type Sabor = { id?: string; nome: string; descricao?: string | null; acrescimo: number; permiteMeioAMeio: boolean; imagemUrl?: string | null; ativo: boolean; precos?: Record<string, number> };
 type Config = { regraMeioAMeio: "maior_valor" | "media" | "preco_fixo"; tamanhos: Tamanho[]; sabores: Sabor[] };
 
 const mesmoNome = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -80,7 +80,7 @@ export function PizzaSaborFicha({ produtoId, nomeSabor, onSalvo, onFechar }: { p
     setSalvando(true);
     try {
       const atualizado: Sabor = {
-        nome: nomeLimpo, descricao: descricao.trim() || null, acrescimo: 0, permiteMeioAMeio: permiteMeio, ativo: true,
+        nome: nomeLimpo, descricao: descricao.trim() || null, acrescimo: 0, permiteMeioAMeio: permiteMeio, imagemUrl: config.sabores.find((sabor) => mesmoNome(sabor.nome, nomeSabor))?.imagemUrl ?? null, ativo: true,
         precos: Object.fromEntries(marcados.map(([tamanho, valor]) => [tamanho, Number(valor)])),
       };
       const existente = config.sabores.some((sabor) => mesmoNome(sabor.nome, nomeSabor));

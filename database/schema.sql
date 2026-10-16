@@ -304,6 +304,7 @@ create table pizza_sabores (
   id uuid primary key default gen_random_uuid(), produto_id uuid not null references produto_configuracoes_pizza(produto_id) on delete cascade,
   estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade, nome text not null, descricao text,
   acrescimo numeric(10,2) not null default 0 check (acrescimo >= 0), permite_meio_a_meio boolean not null default true,
+  imagem_url text,
   ativo boolean not null default true, ordem integer not null default 0, unique (id, estabelecimento_id)
 );
 create index idx_pizza_tamanhos_produto on pizza_tamanhos(produto_id, ordem);
@@ -1402,7 +1403,7 @@ as $$
               from pizza_tamanhos pt where pt.produto_id = p.id and pt.ativo
             ), '[]'::jsonb),
             'sabores', coalesce((
-              select jsonb_agg(jsonb_build_object('id', ps.id, 'nome', ps.nome, 'descricao', ps.descricao, 'acrescimo', ps.acrescimo, 'permiteMeioAMeio', ps.permite_meio_a_meio,
+              select jsonb_agg(jsonb_build_object('id', ps.id, 'nome', ps.nome, 'descricao', ps.descricao, 'acrescimo', ps.acrescimo, 'permiteMeioAMeio', ps.permite_meio_a_meio, 'imagemUrl', ps.imagem_url,
                 'precos', coalesce((select jsonb_object_agg(sp.tamanho_id::text, sp.preco) from pizza_sabor_precos sp where sp.sabor_id = ps.id), '{}'::jsonb)) order by ps.ordem, ps.nome)
               from pizza_sabores ps where ps.produto_id = p.id and ps.ativo
             ), '[]'::jsonb)

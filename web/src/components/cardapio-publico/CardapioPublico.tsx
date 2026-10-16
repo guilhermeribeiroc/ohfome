@@ -67,6 +67,7 @@ interface PizzaSaborPublico {
   descricao: string;
   acrescimo: number;
   permiteMeioAMeio?: boolean;
+  imagemUrl?: string | null;
   /** Preço próprio do sabor por tamanho, indexado pelo id do tamanho. */
   precos?: Record<string, number>;
 }
@@ -265,7 +266,7 @@ function nomeProdutoExibicao(produto: ProdutoPublico) {
 function expandirPizzas(produtos: ProdutoPublico[]): ProdutoPublico[] {
   return produtos.flatMap((produto) => {
     if (produto.tipoProduto !== "pizza" || !produto.pizza?.sabores.length) return [produto];
-    return produto.pizza.sabores.map((sabor) => ({ ...produto, nome: sabor.nome, descricao: sabor.descricao || produto.descricao, saborFixoId: sabor.id, chaveVitrine: `${produto.id}:${sabor.id}` }));
+    return produto.pizza.sabores.map((sabor) => ({ ...produto, nome: sabor.nome, descricao: sabor.descricao || produto.descricao, imagemUrl: sabor.imagemUrl || produto.imagemUrl, saborFixoId: sabor.id, chaveVitrine: `${produto.id}:${sabor.id}` }));
   });
 }
 

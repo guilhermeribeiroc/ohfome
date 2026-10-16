@@ -3,7 +3,7 @@ import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, ses
 import { comEstabelecimento } from "@/lib/db";
 
 type TamanhoInput = { nome?: unknown; precoSaborUnico?: unknown; precoMeioAMeio?: unknown; permiteMeioAMeio?: unknown; ativo?: unknown };
-type SaborInput = { nome?: unknown; descricao?: unknown; acrescimo?: unknown; permiteMeioAMeio?: unknown; ativo?: unknown; precos?: unknown };
+type SaborInput = { nome?: unknown; descricao?: unknown; acrescimo?: unknown; permiteMeioAMeio?: unknown; imagemUrl?: unknown; ativo?: unknown; precos?: unknown };
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const sessao = await autenticarRequisicao(request);
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!rows[0]) return null;
     const [tamanhos, sabores] = await Promise.all([
       client.query(`select id, nome, preco_sabor_unico as "precoSaborUnico", preco_meio_a_meio as "precoMeioAMeio", permite_meio_a_meio as "permiteMeioAMeio", ativo, ordem from pizza_tamanhos where produto_id = $1 order by ordem, nome`, [id]),
-      client.query(`select id, nome, descricao, acrescimo, permite_meio_a_meio as "permiteMeioAMeio", ativo, ordem from pizza_sabores where produto_id = $1 order by ordem, nome`, [id]),
+      client.query(`select id, nome, descricao, acrescimo, permite_meio_a_meio as "permiteMeioAMeio", imagem_url as "imagemUrl", ativo, ordem from pizza_sabores where produto_id = $1 order by ordem, nome`, [id]),
     ]);
     // Preço próprio de cada sabor por tamanho, indexado pelo NOME do tamanho (estável ao salvar).
     const { rows: precos } = await client.query(`select sp.sabor_id as "saborId", pt.nome as tamanho, sp.preco from pizza_sabor_precos sp join pizza_tamanhos pt on pt.id = sp.tamanho_id where pt.produto_id = $1`, [id]);
@@ -61,7 +61,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       const tamanhosCriados: { id: string; nome: string }[] = [];
       for (const [ordem, tamanho] of tamanhos.entries()) { const { rows: tamanhoCriado } = await client.query(`insert into pizza_tamanhos (produto_id, estabelecimento_id, nome, preco_sabor_unico, preco_meio_a_meio, permite_meio_a_meio, ativo, ordem) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id, nome`, [produtoId, sessao.estabelecimentoId, (tamanho.nome as string).trim(), baseDoTamanho(tamanho), tamanho.precoMeioAMeio === null || tamanho.precoMeioAMeio === undefined || tamanho.precoMeioAMeio === "" ? null : Number(tamanho.precoMeioAMeio), tamanho.permiteMeioAMeio !== false, tamanho.ativo !== false, ordem]); tamanhosCriados.push(tamanhoCriado[0]); }
       for (const [ordem, sabor] of sabores.entries()) {
-        const { rows: saborCriado } = await client.query(`insert into pizza_sabores (produto_id, estabelecimento_id, nome, descricao, acrescimo, permite_meio_a_meio, ativo, ordem) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id`, [produtoId, sessao.estabelecimentoId, (sabor.nome as string).trim(), typeof sabor.descricao === "string" ? sabor.descricao.trim() || null : null, Number(sabor.acrescimo ?? 0), sabor.permiteMeioAMeio !== false, sabor.ativo !== false, ordem]);
+        const { rows: saborCriado } = await client.query(`insert into pizza_sabores (produto_id, estabelecimento_id, nome, descricao, acrescimo, permite_meio_a_meio, ativo, ordem, imagem_url) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id`, [produtoId, sessao.estabelecimentoId, (sabor.nome as string).trim(), typeof sabor.descricao === "string" ? sabor.descricao.trim() || null : null, Number(sabor.acrescimo ?? 0), sabor.permiteMeioAMeio !== false, sabor.ativo !== false, ordem, typeof sabor.imagemUrl === "string" && sabor.imagemUrl.startsWith("/api/arquivos/") ? sabor.imagemUrl : null]);
         const precosSabor = sabor.precos && typeof sabor.precos === "object" ? Object.entries(sabor.precos as Record<string, unknown>) : [];
         for (const [nomeTamanho, preco] of precosSabor) {
           const valor = Number(preco);

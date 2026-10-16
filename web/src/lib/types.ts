@@ -194,7 +194,7 @@ export interface Produto {
   /** Só em pizza configurável: quantos sabores ativos e quais tamanhos tem. */
   pizzaSabores?: number;
   pizzaTamanhos?: string | null;
-  pizzaSaboresLista?: { id: string; nome: string; precos: Record<string, number> }[];
+  pizzaSaboresLista?: { id: string; nome: string; imagemUrl?: string | null; precos: Record<string, number> }[];
 }
 
 export interface Categoria {
