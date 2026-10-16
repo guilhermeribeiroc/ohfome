@@ -2006,6 +2006,8 @@ function CarrinhoSheet({
         precoUnitario: number;
       } => Boolean(item.produto),
     );
+  // Só o Pix automático (Mercado Pago) é oferecido no checkout; "Pix na entrega" foi removido.
+  const pixAutomaticoDisponivel = dados.pix?.modo === "mercado_pago";
   const entregaSelecionada = formaRecebimento === "entrega";
   const bairroSelecionado = (bairros ?? []).find((b) => b.id === bairroId);
   const taxaEntrega = entregaSelecionada ? (bairroSelecionado?.taxa ?? 0) : 0;
@@ -2013,7 +2015,7 @@ function CarrinhoSheet({
   const valorParte1Numero = numeroDaMoeda(valorParte1);
   const valorParte2Numero = Math.max(0, Math.round((totalComTaxa - valorParte1Numero) * 100) / 100);
   const forma2Efetiva = dividirPagamento && forma2 === formaPagamento
-    ? (["cartao", "dinheiro", "pix"] as const).find((f) => f !== formaPagamento && (f !== "pix" || dados.pix)) ?? "dinheiro"
+    ? (["cartao", "dinheiro", "pix"] as const).find((f) => f !== formaPagamento && (f !== "pix" || pixAutomaticoDisponivel)) ?? "dinheiro"
     : forma2;
   const enderecoFormatado = [
     rua.trim() && `${rua.trim()}, ${numeroEndereco.trim()}`,
@@ -2499,7 +2501,7 @@ function CarrinhoSheet({
                   </div>
                   <Campo label="Como deseja pagar?">
                     <div className="grid grid-cols-2 gap-2">
-                      {dados.pix && (
+                      {pixAutomaticoDisponivel && (
                         <button
                           type="button"
                           aria-pressed={formaPagamento === "pix"}
@@ -2507,7 +2509,7 @@ function CarrinhoSheet({
                           className={`col-span-2 flex min-h-[76px] items-center gap-3 rounded-2xl border p-3 text-left transition ${formaPagamento === "pix" ? "border-[#0e7775] bg-[#0e7775] text-white shadow-md" : "border-black/[.1] bg-white/65 text-black"}`}
                         >
                           <Banknote size={19} />
-                          <span><b className="block text-sm">{dados.pix.modo === "mercado_pago" ? "Pix agora" : "Pix na entrega"}</b><small className={formaPagamento === "pix" ? "text-white/75" : "text-black/50"}>{dados.pix.modo === "mercado_pago" ? "O pedido só vai para a cozinha após a confirmação." : "Pague ao receber seu pedido."}</small></span>
+                          <span><b className="block text-sm">Pix agora</b><small className={formaPagamento === "pix" ? "text-white/75" : "text-black/50"}>O pedido só vai para a cozinha após a confirmação.</small></span>
                         </button>
                       )}
                       <button
@@ -2537,7 +2539,7 @@ function CarrinhoSheet({
                   </button>
                   {!dividirPagamento && formaPagamento === "pix" && (
                     <div className="rounded-2xl border border-coral-100 bg-coral-050 p-3 text-sm leading-5 text-black/65">
-                      {dados.pix?.modo === "mercado_pago" ? "Você receberá um QR Code Pix válido por 30 minutos. A cozinha só receberá a comanda após a confirmação do pagamento." : "O Pix será pago na entrega. A equipe receberá seu pedido agora e confirmará o pagamento depois."}
+                      Você receberá um QR Code Pix válido por 30 minutos. A cozinha só receberá a comanda após a confirmação do pagamento.
                     </div>
                   )}
                   {!dividirPagamento && formaPagamento === "cartao" ? (
@@ -2583,7 +2585,7 @@ function CarrinhoSheet({
                         <div className="mb-2 flex items-center justify-between gap-3">
                           <b className="text-xs font-semibold uppercase tracking-wide text-black/45">2ª forma</b>
                           <div className="flex gap-1.5">
-                            {(["cartao", "dinheiro", "pix"] as const).filter((f) => f !== formaPagamento && (f !== "pix" || dados.pix)).map((f) => (
+                            {(["cartao", "dinheiro", "pix"] as const).filter((f) => f !== formaPagamento && (f !== "pix" || pixAutomaticoDisponivel)).map((f) => (
                               <button key={f} type="button" onClick={() => setForma2(f)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${forma2Efetiva === f ? "bg-[#0e7775] text-white" : "bg-black/[.05] text-black/55"}`}>{f === "cartao" ? "Cartão" : f === "pix" ? "Pix" : "Dinheiro"}</button>
                             ))}
                           </div>
