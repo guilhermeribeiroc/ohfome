@@ -1,8 +1,8 @@
 "use client";
 
 import { NovoPedidoCentralModal } from "@/components/pedidos/KanbanBoard";
-import { useState, type DragEvent } from "react";
-import { Check, MapPin, MapPinned, Plus, Printer, Trash2, UserRoundPlus, X } from "lucide-react";
+import { useEffect, useState, type DragEvent } from "react";
+import { Check, ChevronDown, HandCoins, MapPin, MapPinned, Plus, Printer, Trash2, UserRoundPlus, X } from "lucide-react";
 import type { BairroEntrega, Entrega, Entregador, EntregaStatus } from "@/lib/types";
 import { ENTREGA_STATUS_LABEL } from "@/lib/types";
 import { usePolling } from "@/lib/use-polling";
@@ -23,6 +23,7 @@ export function DeliveryModule() {
   const [colunaDestino, setColunaDestino] = useState<EntregaStatus | null>(null);
   const [entregaDetalhe, setEntregaDetalhe] = useState<Entrega | null>(null);
   const [bairrosAberto, setBairrosAberto] = useState(false);
+  const [fechamentoAberto, setFechamentoAberto] = useState(false);
 
   async function excluirEntregador(id: string, nome: string) {
     if (!confirm(`Remover "${nome}" da equipe de entrega?`)) return;
@@ -92,6 +93,9 @@ export function DeliveryModule() {
           <p className="of-subtitle">Entregadores, atribuições e acompanhamento de cada saída.</p>
         </div>
         <div className="flex w-full gap-2 sm:w-auto">
+          <button onClick={() => setFechamentoAberto(true)} className="of-btn-secondary flex-1 sm:flex-none">
+            <HandCoins size={17} /> Fechamento
+          </button>
           {usuarioAtual?.role === "admin" && <button onClick={() => setBairrosAberto(true)} className="of-btn-secondary flex-1 sm:flex-none">
             <MapPinned size={17} /> Taxas por bairro
           </button>}
@@ -140,7 +144,7 @@ export function DeliveryModule() {
                           </span>
                         </div>
                         <p className="text-xs font-medium text-ink-600">{entrega.clienteNome}</p>
-                        <p className="mb-2.5 mt-1 flex items-start gap-1.5 text-xs leading-5 text-ink-400"><MapPin size={13} className="mt-0.5 shrink-0" />{entrega.bairro ? `${entrega.bairro} · ${entrega.endereco}` : entrega.endereco}</p>
+                        <p className="mb-2.5 mt-1 flex items-start gap-2 text-base font-semibold leading-6 text-ink-800"><MapPin size={17} className="mt-1 shrink-0 text-coral-600" />{entrega.bairro ? `${entrega.bairro} · ${entrega.endereco}` : entrega.endereco}</p>
 
                         {status === "aguardando" && <div className="space-y-2">{(entregadores ?? []).some((e) => e.ativo !== false) ? <select defaultValue="" onClick={(evento) => evento.stopPropagation()} onChange={(e) => e.target.value && void atribuir(entrega.id, e.target.value)} className="w-full rounded-lg border border-cream-200 bg-surface px-2 py-2 text-xs text-ink-600 shadow-sm outline-none"><option value="" disabled>Selecionar entregador para sair</option>{(entregadores ?? []).filter((e) => e.ativo !== false).map((e) => <option key={e.id} value={e.id}>{e.nome}{e.cargaAtiva ? ` · ${e.cargaAtiva} em rota` : ""}{e.veiculo ? ` · ${e.veiculo}` : ""}</option>)}</select> : <p className="rounded-lg bg-amber-500/10 px-2.5 py-2 text-xs text-amber-800">Cadastre ou ative um entregador para despachar.</p>}</div>}
 
@@ -227,6 +231,99 @@ export function DeliveryModule() {
       )}
       {entregaDetalhe && <EntregaDetalheModal entrega={entregaDetalhe} entregadorNome={(entregadores ?? []).find((entregador) => entregador.id === entregaDetalhe.entregadorId)?.nome} onFechar={() => setEntregaDetalhe(null)} />}
       {bairrosAberto && <BairrosModal onFechar={() => setBairrosAberto(false)} />}
+      {fechamentoAberto && <FechamentoEntregadoresModal onFechar={() => setFechamentoAberto(false)} />}
+    </div>
+  );
+}
+
+interface FechamentoEntregador {
+  entregadorId: string | null;
+  entregadorNome: string;
+  quantidade: number;
+  totalTaxas: number;
+  totalPedidos: number;
+  entregas: { id: string; pedidoCodigo: number; bairro: string | null; taxa: number; total: number; em: string }[];
+}
+
+const reais = (valor: number) => `R$ ${valor.toFixed(2).replace(".", ",")}`;
+
+function dataIso(data: Date) {
+  return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}-${String(data.getDate()).padStart(2, "0")}`;
+}
+
+function periodoPronto(tipo: "hoje" | "ontem" | "semana" | "mes") {
+  const fim = new Date();
+  const inicio = new Date();
+  if (tipo === "ontem") { inicio.setDate(inicio.getDate() - 1); fim.setDate(fim.getDate() - 1); }
+  if (tipo === "semana") inicio.setDate(inicio.getDate() - 6);
+  if (tipo === "mes") inicio.setDate(1);
+  return { inicio: dataIso(inicio), fim: dataIso(fim) };
+}
+
+function FechamentoEntregadoresModal({ onFechar }: { onFechar: () => void }) {
+  const [periodo, setPeriodo] = useState(() => periodoPronto("hoje"));
+  const [entregadores, setEntregadores] = useState<FechamentoEntregador[] | null>(null);
+  const [erro, setErro] = useState("");
+  const [aberto, setAberto] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (periodo.inicio > periodo.fim) return;
+    const controle = new AbortController();
+    fetch(`/api/entregas/fechamento?inicio=${periodo.inicio}&fim=${periodo.fim}`, { signal: controle.signal })
+      .then(async (resposta) => {
+        const dados = await resposta.json().catch(() => null);
+        if (!resposta.ok) throw new Error(dados?.erro ?? "Não foi possível carregar o fechamento.");
+        setErro(""); setEntregadores(dados.entregadores);
+      })
+      .catch((falha: Error) => { if (falha.name !== "AbortError") { setErro(falha.message); setEntregadores([]); } });
+    return () => controle.abort();
+  }, [periodo]);
+
+  const periodoInvalido = periodo.inicio > periodo.fim;
+  const totalTaxas = (entregadores ?? []).reduce((soma, item) => soma + item.totalTaxas, 0);
+  const totalEntregas = (entregadores ?? []).reduce((soma, item) => soma + item.quantidade, 0);
+  const atalhos = [["hoje", "Hoje"], ["ontem", "Ontem"], ["semana", "7 dias"], ["mes", "Este mês"]] as const;
+
+  return (
+    <div className="of-modal-backdrop" role="dialog" aria-modal="true" aria-label="Fechamento dos entregadores">
+      <section className="of-modal-panel flex max-h-[90dvh] max-w-2xl flex-col">
+        <header className="of-panel-header bg-surface">
+          <div><p className="of-eyebrow">Delivery</p><h2 className="font-display text-lg font-bold tracking-tight">Fechamento dos entregadores</h2></div>
+          <button onClick={onFechar} className="of-icon-btn" aria-label="Fechar"><X size={17} /></button>
+        </header>
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
+          <div className="flex flex-wrap items-end gap-2">
+            {atalhos.map(([tipo, rotulo]) => <button key={tipo} type="button" onClick={() => setPeriodo(periodoPronto(tipo))} className="of-btn-secondary min-h-10 px-3 text-xs">{rotulo}</button>)}
+            <label className="text-[11px] font-semibold text-ink-500">De<input type="date" value={periodo.inicio} onChange={(evento) => setPeriodo((atual) => ({ ...atual, inicio: evento.target.value }))} className="of-field mt-1 !min-h-10" /></label>
+            <label className="text-[11px] font-semibold text-ink-500">Até<input type="date" value={periodo.fim} onChange={(evento) => setPeriodo((atual) => ({ ...atual, fim: evento.target.value }))} className="of-field mt-1 !min-h-10" /></label>
+          </div>
+          {periodoInvalido && <p className="rounded-xl bg-danger-050 px-3 py-2 text-xs text-danger-700">A data inicial é maior que a final.</p>}
+          {erro && <p className="rounded-xl bg-danger-050 px-3 py-2 text-xs text-danger-700">{erro}</p>}
+          {entregadores === null ? <p className="py-8 text-center text-sm text-ink-400">Carregando...</p> : entregadores.length === 0 ? <p className="rounded-2xl border border-dashed border-cream-300 py-10 text-center text-sm text-ink-400">Nenhuma entrega concluída neste período.</p> : <>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl bg-cream-50 p-3.5"><span className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Entregas concluídas</span><strong className="mt-1 block font-display text-2xl text-ink-900">{totalEntregas}</strong></div>
+              <div className="rounded-2xl bg-coral-050 p-3.5"><span className="text-[11px] font-semibold uppercase tracking-wide text-coral-600">Taxas de entrega no período</span><strong className="mt-1 block font-display text-2xl text-ink-900">{reais(totalTaxas)}</strong></div>
+            </div>
+            <ul className="space-y-2">
+              {entregadores.map((item) => {
+                const chave = item.entregadorId ?? "sem-entregador";
+                const expandido = aberto === chave;
+                return <li key={chave} className="overflow-hidden rounded-2xl border border-cream-200 bg-surface">
+                  <button type="button" onClick={() => setAberto(expandido ? null : chave)} aria-expanded={expandido} className="flex w-full items-center gap-3 p-3.5 text-left">
+                    <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-ink-900">{item.entregadorNome}</p><p className="mt-0.5 text-xs text-ink-500">{item.quantidade} {item.quantidade === 1 ? "entrega" : "entregas"} · pedidos somam {reais(item.totalPedidos)}</p></div>
+                    <div className="text-right"><span className="block text-[10px] font-semibold uppercase tracking-wide text-ink-400">Taxas</span><strong className="font-display text-lg text-coral-600">{reais(item.totalTaxas)}</strong></div>
+                    <ChevronDown size={16} className={`shrink-0 text-ink-400 transition ${expandido ? "rotate-180" : ""}`} />
+                  </button>
+                  {expandido && <div className="divide-y divide-cream-100 border-t border-cream-100 bg-cream-50/60 px-3.5 text-xs text-ink-600">
+                    {item.entregas.map((entrega) => <div key={entrega.id} className="flex items-center gap-3 py-2"><b className="w-12 text-ink-900">#{entrega.pedidoCodigo}</b><span className="min-w-0 flex-1 truncate">{entrega.bairro ?? "—"} · {new Date(entrega.em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span><span className="w-20 text-right">taxa {reais(entrega.taxa)}</span><span className="w-24 text-right font-semibold text-ink-800">{reais(entrega.total)}</span></div>)}
+                  </div>}
+                </li>;
+              })}
+            </ul>
+            <p className="text-[11px] leading-4 text-ink-400">Considera só entregas concluídas de pedidos não cancelados, pela data em que foram entregues. “Taxas” é a soma das taxas de entrega cobradas; “pedidos” é o valor total vendido em cada entrega.</p>
+          </>}
+        </div>
+      </section>
     </div>
   );
 }
@@ -340,7 +437,7 @@ function EntregaDetalheModal({ entrega, entregadorNome, onFechar }: { entrega: E
   return <div className="of-modal-backdrop z-50" role="dialog" aria-modal="true" aria-label={`Detalhes da entrega ${entrega.pedidoCodigo}`}>
     <section className="of-modal-panel flex h-[min(90dvh,820px)] max-w-lg flex-col overflow-hidden">
       <header className="flex items-start justify-between border-b border-cream-200 p-5"><div><p className="of-eyebrow">Entrega · Pedido #{entrega.pedidoCodigo}</p><h2 className="font-display text-xl font-bold tracking-tight text-ink-900">Ficha do entregador</h2></div><button onClick={onFechar} className="of-icon-btn" aria-label="Fechar detalhes"><X size={17} /></button></header>
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5"><div className="rounded-2xl bg-cream-50 p-3.5"><p className="font-semibold text-ink-900">{entrega.clienteNome}</p>{entrega.clienteTelefone && <p className="mt-1 text-xs text-ink-500">WhatsApp: {entrega.clienteTelefone}</p>}{entregadorNome && <p className="mt-1 text-xs text-ink-500">Entregador: {entregadorNome}</p>}<p className="mt-2 flex gap-1.5 text-xs leading-5 text-ink-600"><MapPin size={13} className="mt-0.5 shrink-0 text-coral-600" />{entrega.endereco}</p>{pagamento && <p className="mt-2 text-xs font-medium text-ink-700">Pagamento: {pagamento}</p>}{entrega.observacoes && <p className="mt-2 text-xs leading-5 text-ink-600">Obs.: {entrega.observacoes}</p>}</div><div><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-ink-400">Itens do pedido</p><ul className="divide-y divide-cream-100 rounded-2xl border border-cream-200 bg-surface px-3.5">{(entrega.itens ?? []).map((item, indice) => <li key={`${item.produtoNome}-${indice}`} className="flex items-center justify-between gap-3 py-3 text-sm"><span><b className="mr-2 text-ink-900">{item.quantidade}×</b>{item.produtoNome}</span><b className="shrink-0 text-ink-900">R$ {(item.precoUnitario * item.quantidade).toFixed(2).replace(".", ",")}</b></li>)}</ul></div></div>
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5"><div className="rounded-2xl bg-cream-50 p-3.5"><p className="font-semibold text-ink-900">{entrega.clienteNome}</p>{entrega.clienteTelefone && <p className="mt-1 text-xs text-ink-500">WhatsApp: {entrega.clienteTelefone}</p>}{entregadorNome && <p className="mt-1 text-xs text-ink-500">Entregador: {entregadorNome}</p>}<p className="mt-2 flex gap-2 text-base font-semibold leading-6 text-ink-800"><MapPin size={17} className="mt-1 shrink-0 text-coral-600" />{entrega.endereco}</p>{pagamento && <p className="mt-2 text-xs font-medium text-ink-700">Pagamento: {pagamento}</p>}{entrega.observacoes && <p className="mt-2 text-xs leading-5 text-ink-600">Obs.: {entrega.observacoes}</p>}</div><div><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-ink-400">Itens do pedido</p><ul className="divide-y divide-cream-100 rounded-2xl border border-cream-200 bg-surface px-3.5">{(entrega.itens ?? []).map((item, indice) => <li key={`${item.produtoNome}-${indice}`} className="flex items-center justify-between gap-3 py-3 text-sm"><span><b className="mr-2 text-ink-900">{item.quantidade}×</b>{item.produtoNome}</span><b className="shrink-0 text-ink-900">R$ {(item.precoUnitario * item.quantidade).toFixed(2).replace(".", ",")}</b></li>)}</ul></div></div>
       <footer className="flex items-center justify-between gap-3 border-t border-cream-200 bg-surface p-5"><button onClick={() => imprimirEntrega(entrega, entregadorNome)} className="of-btn-secondary min-h-11 px-3"><Printer size={16} /> Imprimir</button><div className="text-right"><span className="block text-xs text-ink-400">{ENTREGA_STATUS_LABEL[entrega.status]}</span><strong className="font-display text-xl font-bold text-ink-900">R$ {entrega.total.toFixed(2).replace(".", ",")}</strong></div></footer>
     </section>
   </div>;
