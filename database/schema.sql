@@ -300,15 +300,29 @@ create table pizza_tamanhos (
   id uuid primary key default gen_random_uuid(), produto_id uuid not null references produto_configuracoes_pizza(produto_id) on delete cascade,
   estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade, nome text not null,
   preco_sabor_unico numeric(10,2) not null check (preco_sabor_unico >= 0), preco_meio_a_meio numeric(10,2) check (preco_meio_a_meio >= 0),
+  permite_meio_a_meio boolean not null default true,
   ativo boolean not null default true, ordem integer not null default 0, unique (id, estabelecimento_id)
 );
 create table pizza_sabores (
   id uuid primary key default gen_random_uuid(), produto_id uuid not null references produto_configuracoes_pizza(produto_id) on delete cascade,
   estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade, nome text not null, descricao text,
-  acrescimo numeric(10,2) not null default 0 check (acrescimo >= 0), ativo boolean not null default true, ordem integer not null default 0, unique (id, estabelecimento_id)
+  acrescimo numeric(10,2) not null default 0 check (acrescimo >= 0), permite_meio_a_meio boolean not null default true,
+  imagem_url text,
+  ativo boolean not null default true, ordem integer not null default 0, unique (id, estabelecimento_id)
 );
 create index idx_pizza_tamanhos_produto on pizza_tamanhos(produto_id, ordem);
 create index idx_pizza_sabores_produto on pizza_sabores(produto_id, ordem);
+-- Preço específico de um sabor em um tamanho (sobrepõe preço do tamanho + acréscimo).
+create table pizza_sabor_precos (
+  sabor_id uuid not null,
+  tamanho_id uuid not null,
+  estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade,
+  preco numeric(10,2) not null check (preco >= 0),
+  primary key (sabor_id, tamanho_id),
+  foreign key (sabor_id, estabelecimento_id) references pizza_sabores(id, estabelecimento_id) on delete cascade,
+  foreign key (tamanho_id, estabelecimento_id) references pizza_tamanhos(id, estabelecimento_id) on delete cascade
+);
+create index idx_pizza_sabor_precos_tamanho on pizza_sabor_precos(tamanho_id);
 
 -- Escolhas adicionais do produto (ex.: pão e adicionais de um sanduíche).
 create table produto_grupos_opcoes (
@@ -316,6 +330,9 @@ create table produto_grupos_opcoes (
   produto_id uuid not null references produtos(id) on delete cascade, nome text not null,
   minimo_selecoes integer not null default 0 check (minimo_selecoes >= 0),
   maximo_selecoes integer not null default 1 check (maximo_selecoes >= 1 and maximo_selecoes >= minimo_selecoes),
+  -- Quando true, o preço da opção escolhida é o preço COMPLETO do item (ex.: pão Bola R$ 8, pão Árabe R$ 9),
+  -- em vez de um acréscimo sobre o preço do produto. Exige escolher exatamente uma opção.
+  define_preco boolean not null default false,
   ativo boolean not null default true, ordem integer not null default 0, created_at timestamptz not null default now(), unique (id, estabelecimento_id)
 );
 create table produto_opcoes (
@@ -560,6 +577,8 @@ create table pedidos (
   ),
   constraint uq_pedidos_id_estabelecimento unique (id, estabelecimento_id)
 );
+-- Nome do cliente digitado no balcão/mesa, sem cadastro (opcional).
+alter table pedidos add column cliente_nome_avulso text;
 
 -- codigo reinicia por dia (fuso America/Fortaleza), entao a unicidade vale
 -- por dia, nao pra sempre — ver fn_atribuir_codigo_pedido.
@@ -1343,9 +1362,9 @@ begin
     'custos_fixos', 'whatsapp_mensagens', 'estado_aplicacao', 'estabelecimento_modulos',
     'impressao_jobs', 'bairros_entrega', 'banners_cardapio',
     'produto_grupos_opcoes', 'produto_opcoes', 'itens_pedido_opcoes',
-    'produto_configuracoes_pizza', 'pizza_tamanhos', 'pizza_sabores', 'itens_pedido_pizza',
-    'notificacoes_whatsapp_pedido', 'estoque_produtos', 'movimentacoes_estoque_produtos',
-    'estoque_compromissos_produtos', 'pedidos_idempotencia'
+    'produto_configuracoes_pizza', 'pizza_tamanhos', 'pizza_sabores', 'pizza_sabor_precos',
+    'itens_pedido_pizza', 'notificacoes_whatsapp_pedido', 'estoque_produtos',
+    'movimentacoes_estoque_produtos', 'estoque_compromissos_produtos', 'pedidos_idempotencia'
   ]
   loop
     execute format('alter table %I enable row level security', tabela);
@@ -1677,6 +1696,7 @@ as $$
             'nome', g.nome,
             'minimoSelecoes', g.minimo_selecoes,
             'maximoSelecoes', g.maximo_selecoes,
+            'definePreco', g.define_preco,
             'opcoes', coalesce((
               select jsonb_agg(jsonb_build_object('id', o.id, 'nome', o.nome, 'acrescimo', o.acrescimo) order by o.ordem, o.nome)
               from produto_opcoes o where o.grupo_id = g.id and o.ativo
@@ -1689,11 +1709,12 @@ as $$
           select jsonb_build_object(
             'regraMeioAMeio', pcp.regra_meio_a_meio,
             'tamanhos', coalesce((
-              select jsonb_agg(jsonb_build_object('id', pt.id, 'nome', pt.nome, 'precoSaborUnico', pt.preco_sabor_unico, 'precoMeioAMeio', pt.preco_meio_a_meio) order by pt.ordem)
+              select jsonb_agg(jsonb_build_object('id', pt.id, 'nome', pt.nome, 'precoSaborUnico', pt.preco_sabor_unico, 'precoMeioAMeio', pt.preco_meio_a_meio, 'permiteMeioAMeio', pt.permite_meio_a_meio) order by pt.ordem)
               from pizza_tamanhos pt where pt.produto_id = p.id and pt.ativo
             ), '[]'::jsonb),
             'sabores', coalesce((
-              select jsonb_agg(jsonb_build_object('id', ps.id, 'nome', ps.nome, 'descricao', ps.descricao, 'acrescimo', ps.acrescimo) order by ps.ordem, ps.nome)
+              select jsonb_agg(jsonb_build_object('id', ps.id, 'nome', ps.nome, 'descricao', ps.descricao, 'acrescimo', ps.acrescimo, 'permiteMeioAMeio', ps.permite_meio_a_meio, 'imagemUrl', ps.imagem_url,
+                'precos', coalesce((select jsonb_object_agg(sp.tamanho_id::text, sp.preco) from pizza_sabor_precos sp where sp.sabor_id = ps.id), '{}'::jsonb)) order by ps.ordem, ps.nome)
               from pizza_sabores ps where ps.produto_id = p.id and ps.ativo
             ), '[]'::jsonb)
           )
@@ -1937,15 +1958,33 @@ begin
         raise exception 'Sabor de pizza inválido' using errcode = '22023';
       end if;
 
-      v_pizza_valor_um := v_pizza_preco_sabor_unico + v_pizza_sabor_um_acrescimo;
+      if exists (select 1 from pizza_sabor_precos where sabor_id = v_pizza_sabor_um_id)
+         and not exists (select 1 from pizza_sabor_precos where sabor_id = v_pizza_sabor_um_id and tamanho_id = v_pizza_tamanho_id) then
+        raise exception 'Este sabor não é vendido neste tamanho' using errcode = '22023';
+      end if;
+      v_pizza_valor_um := coalesce(
+        (select preco from pizza_sabor_precos where sabor_id = v_pizza_sabor_um_id and tamanho_id = v_pizza_tamanho_id),
+        v_pizza_preco_sabor_unico + v_pizza_sabor_um_acrescimo);
 
       if v_pizza_sabor_dois_id is not null then
+        if not exists (select 1 from pizza_tamanhos where id = v_pizza_tamanho_id and permite_meio_a_meio) then
+          raise exception 'Este tamanho de pizza não aceita meio a meio' using errcode = '22023';
+        end if;
+        if exists (select 1 from pizza_sabores where id in (v_pizza_sabor_um_id, v_pizza_sabor_dois_id) and not permite_meio_a_meio) then
+          raise exception 'Um dos sabores não pode ser combinado no meio a meio' using errcode = '22023';
+        end if;
         select nome, acrescimo into v_pizza_sabor_dois_nome, v_pizza_sabor_dois_acrescimo
         from pizza_sabores where id = v_pizza_sabor_dois_id and produto_id = v_produto_id and ativo;
         if v_pizza_sabor_dois_nome is null then
           raise exception 'Sabor de pizza inválido' using errcode = '22023';
         end if;
-        v_pizza_valor_dois := v_pizza_preco_sabor_unico + v_pizza_sabor_dois_acrescimo;
+        if exists (select 1 from pizza_sabor_precos where sabor_id = v_pizza_sabor_dois_id)
+           and not exists (select 1 from pizza_sabor_precos where sabor_id = v_pizza_sabor_dois_id and tamanho_id = v_pizza_tamanho_id) then
+          raise exception 'Este sabor não é vendido neste tamanho' using errcode = '22023';
+        end if;
+        v_pizza_valor_dois := coalesce(
+          (select preco from pizza_sabor_precos where sabor_id = v_pizza_sabor_dois_id and tamanho_id = v_pizza_tamanho_id),
+          v_pizza_preco_sabor_unico + v_pizza_sabor_dois_acrescimo);
         v_preco := case v_pizza_regra
           when 'media' then (v_pizza_valor_um + v_pizza_valor_dois) / 2
           when 'preco_fixo' then coalesce(v_pizza_preco_meio_a_meio, greatest(v_pizza_valor_um, v_pizza_valor_dois))
@@ -1976,9 +2015,10 @@ begin
       raise exception 'Uma opção não pertence a este produto' using errcode = '22023';
     end if;
 
-    if v_opcoes_fornecidas and exists (
+    if exists (
       select 1 from produto_grupos_opcoes g
       where g.produto_id = v_produto_id and g.ativo
+        and (v_opcoes_fornecidas or g.define_preco)
         and (select count(*) from jsonb_array_elements(v_item_opcoes) elem where elem->>'grupoId' = g.id::text)
             not between g.minimo_selecoes and g.maximo_selecoes
     ) then
@@ -1990,7 +2030,9 @@ begin
     join produto_opcoes o on o.id = (elem->>'opcaoId')::uuid;
 
     insert into itens_pedido (pedido_id, produto_id, quantidade, preco_unitario, observacoes)
-    values (v_pedido_id, v_produto_id, v_quantidade, v_preco + v_acrescimo, v_item_observacoes)
+    values (v_pedido_id, v_produto_id, v_quantidade, (case when exists (select 1 from jsonb_array_elements(v_item_opcoes) elem
+      join produto_opcoes o on o.id = (elem->>'opcaoId')::uuid
+      join produto_grupos_opcoes g on g.id = o.grupo_id where g.define_preco) then 0 else v_preco end) + v_acrescimo, v_item_observacoes)
     returning id into v_item_pedido_id;
 
     if v_tipo_produto = 'pizza' then
@@ -2250,9 +2292,10 @@ begin
       raise exception 'Uma opção não pertence a este produto' using errcode = '22023';
     end if;
 
-    if v_opcoes_fornecidas and exists (
+    if exists (
       select 1 from produto_grupos_opcoes g
       where g.produto_id = v_produto_id and g.ativo
+        and (v_opcoes_fornecidas or g.define_preco)
         and (select count(*) from jsonb_array_elements(v_item_opcoes) elem where elem->>'grupoId' = g.id::text)
             not between g.minimo_selecoes and g.maximo_selecoes
     ) then
@@ -2264,7 +2307,9 @@ begin
     join produto_opcoes o on o.id = (elem->>'opcaoId')::uuid;
 
     insert into itens_pedido (pedido_id, produto_id, quantidade, preco_unitario, observacoes)
-    values (v_novo_pedido_id, v_produto_id, v_quantidade, v_preco + v_acrescimo, v_item_observacoes)
+    values (v_novo_pedido_id, v_produto_id, v_quantidade, (case when exists (select 1 from jsonb_array_elements(v_item_opcoes) elem
+      join produto_opcoes o on o.id = (elem->>'opcaoId')::uuid
+      join produto_grupos_opcoes g on g.id = o.grupo_id where g.define_preco) then 0 else v_preco end) + v_acrescimo, v_item_observacoes)
     returning id into v_item_pedido_id;
 
     insert into itens_pedido_opcoes (estabelecimento_id, item_pedido_id, grupo_nome, opcao_nome, acrescimo)
@@ -2359,7 +2404,7 @@ grant select, insert, update, delete on
   configuracoes_pix, mercado_pago_conexoes, mercado_pago_oauth_states, pagamentos_pix,
   demonstracao_referencias, pedidos_idempotencia
   , produto_grupos_opcoes, produto_opcoes, itens_pedido_opcoes,
-  produto_configuracoes_pizza, pizza_tamanhos, pizza_sabores, itens_pedido_pizza,
+  produto_configuracoes_pizza, pizza_tamanhos, pizza_sabores, pizza_sabor_precos, itens_pedido_pizza,
   notificacoes_whatsapp_pedido,
   estoque_produtos, estoque_compromissos_produtos, movimentacoes_estoque_produtos
 to ohfome_app;

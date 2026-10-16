@@ -9,7 +9,7 @@ const PEDIDOS_ATIVOS_QUERY = `
     p.id, p.codigo, p.tipo, p.origem, p.status, p.total, p.observacoes, p.forma_recebimento as "formaRecebimento", p.forma_pagamento as "formaPagamento", p.tipo_cartao as "tipoCartao", p.troco_para as "trocoPara", p.pagamento_dividido as "pagamentoDividido", p.pagamento_status as "pagamentoStatus", p.created_at as "createdAt", p.notificado_em as "notificadoEm",
     (p.whatsapp_consentimento and exists (select 1 from estabelecimentos ew where ew.id = p.estabelecimento_id and ew.whatsapp_automacao_ativa and ew.whatsapp_instancia is not null)) as "notificacaoAutomatica",
     m.numero as "mesaNumero",
-    c.nome as "clienteNome",
+    coalesce(c.nome, p.cliente_nome_avulso) as "clienteNome",
     c.telefone as "clienteTelefone",
     e.endereco as "enderecoEntrega",
     u.nome as "usuarioNome",
@@ -21,6 +21,7 @@ const PEDIDOS_ATIVOS_QUERY = `
           'produtoId', ip.produto_id,
           'produtoNome', pr.nome || case when ip.tamanho is not null then ' (' || ip.tamanho::text || ')' else '' end,
           'produtoTamanho', ip.tamanho,
+          'categoriaNome', (select cp.nome from categorias_produto cp where cp.id = pr.categoria_id),
           'quantidade', ip.quantidade,
           'precoUnitario', ip.preco_unitario,
           'observacoes', ip.observacoes,
@@ -99,6 +100,7 @@ export async function POST(request: NextRequest) {
   const tipo = body?.tipo;
   const mesaId = body?.mesaId;
   const clienteNome = typeof body?.clienteNome === "string" ? body.clienteNome.trim() : undefined;
+  const clienteNomeAvulso = typeof body?.clienteNomeAvulso === "string" ? body.clienteNomeAvulso.trim().slice(0, 80) || null : null;
   const clienteIdInformado = typeof body?.clienteId === "string" ? body.clienteId : undefined;
   const clienteTelefone = typeof body?.clienteTelefone === "string" ? body.clienteTelefone.replace(/\D/g, "") || null : null;
   const endereco = typeof body?.endereco === "string" ? body.endereco.trim() : undefined;
@@ -161,7 +163,7 @@ export async function POST(request: NextRequest) {
   try {
     const criado = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
       const hashConteudo = createHash("sha256").update(JSON.stringify({
-        tipo, mesaId, clienteIdInformado, clienteNome, clienteTelefone, endereco, bairroId, itens: itensValidos,
+        tipo, mesaId, clienteIdInformado, clienteNome, clienteNomeAvulso, clienteTelefone, endereco, bairroId, itens: itensValidos,
         formaPagamento, tipoCartao, trocoPara: Number.isFinite(trocoPara) ? trocoPara : null, modalidade,
         formaRecebimento, whatsappConsentimento, pixAutomatico,
       })).digest("hex");
@@ -231,6 +233,18 @@ export async function POST(request: NextRequest) {
           [sessao.estabelecimentoId, clienteNome, clienteTelefone, endereco ?? null]
         );
         clienteId = rows[0].id;
+      } else if (clienteNomeAvulso) {
+        // Nome digitado no balcão/mesa: vira (ou reaproveita) um cliente, sem telefone.
+        // Reaproveita o de mesmo nome sem telefone para não duplicar a cada pedido.
+        const { rows: existente } = await client.query(
+          `select id from clientes where estabelecimento_id = $1 and lower(nome) = lower($2) and telefone is null order by created_at limit 1`,
+          [sessao.estabelecimentoId, clienteNomeAvulso]
+        );
+        if (existente[0]) clienteId = existente[0].id;
+        else {
+          const { rows } = await client.query(`insert into clientes (estabelecimento_id, nome) values ($1, $2) returning id`, [sessao.estabelecimentoId, clienteNomeAvulso]);
+          clienteId = rows[0].id;
+        }
       }
 
       let bairroNome: string | null = null;
@@ -246,8 +260,8 @@ export async function POST(request: NextRequest) {
       }
 
       const { rows: pedidoRows } = await client.query(
-        `insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, comanda_id, cliente_id, usuario_id, taxa_entrega, forma_pagamento, tipo_cartao, troco_para, modalidade_atendimento, pagamento_status, forma_recebimento, whatsapp_consentimento)
-         values ($1, $2, 'presencial', $3, $4, case when $4 then now() else null end, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        `insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, comanda_id, cliente_id, usuario_id, taxa_entrega, forma_pagamento, tipo_cartao, troco_para, modalidade_atendimento, pagamento_status, forma_recebimento, whatsapp_consentimento, cliente_nome_avulso)
+         values ($1, $2, 'presencial', $3, $4, case when $4 then now() else null end, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
          returning id`,
         [
           sessao.estabelecimentoId, tipo,
@@ -258,6 +272,7 @@ export async function POST(request: NextRequest) {
           formaPagamento === "dinheiro" && trocoPara > 0 ? trocoPara : null,
           modalidade, modalidade === "imediata" && !pixAutomatico ? "pago" : "pendente",
           formaRecebimento, whatsappConsentimento && clienteId !== null,
+          clienteId ? null : clienteNomeAvulso,
         ]
       );
       const pedidoId = pedidoRows[0].id;
@@ -271,16 +286,23 @@ export async function POST(request: NextRequest) {
           const pizza = item.pizza;
           if (!pizza || typeof pizza.tamanhoId !== "string" || typeof pizza.saborUmId !== "string" || (pizza.saborDoisId !== undefined && typeof pizza.saborDoisId !== "string")) throw Object.assign(new Error("Escolha tamanho e sabor da pizza."), { status: 400 });
           const { rows: configuracao } = await client.query(`select regra_meio_a_meio as "regraMeioAMeio" from produto_configuracoes_pizza where produto_id = $1`, [item.produtoId]);
-          const { rows: tamanhos } = await client.query(`select id, nome, preco_sabor_unico as "precoSaborUnico", preco_meio_a_meio as "precoMeioAMeio" from pizza_tamanhos where id = $1 and produto_id = $2 and ativo`, [pizza.tamanhoId, item.produtoId]);
+          const { rows: tamanhos } = await client.query(`select id, nome, preco_sabor_unico as "precoSaborUnico", preco_meio_a_meio as "precoMeioAMeio", permite_meio_a_meio as "permiteMeioAMeio" from pizza_tamanhos where id = $1 and produto_id = $2 and ativo`, [pizza.tamanhoId, item.produtoId]);
           const idsSabores = [pizza.saborUmId, pizza.saborDoisId].filter((valor): valor is string => typeof valor === "string");
           if (!configuracao[0] || !tamanhos[0] || new Set(idsSabores).size !== idsSabores.length) throw Object.assign(new Error("Configuração de pizza inválida."), { status: 400 });
-          const { rows: sabores } = await client.query(`select id, nome, acrescimo from pizza_sabores where id = any($1::uuid[]) and produto_id = $2 and ativo`, [idsSabores, item.produtoId]);
+          const { rows: sabores } = await client.query(`select id, nome, acrescimo, permite_meio_a_meio as "permiteMeioAMeio" from pizza_sabores where id = any($1::uuid[]) and produto_id = $2 and ativo`, [idsSabores, item.produtoId]);
           if (sabores.length !== idsSabores.length) throw Object.assign(new Error("Sabor de pizza inválido."), { status: 400 });
           const saborUm = sabores.find((sabor) => sabor.id === pizza.saborUmId)!;
           const saborDois = pizza.saborDoisId ? sabores.find((sabor) => sabor.id === pizza.saborDoisId)! : null;
           const tamanho = tamanhos[0]; const regra = configuracao[0].regraMeioAMeio as string;
-          const valorUm = Number(tamanho.precoSaborUnico) + Number(saborUm.acrescimo);
-          const valorDois = saborDois ? Number(tamanho.precoSaborUnico) + Number(saborDois.acrescimo) : null;
+          if (saborDois && (!tamanho.permiteMeioAMeio || !saborUm.permiteMeioAMeio || !saborDois.permiteMeioAMeio)) throw Object.assign(new Error(!tamanho.permiteMeioAMeio ? "Este tamanho de pizza não aceita meio a meio." : "Um dos sabores não pode ser combinado no meio a meio."), { status: 400 });
+          // Preço próprio do sabor naquele tamanho (tabela do cardápio) sobrepõe tamanho + acréscimo.
+          const { rows: precosSabor } = await client.query(`select sabor_id as "saborId", preco from pizza_sabor_precos where tamanho_id = $1 and sabor_id = any($2::uuid[])`, [tamanho.id, idsSabores]);
+          // Sabor com tabela de preços só é vendido nos tamanhos em que tem preço.
+          const { rows: saboresComTabela } = await client.query(`select distinct sabor_id as "saborId" from pizza_sabor_precos where sabor_id = any($1::uuid[])`, [idsSabores]);
+          for (const sabor of [saborUm, saborDois]) if (sabor && saboresComTabela.some((linha) => linha.saborId === sabor.id) && !precosSabor.some((linha) => linha.saborId === sabor.id)) throw Object.assign(new Error(`${sabor.nome} não é vendido no tamanho ${tamanho.nome}.`), { status: 400 });
+          const valorDoSabor = (sabor: { id: string; acrescimo: unknown }) => { const proprio = precosSabor.find((linha) => linha.saborId === sabor.id); return proprio ? Number(proprio.preco) : Number(tamanho.precoSaborUnico) + Number(sabor.acrescimo); };
+          const valorUm = valorDoSabor(saborUm);
+          const valorDois = saborDois ? valorDoSabor(saborDois) : null;
           precoPizza = !saborDois ? valorUm : regra === "maior_valor" ? Math.max(valorUm, valorDois!) : regra === "media" ? (valorUm + valorDois!) / 2 : Number(tamanho.precoMeioAMeio);
           pizzaSnapshot = { tamanhoNome: tamanho.nome, saborUmNome: saborUm.nome, saborDoisNome: saborDois?.nome ?? null, regraMeioAMeio: saborDois ? regra : null };
         } else if (item.pizza !== undefined) throw Object.assign(new Error("Este produto não é uma pizza configurável."), { status: 400 });
@@ -297,31 +319,33 @@ export async function POST(request: NextRequest) {
           throw Object.assign(new Error("Não repita a mesma opção."), { status: 400 });
         }
         const { rows: grupos } = await client.query(
-          `select id, nome, minimo_selecoes as "minimoSelecoes", maximo_selecoes as "maximoSelecoes"
+          `select id, nome, minimo_selecoes as "minimoSelecoes", maximo_selecoes as "maximoSelecoes", define_preco as "definePreco"
            from produto_grupos_opcoes where produto_id = $1 and ativo order by ordem, nome`,
           [item.produtoId]
         );
         const { rows: opcoes } = opcaoIds.length ? await client.query(
-          `select o.id, o.grupo_id as "grupoId", o.nome, o.acrescimo, g.nome as "grupoNome"
+          `select o.id, o.grupo_id as "grupoId", o.nome, o.acrescimo, g.nome as "grupoNome", g.define_preco as "definePreco"
            from produto_opcoes o
            join produto_grupos_opcoes g on g.id = o.grupo_id
            where o.id = any($1::uuid[]) and o.ativo and g.ativo and g.produto_id = $2`,
           [opcaoIds, item.produtoId]
-        ) : { rows: [] as { id: string; grupoId: string; nome: string; acrescimo: number; grupoNome: string }[] };
+        ) : { rows: [] as { id: string; grupoId: string; nome: string; acrescimo: number; grupoNome: string; definePreco: boolean }[] };
         if (opcoes.length !== escolhas.length || opcoes.some((opcao) => !escolhas.some((escolha) => escolha.opcaoId === opcao.id && escolha.grupoId === opcao.grupoId))) {
           throw Object.assign(new Error("Uma opção não pertence a este produto."), { status: 400 });
         }
         for (const grupo of grupos) {
           const quantidade = opcoes.filter((opcao) => opcao.grupoId === grupo.id).length;
-          if (opcoesFornecidas && (quantidade < Number(grupo.minimoSelecoes) || quantidade > Number(grupo.maximoSelecoes))) {
+          if ((opcoesFornecidas || grupo.definePreco) && (quantidade < Number(grupo.minimoSelecoes) || quantidade > Number(grupo.maximoSelecoes))) {
             throw Object.assign(new Error(`Escolha entre ${grupo.minimoSelecoes} e ${grupo.maximoSelecoes} opção(ões) em ${grupo.nome}.`), { status: 400 });
           }
         }
+        // Pergunta que DEFINE o preço (pão Bola/Árabe): o preço da opção é o preço completo do item.
         const acrescimo = opcoes.reduce((total, opcao) => total + Number(opcao.acrescimo), 0);
+        const baseDoItem = opcoes.some((opcao) => opcao.definePreco) ? 0 : precoPizza;
         const { rows: itensCriados } = await client.query(
           `insert into itens_pedido (pedido_id, produto_id, quantidade, preco_unitario, observacoes)
            values ($1, $2, $3, $4, $5) returning id`,
-          [pedidoId, item.produtoId, item.quantidade, precoPizza + acrescimo, item.observacoes ?? null]
+          [pedidoId, item.produtoId, item.quantidade, baseDoItem + acrescimo, item.observacoes ?? null]
         );
         if (pizzaSnapshot) await client.query(`insert into itens_pedido_pizza (item_pedido_id, estabelecimento_id, tamanho_nome, sabor_um_nome, sabor_dois_nome, regra_meio_a_meio, preco_calculado) values ($1,$2,$3,$4,$5,$6,$7)`, [itensCriados[0].id, sessao.estabelecimentoId, pizzaSnapshot.tamanhoNome, pizzaSnapshot.saborUmNome, pizzaSnapshot.saborDoisNome, pizzaSnapshot.regraMeioAMeio, precoPizza]);
         for (const opcao of opcoes) {

@@ -9,6 +9,8 @@ import { imagemPadraoPorProduto } from "@/lib/imagens-categoria";
 import { FichaTecnica } from "./FichaTecnica";
 import { OpcoesProduto } from "./OpcoesProduto";
 import { PizzaConfiguracao } from "./PizzaConfiguracao";
+import { PizzaSaborFicha } from "./PizzaSaborFicha";
+import { CategoriaChips, CategoriaColuna } from "@/components/ui/CategoriaChips";
 
 const GRADIENTE_CORAL = "linear-gradient(120deg, var(--color-coral-600), var(--color-coral-500), var(--color-mango-500))";
 const CAMPO_CLASSE =
@@ -40,6 +42,20 @@ function calcular(produto: Produto): Produto {
 export function PrecificacaoCalculadora() {
   const { dados, setDados, recarregar } = usePolling<Produto[]>("/api/produtos", 15000);
   const lista = dados ?? [];
+  // Sabor de pizza aberto na ficha da direita (nome vazio = novo sabor).
+  // Só pizzas mostram a configuração de tamanhos e sabores; nos demais produtos ela fica escondida atrás de um botão.
+  const [pizzaLiberadaPara, setPizzaLiberadaPara] = useState<string | null>(null);
+  const [saborAberto, setSaborAberto] = useState<{ produtoId: string; nome: string } | null>(null);
+  const [categoriaFiltro, setCategoriaFiltro] = useState("");
+  const [buscaProduto, setBuscaProduto] = useState("");
+  // Na ordem do cardápio (a API já traz os produtos pela ordem das categorias), não em ordem alfabética.
+  const categoriasDaLista = [...new Set(lista.map((produto) => produto.categoriaNome || "Sem categoria"))];
+  const itensCategorias = [{ valor: "", rotulo: "Todas", quantidade: lista.length }, ...categoriasDaLista.map((nome) => ({ valor: nome, rotulo: nome, quantidade: lista.filter((produto) => (produto.categoriaNome || "Sem categoria") === nome).length }))];
+  // Agrupa por categoria (pizzas, calzones, pastéis...) para a lista ficar organizada.
+  const listaFiltrada = lista
+    .filter((produto) => !categoriaFiltro || (produto.categoriaNome || "Sem categoria") === categoriaFiltro)
+    .filter((produto) => nomeProdutoComTamanho(produto).toLowerCase().includes(buscaProduto.trim().toLowerCase()) || (produto.pizzaSaboresLista ?? []).some((sabor) => sabor.nome.toLowerCase().includes(buscaProduto.trim().toLowerCase())))
+    .sort((a, b) => categoriasDaLista.indexOf(a.categoriaNome || "Sem categoria") - categoriasDaLista.indexOf(b.categoriaNome || "Sem categoria") || a.nome.localeCompare(b.nome, "pt-BR"));
   const [selecionadoIdManual, setSelecionadoIdManual] = useState("");
   const salvarTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [salvando, setSalvando] = useState(false);
@@ -142,26 +158,53 @@ export function PrecificacaoCalculadora() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1.2fr]">
           <div className="of-panel overflow-hidden">
             <p className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-ink-400">Cardápio</p>
-            <ul className="max-h-[420px] overflow-y-auto px-2 pb-2">
-              {lista.map((produto) => (
+            <div className="space-y-2 px-3 pb-2">
+              <input value={buscaProduto} onChange={(evento) => setBuscaProduto(evento.target.value)} placeholder="Buscar produto" aria-label="Buscar produto" className="of-field !min-h-10" />
+              <div className="lg:hidden"><CategoriaChips valor={categoriaFiltro} onChange={setCategoriaFiltro} itens={itensCategorias} /></div>
+            </div>
+            <div className="lg:flex">
+            <aside className="hidden max-h-[520px] w-44 shrink-0 overflow-y-auto border-r border-cream-100 p-2 lg:block"><CategoriaColuna itens={itensCategorias} valor={categoriaFiltro} onChange={setCategoriaFiltro} /></aside>
+            <ul className="max-h-[420px] min-w-0 flex-1 overflow-y-auto px-2 pb-2 lg:max-h-[520px]">
+              {!listaFiltrada.length && <li className="px-3 py-6 text-center text-xs text-ink-500">Nenhum produto encontrado. Tente outra categoria ou busca.</li>}
+              {listaFiltrada.map((produto, indice) => (
                 <li key={produto.id}>
+                  {(produto.categoriaNome || "Sem categoria") !== (listaFiltrada[indice - 1]?.categoriaNome || (indice ? "Sem categoria" : undefined)) && <p className="px-3 pb-1 pt-3 text-[10px] font-bold uppercase tracking-[.14em] text-coral-600">{produto.categoriaNome || "Sem categoria"}</p>}
                   <button
-                    onClick={() => setSelecionadoIdManual(produto.id)}
+                    onClick={() => { setSelecionadoIdManual(produto.id); setSaborAberto(null); }}
                     className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition-all ${
                       produto.id === selecionadoId ? "bg-coral-050 font-semibold text-coral-600" : "text-ink-600 hover:bg-cream-100"
                     }`}
                   >
                     <span>
                       {nomeProdutoComTamanho(produto)}
-                      <span className="ml-2 text-xs text-ink-400">{produto.categoriaNome}</span>
+                      {produto.tipoProduto === "pizza" && <span className="ml-2 text-xs font-medium text-ink-400">{produto.pizzaSabores ?? 0} sabores{produto.pizzaTamanhos ? ` · ${produto.pizzaTamanhos}` : ""}</span>}
                     </span>
                     <span className="font-medium">R$ {produto.precoVenda.toFixed(2).replace(".", ",")}</span>
                   </button>
+                  {produto.tipoProduto === "pizza" && !!produto.pizzaSaboresLista?.length && (
+                    <ul className="mb-2 ml-4 border-l border-cream-200 pl-2">
+                      {produto.pizzaSaboresLista
+                        .filter((sabor) => !buscaProduto.trim() || sabor.nome.toLowerCase().includes(buscaProduto.trim().toLowerCase()) || nomeProdutoComTamanho(produto).toLowerCase().includes(buscaProduto.trim().toLowerCase()))
+                        .map((sabor) => (
+                          <li key={sabor.nome}>
+                            <button onClick={() => { setSelecionadoIdManual(produto.id); setSaborAberto({ produtoId: produto.id, nome: sabor.nome }); }} className={`flex w-full items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left text-xs transition ${saborAberto?.produtoId === produto.id && saborAberto.nome.toLowerCase() === sabor.nome.toLowerCase() ? "bg-coral-050 font-semibold text-coral-700" : "text-ink-600 hover:bg-cream-100"}`}>
+                              <span className="font-medium">{sabor.nome}</span>
+                              <span className="shrink-0 text-ink-400">{Object.entries(sabor.precos).map(([tamanho, preco]) => `${tamanho} ${preco.toFixed(0)}`).join(" · ")}</span>
+                            </button>
+                          </li>
+                        ))}
+                      <li><button onClick={() => { setSelecionadoIdManual(produto.id); setSaborAberto({ produtoId: produto.id, nome: "" }); }} className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-coral-600 hover:bg-coral-050"><Plus size={13} /> Novo sabor</button></li>
+                    </ul>
+                  )}
                 </li>
               ))}
             </ul>
+            </div>
           </div>
 
+          {saborAberto && saborAberto.produtoId === selecionado.id ? (
+            <PizzaSaborFicha key={`${saborAberto.produtoId}:${saborAberto.nome}`} produtoId={saborAberto.produtoId} nomeSabor={saborAberto.nome} onFechar={() => setSaborAberto(null)} onSalvo={(nomeFinal) => { recarregar(); setSaborAberto(nomeFinal ? { produtoId: saborAberto.produtoId, nome: nomeFinal } : null); }} />
+          ) : (
           <div className="of-panel p-4 sm:p-5">
             <div className="mb-4 flex items-start justify-between">
               <div>
@@ -247,8 +290,11 @@ export function PrecificacaoCalculadora() {
 
             <FichaTecnica produtoId={selecionado.id} />
             <OpcoesProduto produtoId={selecionado.id} />
-            <PizzaConfiguracao produtoId={selecionado.id} tipoProduto={selecionado.tipoProduto} onSalvo={recarregar} />
+            {selecionado.tipoProduto === "pizza" || pizzaLiberadaPara === selecionado.id
+              ? <PizzaConfiguracao produtoId={selecionado.id} tipoProduto={selecionado.tipoProduto} onSalvo={recarregar} />
+              : <button type="button" onClick={() => setPizzaLiberadaPara(selecionado.id)} className="mt-4 w-full rounded-2xl border border-dashed border-cream-300 px-4 py-3 text-left text-xs text-ink-500 transition hover:border-coral-300 hover:text-ink-700"><b className="block text-sm text-ink-700">Este produto é uma pizza?</b>Toque aqui para configurar tamanhos (P, M, G) e sabores. Os outros produtos não precisam disso.</button>}
           </div>
+          )}
         </div>
       )}
 
@@ -288,12 +334,13 @@ interface ItemRevisao {
   precoVenda: string;
   categoriaNome: string;
   tiposPao: string;
+  precosPorPao: { pao: string; preco: number }[];
 }
 interface PizzaRevisao {
   chave: string; incluir: boolean; nome: string; categoriaNome: string; descricao: string;
   regraMeioAMeio: "maior_valor" | "media" | "preco_fixo";
   tamanhos: { nome: string; precoSaborUnico: number; precoMeioAMeio: number | null }[];
-  sabores: { nome: string; descricao: string; acrescimo: number }[];
+  sabores: { nome: string; descricao: string; acrescimo: number; precos?: Record<string, number> }[];
 }
 
 function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; onCriados: (ids: string[]) => void }) {
@@ -347,7 +394,7 @@ function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; 
       setEtapa("selecionar");
       return;
     }
-    const extraidos: { nome: string; tamanho: "P" | "M" | "G" | null; descricao: string; precoVenda: number; categoriaSugerida: string; tiposPao?: string[] }[] = corpo.itens ?? [];
+    const extraidos: { nome: string; tamanho: "P" | "M" | "G" | null; descricao: string; precoVenda: number; categoriaSugerida: string; tiposPao?: string[]; precosPorPao?: { pao: string; preco: number }[] }[] = corpo.itens ?? [];
     setItens(
       extraidos.slice().sort((a, b) => a.categoriaSugerida.localeCompare(b.categoriaSugerida, "pt-BR") || a.nome.localeCompare(b.nome, "pt-BR")).map((item, indice) => ({
         chave: `${indice}-${item.nome}`,
@@ -358,6 +405,7 @@ function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; 
         precoVenda: item.precoVenda.toFixed(2).replace(".", ","),
         categoriaNome: item.categoriaSugerida,
         tiposPao: (item.tiposPao ?? []).join(", "),
+        precosPorPao: item.precosPorPao ?? [],
       })),
     );
     const pizzasExtraidas: { nome: string; categoriaSugerida: string; descricao: string; regraMeioAMeio: PizzaRevisao["regraMeioAMeio"]; tamanhos: PizzaRevisao["tamanhos"]; sabores: PizzaRevisao["sabores"] }[] = corpo.pizzas ?? [];
@@ -391,6 +439,7 @@ function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; 
           precoVenda: numeroDaMoeda(item.precoVenda),
           categoriaNome: item.categoriaNome,
           tiposPao: item.tiposPao.split(",").map((tipo) => tipo.trim()).filter(Boolean),
+          precosPorPao: item.precosPorPao,
         })),
         pizzas: pizzasSelecionadas.map((pizza) => ({ nome: pizza.nome, categoriaNome: pizza.categoriaNome, descricao: pizza.descricao, regraMeioAMeio: pizza.regraMeioAMeio, tamanhos: pizza.tamanhos, sabores: pizza.sabores })),
       }),
@@ -506,7 +555,7 @@ function ImportarCardapioModal({ onFechar, onCriados }: { onFechar: () => void; 
                           </div>
                           <input value={item.categoriaNome} onChange={(e) => atualizarItem(item.chave, "categoriaNome", e.target.value)} placeholder="Categoria" list="categorias-existentes" className={`${CAMPO_CLASSE} !py-2 flex-1 text-xs`} />
                         </div>
-                        <input value={item.tiposPao} onChange={(e) => atualizarItem(item.chave, "tiposPao", e.target.value)} placeholder="Tipos de pão (ex.: Bola, Brioche, Árabe) — deixe vazio se não houver" className={`${CAMPO_CLASSE} !py-2 text-xs`} />
+                        <input value={item.tiposPao} onChange={(e) => atualizarItem(item.chave, "tiposPao", e.target.value)} placeholder="Tipos de pão (ex.: Bola, Brioche, Árabe) — deixe vazio se não houver" className={`${CAMPO_CLASSE} !py-2 text-xs`} />{item.precosPorPao.length > 0 && <p className="mt-1 text-[11px] font-semibold text-coral-700">O pão define o preço: {item.precosPorPao.map((entrada) => `${entrada.pao} R$ ${entrada.preco.toFixed(2).replace(".", ",")}`).join(" · ")}</p>}
                       </div>
                       <button onClick={() => removerItem(item.chave)} aria-label="Remover item" className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-ink-400 transition hover:bg-danger-050 hover:text-danger-600">
                         <Trash2 size={14} />

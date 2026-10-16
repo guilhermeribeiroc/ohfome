@@ -116,6 +116,8 @@ export interface ItemPedido {
   produtoId: string;
   produtoNome: string;
   produtoTamanho?: TamanhoProduto | null;
+  /** Categoria do produto (Sanduíche, Salgado...), impressa antes do nome na comanda. */
+  categoriaNome?: string | null;
   quantidade: number;
   precoUnitario: number;
   observacoes?: string;
@@ -189,6 +191,10 @@ export interface Produto {
   controlaEstoqueUnidades?: boolean;
   estoqueDisponivel?: number | null;
   tipoProduto?: "padrao" | "pizza";
+  /** Só em pizza configurável: quantos sabores ativos e quais tamanhos tem. */
+  pizzaSabores?: number;
+  pizzaTamanhos?: string | null;
+  pizzaSaboresLista?: { id: string; nome: string; imagemUrl?: string | null; precos: Record<string, number> }[];
 }
 
 export interface Categoria {
