@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import Lenis from "@studio-freight/lenis";
 import {
@@ -1170,6 +1170,8 @@ export function CardapioPublico({ slug }: { slug: string }) {
       {overlay === "produto" && produtoSelecionado && (
         <ProdutoDetalhe
           produto={produtoSelecionado}
+          outrasPizzas={dados.produtos.filter((item) => item.tipoProduto === "pizza" && item.pizza && item.id !== produtoSelecionado.id)}
+          nomeDaPizza={dados.produtos.find((item) => item.id === produtoSelecionado.id)?.nome}
           onFechar={fecharOverlay}
           onAdicionar={(args) => adicionarAoCarrinho(produtoSelecionado, args)}
           disponivel={cardapioDisponivel && !(produtoSelecionado.controlaEstoqueUnidades && (produtoSelecionado.estoqueDisponivel ?? 0) <= 0)}
@@ -1562,12 +1564,16 @@ function usePainelAcessivel(onFechar: () => void) {
 
 function ProdutoDetalhe({
   produto,
+  outrasPizzas = [],
+  nomeDaPizza,
   onFechar,
   onAdicionar,
   disponivel,
   motivoIndisponivel,
 }: {
   produto: ProdutoPublico;
+  outrasPizzas?: ProdutoPublico[];
+  nomeDaPizza?: string;
   onFechar: () => void;
   onAdicionar: (args: { quantidade: number; opcoes: OpcaoEscolhida[]; pizza?: PizzaEscolhida; observacao: string }) => void;
   disponivel: boolean;
@@ -1592,6 +1598,18 @@ function ProdutoDetalhe({
   const tamanhoAceitaMeio = tamanhoEscolhido ? tamanhoEscolhido.permiteMeioAMeio !== false : true;
   const primeiroSaborId = pizzaSaboresEscolhidos[0];
   const primeiroSabor = pizzaSabores.find((item) => item.id === primeiroSaborId);
+  // Outra metade pode vir de outra pizza (ex.: metade salgada, metade doce) que tenha um tamanho com o mesmo nome.
+  const nomeIgual = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const outraMetadeDeOutrasPizzas = !produto.saborFixoId || !tamanhoEscolhido ? [] : outrasPizzas
+    .flatMap((outra) => {
+      const tamanho = outra.pizza?.tamanhos.find((item) => nomeIgual(item.nome, tamanhoEscolhido.nome));
+      if (!outra.pizza || !tamanho || tamanho.permiteMeioAMeio === false) return [];
+      return outra.pizza.sabores
+        .filter((sabor) => sabor.permiteMeioAMeio !== false && (!sabor.precos || !Object.keys(sabor.precos).length || sabor.precos[tamanho.id] !== undefined))
+        .map((sabor) => ({ sabor, tamanho, pizzaNome: outra.nome }));
+    })
+    .filter((item) => !saborFixo || !nomeIgual(item.sabor.nome, saborFixo.nome))
+    .filter((item, indice, todos) => todos.findIndex((outro) => nomeIgual(outro.pizzaNome, item.pizzaNome) && nomeIgual(outro.sabor.nome, item.sabor.nome)) === indice);
   const podeSerSegundoSabor = (sabor: PizzaSaborPublico) =>
     tamanhoAceitaMeio && sabor.permiteMeioAMeio !== false && primeiroSabor?.permiteMeioAMeio !== false;
 
@@ -1618,10 +1636,13 @@ function ProdutoDetalhe({
     if (!ehPizza) return null;
     const tamanho = pizzaTamanhos.find((item) => item.id === pizzaTamanhoId);
     const saborUm = pizzaSabores.find((item) => item.id === pizzaSaboresEscolhidos[0]);
-    const saborDois = pizzaSaboresEscolhidos[1] ? pizzaSabores.find((item) => item.id === pizzaSaboresEscolhidos[1]) : null;
+    const saborDoisLocal = pizzaSaboresEscolhidos[1] ? pizzaSabores.find((item) => item.id === pizzaSaboresEscolhidos[1]) : null;
+    const saborDoisDeOutra = pizzaSaboresEscolhidos[1] && !saborDoisLocal ? outraMetadeDeOutrasPizzas.find((item) => item.sabor.id === pizzaSaboresEscolhidos[1]) : null;
+    const saborDois = saborDoisLocal ?? saborDoisDeOutra?.sabor ?? null;
     if (!tamanho || !saborUm) return null;
+    if (pizzaSaboresEscolhidos[1] && !saborDois) return null;
     const valorUm = valorSaborNoTamanho(tamanho, saborUm);
-    const valorDois = saborDois ? valorSaborNoTamanho(tamanho, saborDois) : null;
+    const valorDois = saborDois ? valorSaborNoTamanho(saborDoisDeOutra?.tamanho ?? tamanho, saborDois) : null;
     const regra = produto.pizza?.regraMeioAMeio ?? "maior_valor";
     const preco = !saborDois ? valorUm : regra === "maior_valor" ? Math.max(valorUm, valorDois!) : regra === "media" ? (valorUm + valorDois!) / 2 : (tamanho.precoMeioAMeio ?? Math.max(valorUm, valorDois!));
     return { tamanhoId: tamanho.id, tamanhoNome: tamanho.nome, saborUmId: saborUm.id, saborUmNome: saborUm.nome, saborDoisId: saborDois?.id, saborDoisNome: saborDois?.nome, preco };
@@ -1774,16 +1795,26 @@ function ProdutoDetalhe({
                       {querMeio && (
                         <div className="mt-3 space-y-2">
                           <span className="text-[10px] font-semibold uppercase tracking-[.08em] text-black/40">Escolha a outra metade</span>
-                          {pizzaSabores.filter((sabor) => sabor.id !== produto.saborFixoId && sabor.permiteMeioAMeio !== false && produto.pizza && tamanhosDoSabor(produto.pizza, sabor).some((tamanho) => tamanho.id === tamanhoEscolhido.id)).map((sabor) => {
+                          {[
+                            ...pizzaSabores
+                              .filter((sabor) => sabor.id !== produto.saborFixoId && sabor.permiteMeioAMeio !== false && produto.pizza && tamanhosDoSabor(produto.pizza, sabor).some((tamanho) => tamanho.id === tamanhoEscolhido.id))
+                              .map((sabor) => ({ sabor, tamanho: tamanhoEscolhido, pizzaNome: "" })),
+                            ...outraMetadeDeOutrasPizzas,
+                          ].map((item, indice, lista) => {
+                            const { sabor } = item;
                             const marcado = pizzaSaboresEscolhidos[1] === sabor.id;
+                            const novoGrupo = lista.length > 0 && outraMetadeDeOutrasPizzas.length > 0 && (indice === 0 || lista[indice - 1].pizzaNome !== item.pizzaNome);
                             return (
-                              <button key={sabor.id} type="button" onClick={() => setPizzaSaboresEscolhidos(produto.saborFixoId ? [produto.saborFixoId, sabor.id] : [sabor.id])} className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-3 text-left text-sm transition ${marcado ? "border-[#0e7775] bg-[#0e7775]/[.07]" : "border-black/[.08] bg-white"}`}>
-                                <span className="flex items-center gap-2.5">
-                                  <i className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-bold ${marcado ? "border-[#0e7775] bg-[#0e7775] text-white" : "border-black/20"}`}>{marcado && <Check size={12} strokeWidth={3} />}</i>
-                                  <span>{sabor.nome}{sabor.descricao && <span className="block text-[11px] font-normal text-black/45">{sabor.descricao}</span>}</span>
-                                </span>
-                                <span className="shrink-0 text-xs font-semibold text-black/50">{moeda(valorSaborNoTamanho(tamanhoEscolhido, sabor))}</span>
-                              </button>
+                              <Fragment key={sabor.id}>
+                                {novoGrupo && <span className="block pt-1 text-[10px] font-semibold uppercase tracking-[.08em] text-black/35">{item.pizzaNome || nomeDaPizza || "Esta pizza"}</span>}
+                                <button type="button" onClick={() => setPizzaSaboresEscolhidos(produto.saborFixoId ? [produto.saborFixoId, sabor.id] : [sabor.id])} className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-3 text-left text-sm transition ${marcado ? "border-[#0e7775] bg-[#0e7775]/[.07]" : "border-black/[.08] bg-white"}`}>
+                                  <span className="flex items-center gap-2.5">
+                                    <i className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-bold ${marcado ? "border-[#0e7775] bg-[#0e7775] text-white" : "border-black/20"}`}>{marcado && <Check size={12} strokeWidth={3} />}</i>
+                                    <span>{sabor.nome}{sabor.descricao && <span className="block text-[11px] font-normal text-black/45">{sabor.descricao}</span>}</span>
+                                  </span>
+                                  <span className="shrink-0 text-xs font-semibold text-black/50">{moeda(valorSaborNoTamanho(item.tamanho, sabor))}</span>
+                                </button>
+                              </Fragment>
                             );
                           })}
                         </div>

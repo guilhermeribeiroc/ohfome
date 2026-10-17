@@ -1791,6 +1791,10 @@ declare
   v_pizza_sabor_dois_acrescimo numeric(10,2);
   v_pizza_valor_um numeric(10,2);
   v_pizza_valor_dois numeric(10,2);
+  v_pizza_dois_produto_id uuid;
+  v_pizza_dois_tamanho_id uuid;
+  v_pizza_dois_preco_unico numeric(10,2);
+  v_pizza_dois_permite boolean;
   v_endereco text := nullif(btrim(coalesce(p_endereco, '')), '');
   v_observacoes text := nullif(btrim(coalesce(p_observacoes, '')), '');
   v_cpf text := nullif(btrim(coalesce(p_cpf, '')), '');
@@ -1977,18 +1981,37 @@ begin
         if exists (select 1 from pizza_sabores where id in (v_pizza_sabor_um_id, v_pizza_sabor_dois_id) and not permite_meio_a_meio) then
           raise exception 'Um dos sabores não pode ser combinado no meio a meio' using errcode = '22023';
         end if;
-        select nome, acrescimo into v_pizza_sabor_dois_nome, v_pizza_sabor_dois_acrescimo
-        from pizza_sabores where id = v_pizza_sabor_dois_id and produto_id = v_produto_id and ativo;
+        -- O 2º sabor pode ser de outra pizza ativa do estabelecimento (ex.: metade salgada, metade
+        -- doce), desde que essa pizza tenha um tamanho com o mesmo nome do escolhido.
+        select ps.nome, ps.acrescimo, ps.produto_id into v_pizza_sabor_dois_nome, v_pizza_sabor_dois_acrescimo, v_pizza_dois_produto_id
+        from pizza_sabores ps
+        join produtos pr on pr.id = ps.produto_id and pr.ativo and pr.estabelecimento_id = v_estabelecimento_id
+        where ps.id = v_pizza_sabor_dois_id and ps.ativo;
         if v_pizza_sabor_dois_nome is null then
           raise exception 'Sabor de pizza inválido' using errcode = '22023';
         end if;
+        if v_pizza_dois_produto_id = v_produto_id then
+          v_pizza_dois_tamanho_id := v_pizza_tamanho_id;
+          v_pizza_dois_preco_unico := v_pizza_preco_sabor_unico;
+        else
+          select pt.id, pt.preco_sabor_unico, pt.permite_meio_a_meio
+            into v_pizza_dois_tamanho_id, v_pizza_dois_preco_unico, v_pizza_dois_permite
+          from pizza_tamanhos pt
+          where pt.produto_id = v_pizza_dois_produto_id and lower(pt.nome) = lower(v_pizza_tamanho_nome) and pt.ativo;
+          if v_pizza_dois_tamanho_id is null then
+            raise exception 'Este sabor não é vendido neste tamanho' using errcode = '22023';
+          end if;
+          if not v_pizza_dois_permite then
+            raise exception 'Este tamanho de pizza não aceita meio a meio' using errcode = '22023';
+          end if;
+        end if;
         if exists (select 1 from pizza_sabor_precos where sabor_id = v_pizza_sabor_dois_id)
-           and not exists (select 1 from pizza_sabor_precos where sabor_id = v_pizza_sabor_dois_id and tamanho_id = v_pizza_tamanho_id) then
+           and not exists (select 1 from pizza_sabor_precos where sabor_id = v_pizza_sabor_dois_id and tamanho_id = v_pizza_dois_tamanho_id) then
           raise exception 'Este sabor não é vendido neste tamanho' using errcode = '22023';
         end if;
         v_pizza_valor_dois := coalesce(
-          (select preco from pizza_sabor_precos where sabor_id = v_pizza_sabor_dois_id and tamanho_id = v_pizza_tamanho_id),
-          v_pizza_preco_sabor_unico + v_pizza_sabor_dois_acrescimo);
+          (select preco from pizza_sabor_precos where sabor_id = v_pizza_sabor_dois_id and tamanho_id = v_pizza_dois_tamanho_id),
+          v_pizza_dois_preco_unico + v_pizza_sabor_dois_acrescimo);
         v_preco := case v_pizza_regra
           when 'media' then (v_pizza_valor_um + v_pizza_valor_dois) / 2
           when 'preco_fixo' then coalesce(v_pizza_preco_meio_a_meio, greatest(v_pizza_valor_um, v_pizza_valor_dois))
