@@ -292,10 +292,12 @@ function FechamentoEntregadoresModal({ onFechar }: { onFechar: () => void }) {
           <button onClick={onFechar} className="of-icon-btn" aria-label="Fechar"><X size={17} /></button>
         </header>
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
-          <div className="flex flex-wrap items-end gap-2">
-            {atalhos.map(([tipo, rotulo]) => <button key={tipo} type="button" onClick={() => setPeriodo(periodoPronto(tipo))} className="of-btn-secondary min-h-10 px-3 text-xs">{rotulo}</button>)}
-            <label className="text-[11px] font-semibold text-ink-500">De<input type="date" value={periodo.inicio} onChange={(evento) => setPeriodo((atual) => ({ ...atual, inicio: evento.target.value }))} className="of-field mt-1 !min-h-10" /></label>
-            <label className="text-[11px] font-semibold text-ink-500">Até<input type="date" value={periodo.fim} onChange={(evento) => setPeriodo((atual) => ({ ...atual, fim: evento.target.value }))} className="of-field mt-1 !min-h-10" /></label>
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">{atalhos.map(([tipo, rotulo]) => <button key={tipo} type="button" onClick={() => setPeriodo(periodoPronto(tipo))} className="of-btn-secondary min-h-10 px-3 text-xs">{rotulo}</button>)}</div>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-[11px] font-semibold text-ink-500">De<input type="date" value={periodo.inicio} onChange={(evento) => setPeriodo((atual) => ({ ...atual, inicio: evento.target.value }))} className="of-field mt-1 !min-h-10" /></label>
+              <label className="text-[11px] font-semibold text-ink-500">Até<input type="date" value={periodo.fim} onChange={(evento) => setPeriodo((atual) => ({ ...atual, fim: evento.target.value }))} className="of-field mt-1 !min-h-10" /></label>
+            </div>
           </div>
           {periodoInvalido && <p className="rounded-xl bg-danger-050 px-3 py-2 text-xs text-danger-700">A data inicial é maior que a final.</p>}
           {erro && <p className="rounded-xl bg-danger-050 px-3 py-2 text-xs text-danger-700">{erro}</p>}

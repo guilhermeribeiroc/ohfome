@@ -228,7 +228,7 @@ export function FinanceiroModule() {
       </div>
     </section>
 
-    <section className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <section className={`mt-5 grid gap-3 sm:grid-cols-2 ${resumo.taxasPix > 0 ? "xl:grid-cols-5" : "xl:grid-cols-4"}`}>
       <ResumoCard label="Vendas finalizadas" valor={resumo.vendasFinalizadas} icon={ArrowUpRight} tom="basil" />
       <ResumoCard label="Custo dos produtos" valor={resumo.custoProdutosVendidos} icon={ReceiptText} tom="amber" />
       <ResumoCard label="Saídas e custos fixos" valor={resumo.saidasAvulsas + resumo.custosFixosPeriodo} icon={ArrowDownRight} tom="coral" />

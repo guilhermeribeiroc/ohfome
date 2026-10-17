@@ -31,6 +31,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     || ((status === "saiu_para_entrega" || status === "finalizado") && sessaoPodeAcessarModulo(sessao, "delivery"));
   if (!podeAtualizarPedido) return respostaAcessoNegado();
 
+  try {
   const pedido = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     const { rows: existentes } = await client.query(
       `select status, tipo from pedidos where id = $1 for update`,
@@ -119,6 +120,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (!pedido) return NextResponse.json({ erro: "Pedido não encontrado." }, { status: 404 });
   if (pedido.conflito) return NextResponse.json({ erro: "Esta mudança de status não é permitida." }, { status: 409 });
   return NextResponse.json(pedido);
+  } catch (erro) {
+    // Sem isso, recusas esperadas (400/409) viravam 500 sem corpo e a tela não sabia explicar o motivo.
+    const status = (erro as { status?: number }).status ?? 500;
+    if (status === 500) console.error("PATCH /api/pedidos/[id]", erro);
+    return NextResponse.json({ erro: status < 500 ? (erro as Error).message : "Não foi possível atualizar o pedido." }, { status });
+  }
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
