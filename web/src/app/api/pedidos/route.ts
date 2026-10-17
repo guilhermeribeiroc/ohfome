@@ -373,6 +373,10 @@ export async function POST(request: NextRequest) {
         await client.query(`insert into entregas (pedido_id, endereco, bairro) values ($1, $2, $3)`, [pedidoId, endereco, bairroNome]);
       }
 
+      if (tipo !== "mesa" && formaPagamento === "dinheiro" && trocoPara > 0) {
+        const { rows: totais } = await client.query<{ total: string }>(`select total from pedidos where id = $1`, [pedidoId]);
+        if (trocoPara < Number(totais[0]?.total)) throw Object.assign(new Error(`O troco precisa ser para um valor igual ou maior que o total do pedido (R$ ${Number(totais[0]?.total).toFixed(2).replace(".", ",")}).`), { status: 400 });
+      }
       await client.query(`select fn_comprometer_estoque_pedido($1, 'comprometido')`, [pedidoId]);
       if (modalidade === "imediata" && !pixAutomatico) await client.query(`select fn_consumir_estoque_pedido($1)`, [pedidoId]);
       await client.query(

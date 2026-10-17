@@ -345,6 +345,9 @@ begin
   end if;
 
   select total into v_total from pedidos where id = v_pedido_id;
+  if v_troco_para is not null and p_forma_pagamento = 'dinheiro' and v_troco_para < v_total then
+    raise exception 'O troco precisa ser para um valor igual ou maior que o total do pedido' using errcode = '22023';
+  end if;
   if v_misto and abs(v_soma_partes - v_total) > 0.01 then
     raise exception 'A soma do pagamento dividido não bate com o total do pedido' using errcode = '22023';
   end if;

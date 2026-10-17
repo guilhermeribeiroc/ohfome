@@ -484,6 +484,8 @@ export function NovoPedidoCentralModal({ onFechar, onCriado, tipoInicial = "balc
     if (tipo === "retirada" && !cliente && !clienteNomeDigitado.trim()) { setErro("Informe o nome do cliente para a retirada."); return; }
     if (tipo === "mesa" && !mesaId) { setErro("Selecione a mesa."); return; }
     if (tipo === "balcao" && modalidade === "imediata" && !pixAutomatico && !confirmarRecebimento) { setErro("Confirme a entrega e o recebimento para concluir a venda imediata."); return; }
+    const totalDoPedido = subtotal + (tipo === "delivery" ? taxaEntrega : 0);
+    if (formaPagamento === "dinheiro" && trocoPara.trim() && Number(trocoPara.replace(",", ".")) < totalDoPedido) { setErro(`O troco precisa ser para um valor igual ou maior que o total (R$ ${totalDoPedido.toFixed(2).replace(".", ",")}).`); return; }
     setEnviando(true); setErro("");
     const resposta = await fetch("/api/pedidos", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": chaveIdempotencia }, body: JSON.stringify({
       tipo: tipo === "retirada" ? "balcao" : tipo, formaRecebimento: tipo === "retirada" ? "retirada" : undefined, mesaId: tipo === "mesa" ? mesaId : undefined, modalidade: tipo === "balcao" ? modalidade : "preparo", confirmarRecebimento: tipo === "balcao" && modalidade === "imediata" && !pixAutomatico && confirmarRecebimento, formaPagamento: tipo !== "mesa" ? formaPagamento : undefined, tipoCartao: formaPagamento === "cartao" ? tipoCartao : undefined, trocoPara: formaPagamento === "dinheiro" && trocoPara.trim() ? Number(trocoPara.replace(",", ".")) : undefined, pixAutomatico: formaPagamento === "pix" && pixAutomatico, observacoes: observacoes.trim() || undefined,
