@@ -2014,6 +2014,9 @@ function CarrinhoSheet({
   const [observacoes, setObservacoes] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
+  const erroRef = useRef<HTMLParagraphElement>(null);
+  // O formulário rola dentro do modal: sem isso o aviso nascia fora da vista e o botão parecia quebrado.
+  useEffect(() => { if (erro) erroRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }); }, [erro]);
   const itens = Object.values(carrinho)
     .map((item) => ({
       chave: item.chave,
@@ -2089,6 +2092,10 @@ function CarrinhoSheet({
       setErro("Informe o valor para o qual precisa de troco.");
       return;
     }
+    if (!dividirPagamento && formaPagamento === "dinheiro" && precisaTroco && numeroDaMoeda(trocoPara) < totalComTaxa) {
+      setErro(`O troco precisa ser para um valor igual ou maior que o total do pedido (${moeda(totalComTaxa)}).`);
+      return;
+    }
     if (dividirPagamento) {
       if (formaPagamento === forma2Efetiva) {
         setErro("As duas formas de pagamento precisam ser diferentes.");
@@ -2104,6 +2111,14 @@ function CarrinhoSheet({
       }
       if (precisaTroco2 && numeroDaMoeda(trocoPara2) <= 0) {
         setErro("Informe o valor para o qual precisa de troco na 2ª parte.");
+        return;
+      }
+      if (formaPagamento === "dinheiro" && precisaTroco && numeroDaMoeda(trocoPara) < valorParte1Numero) {
+        setErro(`O troco da 1ª parte precisa ser igual ou maior que ${moeda(valorParte1Numero)}.`);
+        return;
+      }
+      if (forma2Efetiva === "dinheiro" && precisaTroco2 && numeroDaMoeda(trocoPara2) < valorParte2Numero) {
+        setErro(`O troco da 2ª parte precisa ser igual ou maior que ${moeda(valorParte2Numero)}.`);
         return;
       }
     }
@@ -2519,7 +2534,7 @@ function CarrinhoSheet({
                 </div>
               )}
               {erro && (
-                <p role="alert" className="rounded-xl bg-red-500/10 p-3 text-xs text-red-700">
+                <p ref={erroRef} role="alert" className="rounded-xl bg-red-500/10 p-3 text-xs text-red-700">
                   {erro}
                 </p>
               )}
@@ -2653,7 +2668,7 @@ function CarrinhoSheet({
                     <div className="flex items-center justify-between"><b className="text-sm">Resumo do pedido</b><span className="text-xs text-black/45">{itens.reduce((soma, item) => soma + item.quantidade, 0)} item(ns)</span></div>
                     <div className="mt-3 space-y-2 text-xs text-black/60">{itens.map((item) => <div key={item.chave} className="flex justify-between gap-3"><span className="min-w-0 truncate">{item.quantidade}× {item.produto.nome}{detalhesItemTexto(item) ? ` (${detalhesItemTexto(item)})` : ""}</span><span>{moeda(item.precoUnitario * item.quantidade)}</span></div>)}</div>
                   </div>
-                  {erro && <p role="alert" className="rounded-xl bg-red-500/10 p-3 text-xs text-red-700">{erro}</p>}
+                  {erro && <p ref={erroRef} role="alert" className="rounded-xl bg-red-500/10 p-3 text-xs text-red-700">{erro}</p>}
                 </>
               )}
             </div>
@@ -3438,9 +3453,10 @@ function montarMensagemAcompanhamento(pedido: PedidoStatusPublico) {
                           className="menu-field pl-9 text-sm"
                         />
                       </div>
+                      <p className="mb-2 text-[11px] leading-4 text-black/45">Itens que pedem uma escolha (como pizza ou o pão do sanduíche) não aparecem aqui — faça um novo pedido para eles.</p>
                       <div className="max-h-56 space-y-2 overflow-y-auto">
                         {produtos
-                          .filter((produto) => produto.tipoProduto !== "pizza" && nomeProdutoExibicao(produto).toLowerCase().includes(buscaAdicional.toLowerCase()))
+                          .filter((produto) => produto.tipoProduto !== "pizza" && !(produto.grupoOpcoes ?? []).some((grupo) => grupo.minimoSelecoes > 0 || grupo.definePreco) && nomeProdutoExibicao(produto).toLowerCase().includes(buscaAdicional.toLowerCase()))
                           .slice(0, 20)
                           .map((produto) => {
                             const qtd = itensAdicionar[produto.id] ?? 0;
