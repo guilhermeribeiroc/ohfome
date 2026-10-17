@@ -29,7 +29,7 @@ export async function buscarContexto(estabelecimentoId: string, usuarioId: strin
       `select e.id, e.nome, e.tipo, e.tipo_comida as "tipoComida", e.slug, e.demonstracao,
               e.onboarding_concluido as "onboardingConcluido",
               coalesce(
-                array_agg(em.modulo) filter (where em.modulo is not null),
+                array_agg(em.modulo::text) filter (where em.modulo is not null),
                 array[]::text[]
               ) as "modulosAtivos",
               u.id as "usuarioId", u.nome as "usuarioNome", u.usuario as "usuarioUsuario", u.role as "usuarioRole"

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, CalendarDays, CalendarPlus, CircleDollarSign, Minus, Plus, ReceiptText, Search, Trash2, Truck, UtensilsCrossed, WalletCards, X, type LucideIcon } from "lucide-react";
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, CalendarDays, CalendarPlus, CircleDollarSign, Download, Minus, Plus, ReceiptText, Search, Trash2, Truck, UtensilsCrossed, WalletCards, X, type LucideIcon } from "lucide-react";
 import type { CustoFixo, FinanceiroTipo, MovimentoFinanceiro, Produto, ResumoFinanceiro, VendaFinanceira } from "@/lib/types";
 import { nomeProdutoComTamanho } from "@/lib/types";
 import { mascararMoeda, moedaComCentavos, numeroDaMoeda } from "@/lib/moeda";
@@ -190,7 +190,10 @@ export function FinanceiroModule() {
       {erroPeriodo && <p className="mt-2 text-xs font-medium text-coral-600">{erroPeriodo}</p>}
       {erroCarregamento && <p className="mt-3 text-xs font-medium text-coral-600">{erroCarregamento}</p>}
     </div>
-      <button onClick={() => setVendaRetroativaAberta(true)} className="of-btn-secondary w-full sm:w-auto"><CalendarPlus size={16} /> Lançar venda de outro dia</button>
+      <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+        <a href={`/api/financeiro/relatorio?${new URLSearchParams(intervalo).toString()}`} download className="of-btn-secondary w-full sm:w-auto"><Download size={16} /> Baixar relatório</a>
+        <button onClick={() => setVendaRetroativaAberta(true)} className="of-btn-secondary w-full sm:w-auto"><CalendarPlus size={16} /> Lançar venda de outro dia</button>
+      </div>
     </header>
 
     {!!pendentesAntigos?.pedidos.length && (
