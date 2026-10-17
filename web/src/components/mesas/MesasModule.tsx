@@ -67,6 +67,7 @@ export function MesasModule() {
   const [precisaTrocoPorMesa, setPrecisaTrocoPorMesa] = useState<Record<string, boolean>>({});
   const [trocoPorMesa, setTrocoPorMesa] = useState<Record<string, string>>({});
   const [enviando, setEnviando] = useState(false);
+  const [erroLancamento, setErroLancamento] = useState("");
   const [enviados, setEnviados] = useState<Record<string, boolean>>({});
   const [gerenciarAberto, setGerenciarAberto] = useState(false);
   const [busca, setBusca] = useState("");
@@ -143,7 +144,12 @@ export function MesasModule() {
       }),
     });
     setEnviando(false);
-    if (!res.ok) return;
+    if (!res.ok) {
+      const dados = await res.json().catch(() => null) as { erro?: string } | null;
+      setErroLancamento(dados?.erro ?? "Não foi possível lançar o pedido.");
+      return;
+    }
+    setErroLancamento("");
 
     setItensPorMesa((atual) => ({ ...atual, [mesaAbertaId]: [] }));
     setObsPorMesa((atual) => ({ ...atual, [mesaAbertaId]: "" }));
@@ -338,6 +344,7 @@ export function MesasModule() {
               </span>
             </div>
             {trocoAtualInvalido && <p className="mb-2 text-xs font-medium text-coral-600">Informe o valor que o cliente vai pagar.</p>}
+            {erroLancamento && <p role="alert" className="mb-2 rounded-xl bg-danger-050 px-3 py-2 text-xs font-medium text-danger-700">{erroLancamento}</p>}
             <div className="flex gap-2"><button onClick={() => imprimirComanda()} className="of-btn-secondary min-h-12 shrink-0 px-4" aria-label="Imprimir comanda"><Printer size={17} /><span className="hidden sm:inline">Imprimir</span></button><button onClick={lancarPedido} disabled={itensAtuais.length === 0 || enviando || trocoAtualInvalido} className="of-btn-primary flex-1">{enviando ? "Lançando..." : enviados[mesaAbertaId ?? ""] ? <><Check size={17} /> Pedido lançado</> : <>Lançar pedido <ArrowRight size={17} /></>}</button></div>
           </div>
         </div>
