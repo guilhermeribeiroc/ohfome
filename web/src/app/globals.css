@@ -158,9 +158,19 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .cardapio-theme [class*="bg-[#f4eee6]"] { background-color: var(--color-cream-100) !important; }
 .cardapio-theme [class*="bg-[#181714]"] { background-color: var(--color-ink-900) !important; }
 .cardapio-theme [class*="text-[#181714]"] { color: var(--color-ink-900) !important; }
-.cardapio-theme [class*="bg-[#0e7775]"] { background-color: var(--color-coral-600) !important; }
+.cardapio-theme [class*="bg-[#0e7775]"]:not([class*="bg-[#0e7775]/"]) { background-color: var(--color-coral-600) !important; }
+/* Variantes translúcidas (bg-[#0e7775]/5 etc.) precisam continuar translúcidas, na cor do tema;
+   senão viram coral sólido e o texto da mesma cor some. */
+.cardapio-theme [class*="bg-[#0e7775]/5"], .cardapio-theme [class*="bg-[#0e7775]/[.05]"] { background-color: rgba(201,67,41,.05) !important; }
+.cardapio-theme [class*="bg-[#0e7775]/[.07]"] { background-color: rgba(201,67,41,.07) !important; }
+.cardapio-theme [class*="bg-[#0e7775]/10"] { background-color: rgba(201,67,41,.10) !important; }
 .cardapio-theme [class*="text-[#0e7775]"] { color: var(--color-coral-600) !important; }
-.cardapio-theme [class*="border-[#0e7775]"] { border-color: var(--color-coral-600) !important; }
+.cardapio-theme [class*="border-[#0e7775]"]:not([class*="border-[#0e7775]/"]) { border-color: var(--color-coral-600) !important; }
+.cardapio-theme [class*="border-[#0e7775]/15"] { border-color: rgba(201,67,41,.15) !important; }
+.cardapio-theme [class*="border-[#0e7775]/20"] { border-color: rgba(201,67,41,.20) !important; }
+.cardapio-theme [class*="border-[#0e7775]/35"] { border-color: rgba(201,67,41,.35) !important; }
+.cardapio-theme [class*="border-[#0e7775]/40"] { border-color: rgba(201,67,41,.40) !important; }
+.cardapio-theme [class*="border-[#0e7775]/45"] { border-color: rgba(201,67,41,.45) !important; }
 .cardapio-theme [class*="ring-[#0e7775]"] { --tw-ring-color: rgba(201,67,41,.14) !important; }
 .cardapio-theme [class*="shadow-[#0e7775]"] { --tw-shadow-color: rgba(201,67,41,.24) !important; }
 .cardapio-theme [class*="bg-[#941c42]"] { background-color: var(--color-coral-500) !important; }
