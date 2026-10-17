@@ -2024,7 +2024,7 @@ function CarrinhoSheet({
       quantidade: item.quantidade,
       opcoes: item.opcoes,
       pizza: item.pizza,
-      observacoes: item.observacao.trim(),
+      observacoes: item.observacao,
       precoUnitario: item.pizza ? item.pizza.preco : precoComOpcoes(dados.produtos.find((produto) => produto.id === item.produtoId)?.precoVenda ?? 0, item.opcoes),
     }))
     .filter(
@@ -2164,7 +2164,7 @@ function CarrinhoSheet({
         itens: itens.map((item) => ({
           produtoId: item.produto.id,
           quantidade: item.quantidade,
-          observacoes: item.observacoes || undefined,
+          observacoes: item.observacoes.trim() || undefined,
           opcoes: item.opcoes.map((opcao) => ({ grupoId: opcao.grupoId, opcaoId: opcao.opcaoId })),
           pizza: item.pizza ? { tamanhoId: item.pizza.tamanhoId, saborUmId: item.pizza.saborUmId, saborDoisId: item.pizza.saborDoisId } : undefined,
         })),
@@ -2220,7 +2220,7 @@ function CarrinhoSheet({
       "*Itens:*",
       ...itens.map(
         (item) =>
-          `${item.quantidade}× ${nomeProdutoExibicao(item.produto)}${detalhesItemTexto(item) ? ` (${detalhesItemTexto(item)})` : ""} — ${moeda(item.precoUnitario * item.quantidade)}${item.observacoes ? `\n   Obs.: ${item.observacoes}` : ""}`,
+          `${item.quantidade}× ${nomeProdutoExibicao(item.produto)}${detalhesItemTexto(item) ? ` (${detalhesItemTexto(item)})` : ""} — ${moeda(item.precoUnitario * item.quantidade)}${item.observacoes.trim() ? `\n   Obs.: ${item.observacoes.trim()}` : ""}`,
       ),
       "",
       `*Total:* ${moeda(totalComTaxa)}`,
