@@ -5,6 +5,7 @@ import { KanbanBoard } from "@/components/pedidos/KanbanBoard";
 import { PrecificacaoCalculadora } from "@/components/estoque/PrecificacaoCalculadora";
 import { EditorBannerCardapio } from "@/components/site/EditorBannerCardapio";
 import { useTenant } from "@/lib/tenant-context";
+import { EXEMPLO_CELULAR, formatarWhatsappBrasil, normalizarWhatsappBrasil } from "@/lib/whatsapp";
 import { Check, Clipboard, ExternalLink, Globe2, ImagePlus, Link2, MessageCircle, PackageOpen, Trash2, Upload } from "lucide-react";
 
 const ABAS = [
@@ -29,6 +30,8 @@ export function SiteModule() {
   const [whatsappAtendimento, setWhatsappAtendimento] = useState("");
   const [salvandoWhatsapp, setSalvandoWhatsapp] = useState(false);
   const [erroWhatsapp, setErroWhatsapp] = useState("");
+  const [whatsappTocado, setWhatsappTocado] = useState(false);
+  const validacaoWhatsapp = whatsappAtendimento.trim() ? normalizarWhatsappBrasil(whatsappAtendimento) : null;
 
   const dominioPublicoConfigurado = normalizarDominioPublico(process.env.NEXT_PUBLIC_CARDAPIO_DOMINIO ?? "");
   const link = estabelecimento
@@ -57,7 +60,7 @@ export function SiteModule() {
       .then(async (resposta) => {
         const dados = await resposta.json().catch(() => null);
         if (!resposta.ok) throw new Error(dados?.erro ?? "Não foi possível carregar o WhatsApp.");
-        setWhatsappAtendimento(dados?.whatsappAtendimento ?? "");
+        setWhatsappAtendimento(formatarWhatsappBrasil(dados?.whatsappAtendimento ?? ""));
       })
       .catch((erro: unknown) => setErroWhatsapp(erro instanceof Error ? erro.message : "Não foi possível carregar o WhatsApp."));
   }, []);
@@ -103,13 +106,15 @@ export function SiteModule() {
   }
 
   async function salvarWhatsapp() {
+    setWhatsappTocado(true);
+    if (validacaoWhatsapp && !validacaoWhatsapp.ok) return;
     setSalvandoWhatsapp(true);
     setErroWhatsapp("");
     try {
       const resposta = await fetch("/api/estabelecimento/whatsapp", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ whatsappAtendimento }) });
       const dados = await resposta.json().catch(() => null);
       if (!resposta.ok) throw new Error(dados?.erro ?? "Não foi possível salvar o WhatsApp.");
-      setWhatsappAtendimento(dados?.whatsappAtendimento ?? "");
+      setWhatsappAtendimento(formatarWhatsappBrasil(dados?.whatsappAtendimento ?? ""));
     } catch (erro) {
       setErroWhatsapp(erro instanceof Error ? erro.message : "Não foi possível salvar o WhatsApp.");
     } finally {
@@ -164,8 +169,8 @@ export function SiteModule() {
 
       <section className="mb-6 rounded-[1.4rem] border border-ink-200/80 bg-white p-5 shadow-sm sm:p-6">
         <div className="flex items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-basil-50 text-basil-700"><MessageCircle size={19} /></span><div><h2 className="font-display text-lg font-semibold tracking-[-.035em]">WhatsApp de atendimento</h2><p className="mt-0.5 text-xs leading-5 text-ink-500">Após registrar o pedido, o cliente é direcionado ao seu WhatsApp com todos os dados preenchidos.</p></div></div>
-        <div className="mt-4 flex flex-col gap-2 sm:flex-row"><input value={whatsappAtendimento} onChange={(evento) => setWhatsappAtendimento(evento.target.value)} inputMode="tel" placeholder="5511999999999" className="min-h-11 flex-1 rounded-xl border border-ink-200 bg-cream-50/50 px-3 text-sm outline-none transition focus:border-basil-500 focus:ring-4 focus:ring-basil-500/10" /><button onClick={() => void salvarWhatsapp()} disabled={salvandoWhatsapp} className="min-h-11 rounded-xl bg-ink-900 px-4 text-xs font-semibold text-white transition hover:bg-ink-800 disabled:opacity-50">{salvandoWhatsapp ? "Salvando..." : "Salvar WhatsApp"}</button></div>
-        {erroWhatsapp ? <p className="mt-2 text-xs text-red-600">{erroWhatsapp}</p> : <p className="mt-2 text-xs text-ink-400">Informe com DDI e DDD. Ex.: 55 11 99999-9999.</p>}
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row"><input value={whatsappAtendimento} onChange={(evento) => { setWhatsappAtendimento(formatarWhatsappBrasil(evento.target.value)); setErroWhatsapp(""); }} onBlur={() => setWhatsappTocado(true)} inputMode="tel" autoComplete="tel-national" placeholder={EXEMPLO_CELULAR} aria-label="WhatsApp de atendimento" aria-invalid={whatsappTocado && validacaoWhatsapp?.ok === false} className="min-h-11 flex-1 rounded-xl border border-ink-200 bg-cream-50/50 px-3 text-sm outline-none transition focus:border-basil-500 focus:ring-4 focus:ring-basil-500/10 aria-[invalid=true]:border-red-400" /><button onClick={() => void salvarWhatsapp()} disabled={salvandoWhatsapp || validacaoWhatsapp?.ok === false} className="min-h-11 rounded-xl bg-ink-900 px-4 text-xs font-semibold text-white transition hover:bg-ink-800 disabled:opacity-50">{salvandoWhatsapp ? "Salvando..." : "Salvar WhatsApp"}</button></div>
+        {erroWhatsapp ? <p role="alert" className="mt-2 text-xs text-red-600">{erroWhatsapp}</p> : whatsappTocado && validacaoWhatsapp?.ok === false ? <p role="alert" className="mt-2 text-xs text-red-600">{validacaoWhatsapp.erro}</p> : <p className="mt-2 text-xs text-ink-400">Informe o celular com DDD, sem o 55. Ex.: (88) 99999-1234. Use o número que recebe mensagens no WhatsApp.</p>}{validacaoWhatsapp?.ok && <a href={`https://wa.me/${validacaoWhatsapp.numero}`} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-basil-700 underline-offset-2 hover:underline"><ExternalLink size={12} /> Testar no WhatsApp</a>}
       </section>
 
       <EditorBannerCardapio />

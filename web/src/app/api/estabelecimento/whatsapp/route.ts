@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { autenticarRequisicao, respostaNaoAutenticado } from "@/lib/api-auth";
 import { comEstabelecimento } from "@/lib/db";
 import type { SessionPayload } from "@/lib/session";
+import { normalizarWhatsappBrasil } from "@/lib/whatsapp";
 
 async function administradorDaRequisicao(request: NextRequest): Promise<SessionPayload | null> {
   const sessao = await autenticarRequisicao(request);
@@ -33,9 +34,12 @@ export async function PATCH(request: NextRequest) {
   const sessao = await administradorDaRequisicao(request);
   if (!sessao) return semPermissao();
   const body = await request.json().catch(() => null);
-  const numero = typeof body?.whatsappAtendimento === "string" ? body.whatsappAtendimento.replace(/\D/g, "") : "";
-  if (numero && (numero.length < 10 || numero.length > 15)) {
-    return NextResponse.json({ erro: "Informe o WhatsApp com DDI e DDD. Ex.: 5511999999999." }, { status: 400 });
+  const informado = typeof body?.whatsappAtendimento === "string" ? body.whatsappAtendimento.trim() : "";
+  let numero = "";
+  if (informado) {
+    const validado = normalizarWhatsappBrasil(informado);
+    if (!validado.ok) return NextResponse.json({ erro: validado.erro }, { status: 400 });
+    numero = validado.numero;
   }
   const salvo = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     const { rows } = await client.query(

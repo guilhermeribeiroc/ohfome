@@ -98,25 +98,51 @@ export async function POST(request: NextRequest) {
   if (!sessao) return respostaNaoAutenticado();
 
   const body = await request.json().catch(() => null);
-  const tipo = body?.tipo;
-  const mesaId = body?.mesaId;
-  const clienteNome = typeof body?.clienteNome === "string" ? body.clienteNome.trim() : undefined;
-  const clienteNomeAvulso = typeof body?.clienteNomeAvulso === "string" ? body.clienteNomeAvulso.trim().slice(0, 80) || null : null;
+  // Adicional de um pedido já feito: vira um pedido novo ligado ao original (mesmo padrão das rodadas
+  // da mesa), para a cozinha imprimir só o que foi acrescentado. O tipo, o cliente, a mesa, o endereço
+  // e a forma de pagamento vêm do pedido original, nunca da tela.
+  const pedidoPaiInformado = typeof body?.pedidoPaiId === "string" ? body.pedidoPaiId : null;
+  const pai = pedidoPaiInformado ? await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
+    const { rows } = await client.query<{
+      id: string; raizId: string; tipo: string; status: string; clienteId: string | null; comandaId: string | null; comandaStatus: string | null; mesaId: string | null;
+      formaRecebimento: string | null; formaPagamento: string | null; tipoCartao: string | null; pixAutomatico: boolean; endereco: string | null; bairro: string | null;
+    }>(
+      `select p.id, coalesce(p.pedido_pai_id, p.id) as "raizId", p.tipo, p.status, p.cliente_id as "clienteId", p.comanda_id as "comandaId", cm.status as "comandaStatus", cm.mesa_id as "mesaId",
+              p.forma_recebimento as "formaRecebimento", p.forma_pagamento as "formaPagamento", p.tipo_cartao as "tipoCartao",
+              exists (select 1 from pagamentos_pix px where px.pedido_id = p.id) as "pixAutomatico",
+              en.endereco, en.bairro
+         from pedidos p
+         left join comandas cm on cm.id = p.comanda_id
+         left join entregas en on en.pedido_id = p.id
+        where p.id = $1`,
+      [pedidoPaiInformado]
+    );
+    return rows[0] ?? null;
+  }) : null;
+  if (pedidoPaiInformado && !pai) return NextResponse.json({ erro: "Pedido original não encontrado." }, { status: 404 });
+  if (pai?.status === "cancelado") return NextResponse.json({ erro: "Não é possível adicionar itens a um pedido cancelado." }, { status: 409 });
+  if (pai?.tipo === "mesa" && pai.comandaStatus !== "aberta") return NextResponse.json({ erro: "A comanda desta mesa já foi fechada. Abra um novo pedido para a mesa." }, { status: 409 });
+  if (pai?.tipo === "delivery" && !pai.endereco) return NextResponse.json({ erro: "O pedido original não tem endereço de entrega." }, { status: 409 });
+  const tipo = pai ? pai.tipo : body?.tipo;
+  const mesaId = pai ? pai.mesaId : body?.mesaId;
+  const clienteNome = pai ? undefined : typeof body?.clienteNome === "string" ? body.clienteNome.trim() : undefined;
+  const clienteNomeAvulso = pai ? null : typeof body?.clienteNomeAvulso === "string" ? body.clienteNomeAvulso.trim().slice(0, 80) || null : null;
   const observacoesPedido = typeof body?.observacoes === "string" ? body.observacoes.trim().slice(0, 500) || null : null;
-  const clienteIdInformado = typeof body?.clienteId === "string" ? body.clienteId : undefined;
-  const clienteTelefone = typeof body?.clienteTelefone === "string" ? body.clienteTelefone.replace(/\D/g, "") || null : null;
-  const endereco = typeof body?.endereco === "string" ? body.endereco.trim() : undefined;
-  const bairroId = typeof body?.bairroId === "string" ? body.bairroId : undefined;
+  const clienteIdInformado = pai ? pai.clienteId ?? undefined : typeof body?.clienteId === "string" ? body.clienteId : undefined;
+  const clienteTelefone = pai ? null : typeof body?.clienteTelefone === "string" ? body.clienteTelefone.replace(/\D/g, "") || null : null;
+  const endereco = pai ? pai.endereco ?? undefined : typeof body?.endereco === "string" ? body.endereco.trim() : undefined;
+  const bairroId = pai ? undefined : typeof body?.bairroId === "string" ? body.bairroId : undefined;
   const itensInput: ItemInput[] = Array.isArray(body?.itens) ? body.itens : [];
-  const formaPagamento = body?.formaPagamento;
-  const tipoCartao = body?.tipoCartao;
-  const trocoPara = Number(body?.trocoPara);
-  const modalidade = body?.modalidade === "imediata" ? "imediata" : "preparo";
+  // Adicional herda a forma do original (menos "misto" e Pix automático, que se acertam em "Alterar pagamento").
+  const formaPagamento = pai ? (pai.formaPagamento && pai.formaPagamento !== "misto" && !pai.pixAutomatico ? pai.formaPagamento : undefined) : body?.formaPagamento;
+  const tipoCartao = pai ? pai.tipoCartao : body?.tipoCartao;
+  const trocoPara = pai ? NaN : Number(body?.trocoPara);
+  const modalidade = !pai && body?.modalidade === "imediata" ? "imediata" : "preparo";
   const confirmarRecebimento = body?.confirmarRecebimento === true;
-  const atualizarCliente = body?.atualizarCliente === true;
-  const formaRecebimento = tipo === "balcao" && body?.formaRecebimento === "retirada" ? "retirada" : null;
-  const whatsappConsentimento = body?.whatsappConsentimento === true;
-  const pixAutomatico = body?.pixAutomatico === true;
+  const atualizarCliente = !pai && body?.atualizarCliente === true;
+  const formaRecebimento = tipo === "balcao" && (pai ? pai.formaRecebimento : body?.formaRecebimento) === "retirada" ? "retirada" : null;
+  const whatsappConsentimento = !pai && body?.whatsappConsentimento === true;
+  const pixAutomatico = !pai && body?.pixAutomatico === true;
   const chaveIdempotencia = request.headers.get("Idempotency-Key") ?? (typeof body?.chaveIdempotencia === "string" ? body.chaveIdempotencia : randomUUID());
 
   if (tipo !== "mesa" && tipo !== "balcao" && tipo !== "delivery") {
@@ -130,10 +156,10 @@ export async function POST(request: NextRequest) {
   if (tipo === "mesa" && typeof mesaId !== "string") {
     return NextResponse.json({ erro: "Informe a mesa." }, { status: 400 });
   }
-  if (tipo === "delivery" && ((!clienteNome && !clienteIdInformado) || !endereco || !bairroId)) {
+  if (tipo === "delivery" && !pai && ((!clienteNome && !clienteIdInformado) || !endereco || !bairroId)) {
     return NextResponse.json({ erro: "Informe cliente, endereço e bairro para delivery." }, { status: 400 });
   }
-  if (formaRecebimento === "retirada" && !clienteNome && !clienteIdInformado) {
+  if (formaRecebimento === "retirada" && !pai && !clienteNome && !clienteIdInformado) {
     return NextResponse.json({ erro: "Selecione o cliente para a retirada." }, { status: 400 });
   }
   if (modalidade === "imediata" && tipo !== "balcao") return NextResponse.json({ erro: "Venda imediata é exclusiva do balcão." }, { status: 400 });
@@ -165,7 +191,7 @@ export async function POST(request: NextRequest) {
   try {
     const criado = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
       const hashConteudo = createHash("sha256").update(JSON.stringify({
-        tipo, mesaId, observacoesPedido, clienteIdInformado, clienteNome, clienteNomeAvulso, clienteTelefone, endereco, bairroId, itens: itensValidos,
+        tipo, mesaId, pedidoPaiId: pai?.raizId ?? null, observacoesPedido, clienteIdInformado, clienteNome, clienteNomeAvulso, clienteTelefone, endereco, bairroId, itens: itensValidos,
         formaPagamento, tipoCartao, trocoPara: Number.isFinite(trocoPara) ? trocoPara : null, modalidade,
         formaRecebimento, whatsappConsentimento, pixAutomatico,
       })).digest("hex");
@@ -190,7 +216,9 @@ export async function POST(request: NextRequest) {
       }
 
       let comandaId: string | null = null;
-      if (tipo === "mesa") {
+      if (pai && tipo === "mesa") {
+        comandaId = pai.comandaId;
+      } else if (tipo === "mesa") {
         // A busca da mesa passa pela RLS de "mesas": se o mesaId nao for
         // desta tenant, vem vazio e barra aqui, antes de tocar em comandas
         // (que nao tem RLS propria, so o vinculo com a mesa).
@@ -249,7 +277,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      let bairroNome: string | null = null;
+      let bairroNome: string | null = pai?.bairro ?? null;
       let taxaEntrega = 0;
       if (tipo === "delivery" && bairroId) {
         const { rows: bairroRows } = await client.query(
@@ -262,8 +290,8 @@ export async function POST(request: NextRequest) {
       }
 
       const { rows: pedidoRows } = await client.query(
-        `insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, comanda_id, cliente_id, usuario_id, taxa_entrega, forma_pagamento, tipo_cartao, troco_para, modalidade_atendimento, pagamento_status, forma_recebimento, whatsapp_consentimento, cliente_nome_avulso, observacoes)
-         values ($1, $2, 'presencial', $3, $4, case when $4 then now() else null end, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        `insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, comanda_id, cliente_id, usuario_id, taxa_entrega, forma_pagamento, tipo_cartao, troco_para, modalidade_atendimento, pagamento_status, forma_recebimento, whatsapp_consentimento, cliente_nome_avulso, observacoes, pedido_pai_id)
+         values ($1, $2, 'presencial', $3, $4, case when $4 then now() else null end, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
          returning id`,
         [
           sessao.estabelecimentoId, tipo,
@@ -275,7 +303,7 @@ export async function POST(request: NextRequest) {
           modalidade, modalidade === "imediata" && !pixAutomatico ? "pago" : "pendente",
           formaRecebimento, whatsappConsentimento && clienteId !== null,
           clienteId ? null : clienteNomeAvulso,
-          observacoesPedido,
+          observacoesPedido, pai?.raizId ?? null,
         ]
       );
       const pedidoId = pedidoRows[0].id;

@@ -34,8 +34,10 @@ const MENSAGEM_POR_STATUS: Record<StatusPedidoWhatsApp, (codigo: number, nome: s
   finalizado: (codigo, nome) => `Seu pedido #${codigo} na ${nome} foi finalizado. Obrigado!`,
 };
 
+// A API do WhatsApp exige o código do país; o telefone do cliente é guardado só com DDD + número.
 function normalizarTelefone(telefone: string): string {
-  return telefone.replace(/\D/g, "");
+  const digitos = telefone.replace(/\D/g, "");
+  return digitos.length === 10 || digitos.length === 11 ? `55${digitos}` : digitos;
 }
 
 function montarTexto(statusPedido: StatusPedidoWhatsApp, tipo: string | null, formaRecebimento: string | null, codigo: number, nome: string): string {

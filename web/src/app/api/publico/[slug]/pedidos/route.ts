@@ -3,14 +3,17 @@ import { randomUUID } from "crypto";
 import { comEstabelecimento, queryPublico } from "@/lib/db";
 import { accessTokenDoEstabelecimento, criarCobrancaPixMercadoPago, emailTecnicoPix, MercadoPagoErro } from "@/lib/mercado-pago";
 import { ipClienteConfiavel, limitado } from "@/lib/rate-limit";
+import { normalizarTelefoneCliente } from "@/lib/whatsapp";
 
-const EMAIL_TELEFONE_MIN = 8;
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const body = await request.json().catch(() => null);
   const clienteNome = typeof body?.clienteNome === "string" ? body.clienteNome.trim() : "";
-  const telefone = typeof body?.telefone === "string" ? body.telefone.trim() : "";
+  const telefoneInformado = typeof body?.telefone === "string" ? body.telefone.trim() : "";
+  const telefoneValidado = normalizarTelefoneCliente(telefoneInformado);
+  // Só DDD + número, sem 55: é assim que o cliente é identificado nos pedidos seguintes.
+  const telefone = telefoneValidado.ok ? telefoneValidado.numero : "";
   const enderecoInformado = typeof body?.endereco === "string" ? body.endereco.trim() : "";
   const rua = typeof body?.rua === "string" ? body.rua.trim() : "";
   const numeroEndereco = typeof body?.numero === "string" ? body.numero.trim() : "";
@@ -39,14 +42,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const precisaEmailTecnicoPix = formaPagamento === "pix" || pagamentoDividido?.some((parte) => parte.forma === "pix");
 
   const ip = ipClienteConfiavel(request);
-  const limiteTelefone = await limitado("pedido-publico:telefone", `${slug}:${telefone}`);
+  const limiteTelefone = await limitado("pedido-publico:telefone", `${slug}:${telefoneInformado}`);
   const limiteIp = ip ? await limitado("pedido-publico:ip", ip) : false;
   if (limiteTelefone || limiteIp) {
     return NextResponse.json({ erro: "Muitos pedidos em pouco tempo. Aguarde um instante." }, { status: 429 });
   }
 
   if (clienteNome.length < 2) return NextResponse.json({ erro: "Informe seu nome." }, { status: 400 });
-  if (telefone.length < EMAIL_TELEFONE_MIN) return NextResponse.json({ erro: "Informe um telefone válido." }, { status: 400 });
+  if (!telefoneValidado.ok) return NextResponse.json({ erro: telefoneValidado.erro }, { status: 400 });
   if (!formaRecebimento) return NextResponse.json({ erro: "Escolha entre entrega ou retirada." }, { status: 400 });
   if (!formaPagamento) return NextResponse.json({ erro: "Escolha a forma de pagamento." }, { status: 400 });
   if (formaPagamento === "cartao" && !tipoCartao) return NextResponse.json({ erro: "Escolha crédito ou débito." }, { status: 400 });

@@ -29,6 +29,7 @@ import { OhFomeMark } from "@/components/ui/OhFomeLogo";
 import { SEGMENTOS } from "@/lib/tenant-types";
 import { mascararMoeda, numeroDaMoeda } from "@/lib/moeda";
 import { usePolling } from "@/lib/use-polling";
+import { EXEMPLO_CELULAR, formatarWhatsappBrasil, normalizarTelefoneCliente } from "@/lib/whatsapp";
 import { Bell, ChefHat, PackageCheck, PackageSearch } from "lucide-react";
 
 interface OpcaoPublica {
@@ -1279,7 +1280,6 @@ export function CardapioPublico({ slug }: { slug: string }) {
         <PedidoSheet
           slug={slug}
           pedidoId={pedidoAtivo.id}
-          produtos={dados.produtos}
           numeroWhatsapp={numeroWhatsapp}
           onFechar={fecharOverlay}
         />
@@ -2057,8 +2057,13 @@ function CarrinhoSheet({
   ].filter(Boolean).join(" · ");
 
   function validarDados() {
-    if (!nome.trim() || telefone.trim().length < 8) {
+    if (!nome.trim()) {
       setErro("Preencha seu nome e WhatsApp.");
+      return false;
+    }
+    const telefoneValidado = normalizarTelefoneCliente(telefone);
+    if (!telefoneValidado.ok) {
+      setErro(telefone.trim() ? telefoneValidado.erro : "Preencha seu nome e WhatsApp.");
       return false;
     }
     if (entregaSelecionada && !bairroId) {
@@ -2441,8 +2446,10 @@ function CarrinhoSheet({
                 <Campo label="WhatsApp">
                   <input
                     value={telefone}
-                    onChange={(evento) => setTelefone(evento.target.value)}
-                    placeholder="(00) 00000-0000"
+                    onChange={(evento) => setTelefone(formatarWhatsappBrasil(evento.target.value))}
+                    inputMode="tel"
+                    autoComplete="tel-national"
+                    placeholder={EXEMPLO_CELULAR}
                     className="menu-field"
                   />
                 </Campo>
@@ -3134,19 +3141,6 @@ interface PedidoStatusPublico {
   adicionais?: AdicionalPublico[];
 }
 
-// "Já saiu pra entrega" (ou, na retirada, "já ficou pronto") é o corte: a
-// partir daí o pedido pode estar a caminho ou já nas mãos do cliente, então
-// não faz mais sentido lançar itens novos como se fossem chegar junto.
-function podeAdicionarItens(
-  status: PedidoStatusPublico["status"],
-  formaRecebimento: PedidoStatusPublico["formaRecebimento"],
-) {
-  if (status === "finalizado" || status === "cancelado") return false;
-  if (formaRecebimento === "entrega" && status === "saiu_para_entrega") return false;
-  if (formaRecebimento === "retirada" && status === "pronto") return false;
-  return true;
-}
-
 const ETAPAS_PEDIDO: {
   status: PedidoStatusPublico["status"];
   label: string;
@@ -3162,13 +3156,11 @@ const ETAPAS_PEDIDO: {
 function PedidoSheet({
   slug,
   pedidoId,
-  produtos,
   numeroWhatsapp,
   onFechar,
 }: {
   slug: string;
   pedidoId: string;
-  produtos: ProdutoPublico[];
   numeroWhatsapp: string;
   onFechar: () => void;
 }) {
@@ -3179,51 +3171,7 @@ function PedidoSheet({
   );
   const statusAnteriorRef = useRef<PedidoStatusPublico["status"] | null>(null);
   const [avisoStatus, setAvisoStatus] = useState<string | null>(null);
-  const [adicionarAberto, setAdicionarAberto] = useState(false);
-  const [buscaAdicional, setBuscaAdicional] = useState("");
-  const [itensAdicionar, setItensAdicionar] = useState<Record<string, number>>({});
-  const [obsAdicional, setObsAdicional] = useState("");
-  const [enviandoAdicional, setEnviandoAdicional] = useState(false);
-  const [erroAdicional, setErroAdicional] = useState("");
-
-  function ajustarAdicional(produtoId: string, delta: number) {
-    setItensAdicionar((atual) => {
-      const proximaQtd = (atual[produtoId] ?? 0) + delta;
-      const proximo = { ...atual };
-      if (proximaQtd <= 0) delete proximo[produtoId];
-      else proximo[produtoId] = proximaQtd;
-      return proximo;
-    });
-  }
-
-  const totalItensAdicionar = Object.values(itensAdicionar).reduce((soma, qtd) => soma + qtd, 0);
-
-  async function enviarAdicional() {
-    if (totalItensAdicionar === 0) return;
-    setEnviandoAdicional(true);
-    setErroAdicional("");
-    const resposta = await fetch(`/api/publico/${slug}/pedidos/${pedidoId}/itens`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        itens: Object.entries(itensAdicionar).map(([produtoId, quantidade]) => ({ produtoId, quantidade })),
-        observacoes: obsAdicional.trim() || undefined,
-      }),
-    });
-    setEnviandoAdicional(false);
-    if (!resposta.ok) {
-      const corpo = await resposta.json().catch(() => null);
-      setErroAdicional(corpo?.erro ?? "Não foi possível adicionar os itens.");
-      return;
-    }
-    setItensAdicionar({});
-    setObsAdicional("");
-    setBuscaAdicional("");
-    setAdicionarAberto(false);
-    void recarregar();
-  }
-
-function montarMensagemAcompanhamento(pedido: PedidoStatusPublico) {
+  function montarMensagemAcompanhamento(pedido: PedidoStatusPublico) {
     const etapaAtual = ETAPAS_PEDIDO.find((etapa) => etapa.status === pedido.status)?.label ?? pedido.status;
     const linhas = [
       `Olá! Estou acompanhando meu pedido *#${pedido.codigo}*.`,
@@ -3420,93 +3368,16 @@ function montarMensagemAcompanhamento(pedido: PedidoStatusPublico) {
                 </div>
               ))}
 
-              <div className="mt-4">
-                {podeAdicionarItens(dados.status, dados.formaRecebimento) ? (
-                  !adicionarAberto ? (
-                    <button
-                      type="button"
-                      onClick={() => setAdicionarAberto(true)}
-                      className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[#0e7775]/40 bg-[#0e7775]/5 py-3.5 text-sm font-semibold text-[#0e7775] transition active:scale-[.98]"
-                    >
-                      <Plus size={16} /> Adicionar mais itens a este pedido
-                    </button>
-                  ) : (
-                    <div className="rounded-2xl border border-black/[.08] bg-white/60 p-4">
-                      <div className="mb-3 flex items-center justify-between">
-                        <b className="text-sm">Adicionar itens</b>
-                        <button
-                          type="button"
-                          onClick={() => { setAdicionarAberto(false); setItensAdicionar({}); setErroAdicional(""); setBuscaAdicional(""); }}
-                          className="text-xs font-semibold text-black/40"
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                      <div className="relative mb-3">
-                        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-black/35" />
-                        <input
-                          value={buscaAdicional}
-                          onChange={(evento) => setBuscaAdicional(evento.target.value)}
-                          placeholder="Buscar item do cardápio"
-                          className="menu-field pl-9 text-sm"
-                        />
-                      </div>
-                      <p className="mb-2 text-[11px] leading-4 text-black/45">Itens que pedem uma escolha (como pizza ou o pão do sanduíche) não aparecem aqui — faça um novo pedido para eles.</p>
-                      <div className="max-h-56 space-y-2 overflow-y-auto">
-                        {produtos
-                          .filter((produto) => produto.tipoProduto !== "pizza" && !(produto.grupoOpcoes ?? []).some((grupo) => grupo.minimoSelecoes > 0 || grupo.definePreco) && nomeProdutoExibicao(produto).toLowerCase().includes(buscaAdicional.toLowerCase()))
-                          .slice(0, 20)
-                          .map((produto) => {
-                            const qtd = itensAdicionar[produto.id] ?? 0;
-                            return (
-                              <div
-                                key={produto.id}
-                                className={`flex items-center justify-between gap-2 rounded-xl border p-2.5 ${qtd > 0 ? "border-[#0e7775]/40 bg-[#0e7775]/5" : "border-black/[.06] bg-white"}`}
-                              >
-                                <div className="min-w-0">
-                                  <p className="truncate text-xs font-medium text-black/80">{nomeProdutoExibicao(produto)}</p>
-                                  <p className="text-[11px] text-black/45">{moeda(produto.precoVenda)}</p>
-                                </div>
-                                <div className="flex shrink-0 items-center gap-2">
-                                  <button type="button" onClick={() => ajustarAdicional(produto.id, -1)} className="flex h-8 w-8 items-center justify-center rounded-full bg-black/[.05]" aria-label={`Remover ${produto.nome}`}>
-                                    <Minus size={13} />
-                                  </button>
-                                  <span className="w-4 text-center text-xs font-bold">{qtd}</span>
-                                  <button type="button" onClick={() => ajustarAdicional(produto.id, 1)} className="flex h-8 w-8 items-center justify-center rounded-full bg-[#181714] text-white" aria-label={`Adicionar ${produto.nome}`}>
-                                    <Plus size={13} />
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                      </div>
-                      {erroAdicional && <p role="alert" className="mt-2 text-xs font-medium text-red-600">{erroAdicional}</p>}
-                      <button
-                        type="button"
-                        onClick={enviarAdicional}
-                        disabled={totalItensAdicionar === 0 || enviandoAdicional}
-                        className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0e7775] text-sm font-semibold text-white transition active:scale-[.98] disabled:opacity-50"
-                      >
-                        {enviandoAdicional ? "Enviando..." : totalItensAdicionar > 0 ? `Enviar ${totalItensAdicionar} item(ns) adicional(is)` : "Escolha ao menos 1 item"}
-                      </button>
-                      <p className="mt-2 text-center text-[11px] text-black/40">Esse valor é cobrado junto na entrega/retirada.</p>
-                    </div>
-                  )
-                ) : (
-                  <div className="rounded-2xl border border-black/[.08] bg-white/50 p-3.5 text-xs leading-5 text-black/50">
-                    {dados.formaRecebimento === "entrega"
-                      ? "Seu pedido já saiu para entrega — não é mais possível adicionar itens."
-                      : dados.formaRecebimento === "retirada"
-                        ? "Seu pedido já está pronto para retirada — não é mais possível adicionar itens."
-                        : "Não é mais possível adicionar itens a este pedido."}
-                    {linkWhatsappPedido && (
-                      <a href={linkWhatsappPedido} target="_blank" rel="noopener noreferrer" className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-[#0e7775]">
-                        <MessageCircle size={13} /> Falar com o estabelecimento
-                      </a>
-                    )}
-                  </div>
-                )}
-              </div>
+              {dados.status !== "finalizado" && (
+                <div className="mt-4 rounded-2xl border border-black/[.08] bg-white/50 p-3.5 text-xs leading-5 text-black/55">
+                  Para incluir mais itens ou mudar a forma de pagamento, fale com o estabelecimento.
+                  {linkWhatsappPedido && (
+                    <a href={linkWhatsappPedido} target="_blank" rel="noopener noreferrer" className="mt-2 flex items-center gap-1.5 font-semibold text-[#0e7775]">
+                      <MessageCircle size={13} /> Falar com o estabelecimento
+                    </a>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
