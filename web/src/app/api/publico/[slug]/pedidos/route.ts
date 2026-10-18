@@ -145,6 +145,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (detalhes.code === "P0002") {
       return NextResponse.json({ erro: "Cardápio não encontrado." }, { status: 404 });
     }
+    if (detalhes.code === "22023" && detalhes.message?.startsWith("O Pix só é aceito")) {
+      return NextResponse.json({ erro: detalhes.message }, { status: 409 });
+    }
     return NextResponse.json({ erro: "Não foi possível enviar o pedido. Confira os itens e tente novamente." }, { status: 400 });
   }
 }

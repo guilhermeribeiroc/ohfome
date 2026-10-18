@@ -2190,7 +2190,7 @@ function CarrinhoSheet({
     }
     function textoForma(forma: "cartao" | "dinheiro" | "pix", tipo: "credito" | "debito", troco: boolean, valorTroco: string) {
       if (forma === "cartao") return `Cartão · ${tipo === "credito" ? "Crédito" : "Débito"}`;
-      if (forma === "pix") return "Pix na entrega";
+      if (forma === "pix") return "Pix (pago pelo QR Code)";
       return troco ? `Dinheiro · troco para ${moeda(numeroDaMoeda(valorTroco))}` : "Dinheiro";
     }
     const pagamento = dividirPagamento
@@ -2198,7 +2198,7 @@ function CarrinhoSheet({
       : formaPagamento === "cartao"
         ? `Cartão · ${tipoCartao === "credito" ? "Crédito" : "Débito"}`
         : formaPagamento === "pix"
-          ? "Pix na entrega"
+          ? "Pix (pago pelo QR Code)"
           : "Dinheiro";
     const mensagem = [
       `Olá! Acabei de fazer o pedido *#${pedido.codigo}* pelo cardápio digital.`,
@@ -2793,9 +2793,7 @@ function CarrinhoSheet({
                   </div>
                 ) : (
                   <div className="mt-2 rounded-2xl border border-coral-100 bg-coral-050 p-3 text-sm leading-5 text-black/65">
-                    {dados.pix?.modo === "mercado_pago"
-                      ? "Você verá um QR Code Pix válido por 30 minutos. O pedido só seguirá para a cozinha e será impresso depois da confirmação do pagamento."
-                      : "O Pix será pago na entrega. A equipe receberá seu pedido agora e confirmará o pagamento depois."}
+                    Você verá um QR Code Pix válido por 30 minutos. O pedido só seguirá para a cozinha e será impresso depois da confirmação do pagamento.
                   </div>
                 )}
               </Campo>

@@ -1078,6 +1078,11 @@ begin
     return new;
   end if;
 
+  -- Pedido do cardápio digital ainda não liberado (Pix aguardando pagamento): não avisa o cliente.
+  if new.origem = 'app' and not new.enviado_cozinha then
+    return new;
+  end if;
+
   select e.whatsapp_automacao_ativa into v_automacao_ativa
   from estabelecimentos e where e.id = new.estabelecimento_id;
 
@@ -1099,7 +1104,7 @@ end;
 $$ language plpgsql;
 
 create trigger trg_pedidos_notificacao_whatsapp
-  after insert or update of status on pedidos
+  after insert or update of status, enviado_cozinha on pedidos
   for each row execute function enfileirar_notificacao_whatsapp();
 
 -- Desativar a automacao ignora pendencias existentes (mantendo o historico);
@@ -1881,6 +1886,11 @@ begin
     where estabelecimento_id = v_estabelecimento_id and ativo;
     if v_pix_modo is null then
       raise exception 'Pix não está disponível neste cardápio' using errcode = '22023';
+    end if;
+    -- Pix no cardápio digital só vale com pagamento na hora (QR Code). Sem isso o pedido iria direto para a
+    -- cozinha com o Pix "para pagar depois" (Pix na entrega), o que não é aceito.
+    if v_pix_modo <> 'mercado_pago' then
+      raise exception 'O Pix só é aceito com pagamento na hora pelo QR Code. Escolha outra forma de pagamento.' using errcode = '22023';
     end if;
     if v_pix_modo = 'mercado_pago' then
       if v_email is null or position('@' in v_email) < 2 or position('.' in split_part(v_email, '@', 2)) < 2 then

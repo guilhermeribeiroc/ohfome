@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
        join pedidos p on p.id = en.pedido_id
        left join clientes c on c.id = p.cliente_id
        where p.status <> 'cancelado'
+         and not (p.origem = 'app' and not p.enviado_cozinha) -- entrega do cardápio só aparece depois de liberada (Pix pago)
          and (en.status not in ('entregue', 'cancelada')
               or en.created_at > now() - interval '12 hours')
        order by en.created_at desc`

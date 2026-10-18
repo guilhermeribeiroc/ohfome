@@ -67,6 +67,7 @@ export async function GET(request: NextRequest) {
     const { rows } = await client.query(
       `${PEDIDOS_ATIVOS_QUERY}
        where p.status not in ('finalizado', 'cancelado')
+         and not (p.origem = 'app' and not p.enviado_cozinha) -- pedido do cardápio só aparece depois de liberado (Pix pago)
          and ($1::pedido_origem is null or p.origem = $1)
        order by p.created_at asc`,
       [origem]
