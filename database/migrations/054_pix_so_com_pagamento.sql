@@ -399,23 +399,6 @@ begin
 end;
 $$ language plpgsql;
 
-create trigger trg_pedidos_notificacao_whatsapp
-  after insert or update of status on pedidos
-  for each row execute function enfileirar_notificacao_whatsapp();
-
--- Desativar a automacao ignora pendencias existentes (mantendo o historico);
--- reativar nao reenvia retroativamente, pois so novas transicoes passam pelo
--- trigger acima.
-create function fn_whatsapp_desativar_automacao(p_estabelecimento_id uuid) returns void
-language sql
-security invoker
-set search_path = public
-as $$
-  update notificacoes_whatsapp_pedido
-  set fila = 'ignored'
-  where estabelecimento_id = p_estabelecimento_id and fila = 'pending';
-$$;
-
 drop trigger if exists trg_pedidos_notificacao_whatsapp on pedidos;
 create trigger trg_pedidos_notificacao_whatsapp
   after insert or update of status, enviado_cozinha on pedidos
