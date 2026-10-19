@@ -2099,7 +2099,13 @@ begin
   return jsonb_build_object(
     'id', v_pedido_id,
     'codigo', v_codigo,
-    'total', v_total
+    'estabelecimentoId', v_estabelecimento_id,
+    'notificar', p_notificar_pedido,
+    'taxaEntrega', v_taxa_entrega,
+    'total', v_total,
+    'pixModo', case when p_forma_pagamento = 'pix' or v_valor_pix is not null then v_pix_modo else null end,
+    'valorPix', v_valor_pix,
+    'aguardandoPagamento', not v_enviar_cozinha
   );
 end;
 $$;
