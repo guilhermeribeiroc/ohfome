@@ -1887,11 +1887,8 @@ begin
     if v_pix_modo is null then
       raise exception 'Pix não está disponível neste cardápio' using errcode = '22023';
     end if;
-    -- Pix no cardápio digital só vale com pagamento na hora (QR Code). Sem isso o pedido iria direto para a
-    -- cozinha com o Pix "para pagar depois" (Pix na entrega), o que não é aceito.
-    if v_pix_modo <> 'mercado_pago' then
-      raise exception 'O Pix só é aceito com pagamento na hora pelo QR Code. Escolha outra forma de pagamento.' using errcode = '22023';
-    end if;
+    -- O dono escolhe o modo em Configurações > Pix: 'manual' (Pix na entrega, equipe confirma depois) ou
+    -- 'mercado_pago' (QR Code, pago na hora). O cardápio público mostra o que estiver configurado.
     if v_pix_modo = 'mercado_pago' then
       if v_email is null or position('@' in v_email) < 2 or position('.' in split_part(v_email, '@', 2)) < 2 then
         raise exception 'Informe um e-mail válido para pagar com Pix' using errcode = '22023';

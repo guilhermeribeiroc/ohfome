@@ -1,10 +1,17 @@
 begin;
 
--- O retorno desta função tinha sido truncado para {id, codigo, total} na migration 043 e seguiu
--- assim até a 054. Sem 'pixModo' a rota do cardápio (`POST /api/publico/[slug]/pedidos`) saía antes
--- de criar a cobrança, então o cliente nunca via o QR Code e o pedido ficava sem pagamento — e,
--- depois da 054, invisível para a equipe. Aqui o retorno completo volta; o resto da função é o
--- mesmo da 054.
+-- Duas correções nesta função:
+--
+-- 1) O retorno tinha sido truncado para {id, codigo, total} na migration 043 e seguiu assim até a
+--    054. Sem 'pixModo' a rota do cardápio (`POST /api/publico/[slug]/pedidos`) saía antes de criar
+--    a cobrança: o cliente nunca via o QR Code e o pedido ficava sem pagamento — e, depois da 054,
+--    invisível para a equipe. O retorno completo volta.
+--
+-- 2) A 054 também passou a recusar qualquer Pix fora do modo automático, mesmo quando o dono tinha
+--    escolhido 'manual' em Configurações > Pix. O dono volta a decidir o modo: 'manual' (Pix na
+--    entrega, pedido segue para a cozinha e a equipe confirma o pagamento depois) ou 'mercado_pago'
+--    (QR Code, só segue para a cozinha após a confirmação). O cardápio público mostra sempre o modo
+--    configurado, nunca os dois.
 
 create or replace function fn_criar_pedido_publico(
   p_slug text,
@@ -148,11 +155,8 @@ begin
     if v_pix_modo is null then
       raise exception 'Pix não está disponível neste cardápio' using errcode = '22023';
     end if;
-    -- Pix no cardápio digital só vale com pagamento na hora (QR Code). Sem isso o pedido iria direto para a
-    -- cozinha com o Pix "para pagar depois" (Pix na entrega), o que não é aceito.
-    if v_pix_modo <> 'mercado_pago' then
-      raise exception 'O Pix só é aceito com pagamento na hora pelo QR Code. Escolha outra forma de pagamento.' using errcode = '22023';
-    end if;
+    -- O dono escolhe o modo em Configurações > Pix: 'manual' (Pix na entrega, equipe confirma depois) ou
+    -- 'mercado_pago' (QR Code, pago na hora). O cardápio público mostra o que estiver configurado.
     if v_pix_modo = 'mercado_pago' then
       if v_email is null or position('@' in v_email) < 2 or position('.' in split_part(v_email, '@', 2)) < 2 then
         raise exception 'Informe um e-mail válido para pagar com Pix' using errcode = '22023';

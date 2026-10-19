@@ -2040,8 +2040,10 @@ function CarrinhoSheet({
         precoUnitario: number;
       } => Boolean(item.produto),
     );
-  // Só o Pix automático (Mercado Pago) é oferecido no checkout; "Pix na entrega" foi removido.
-  const pixAutomaticoDisponivel = dados.pix?.modo === "mercado_pago";
+  // O dono escolhe o modo em Configurações > Pix. O checkout mostra só o que estiver configurado:
+  // nunca os dois ao mesmo tempo, nunca nenhum quando o Pix está desativado.
+  const pixDisponivel = Boolean(dados.pix);
+  const pixAutomatico = dados.pix?.modo === "mercado_pago";
   const entregaSelecionada = formaRecebimento === "entrega";
   const bairroSelecionado = (bairros ?? []).find((b) => b.id === bairroId);
   const taxaEntrega = entregaSelecionada ? (bairroSelecionado?.taxa ?? 0) : 0;
@@ -2049,7 +2051,7 @@ function CarrinhoSheet({
   const valorParte1Numero = numeroDaMoeda(valorParte1);
   const valorParte2Numero = Math.max(0, Math.round((totalComTaxa - valorParte1Numero) * 100) / 100);
   const forma2Efetiva = dividirPagamento && forma2 === formaPagamento
-    ? (["cartao", "dinheiro", "pix"] as const).find((f) => f !== formaPagamento && (f !== "pix" || pixAutomaticoDisponivel)) ?? "dinheiro"
+    ? (["cartao", "dinheiro", "pix"] as const).find((f) => f !== formaPagamento && (f !== "pix" || pixDisponivel)) ?? "dinheiro"
     : forma2;
   const enderecoFormatado = [
     rua.trim() && `${rua.trim()}, ${numeroEndereco.trim()}`,
@@ -2195,7 +2197,7 @@ function CarrinhoSheet({
     }
     function textoForma(forma: "cartao" | "dinheiro" | "pix", tipo: "credito" | "debito", troco: boolean, valorTroco: string) {
       if (forma === "cartao") return `Cartão · ${tipo === "credito" ? "Crédito" : "Débito"}`;
-      if (forma === "pix") return "Pix (pago pelo QR Code)";
+      if (forma === "pix") return "Pix";
       return troco ? `Dinheiro · troco para ${moeda(numeroDaMoeda(valorTroco))}` : "Dinheiro";
     }
     const pagamento = dividirPagamento
@@ -2203,7 +2205,7 @@ function CarrinhoSheet({
       : formaPagamento === "cartao"
         ? `Cartão · ${tipoCartao === "credito" ? "Crédito" : "Débito"}`
         : formaPagamento === "pix"
-          ? "Pix (pago pelo QR Code)"
+          ? "Pix"
           : "Dinheiro";
     const mensagem = [
       `Olá! Acabei de fazer o pedido *#${pedido.codigo}* pelo cardápio digital.`,
@@ -2554,7 +2556,7 @@ function CarrinhoSheet({
                   </div>
                   <Campo label="Como deseja pagar?">
                     <div className="grid grid-cols-2 gap-2">
-                      {pixAutomaticoDisponivel && (
+                      {pixDisponivel && (
                         <button
                           type="button"
                           aria-pressed={formaPagamento === "pix"}
@@ -2562,7 +2564,7 @@ function CarrinhoSheet({
                           className={`col-span-2 flex min-h-[76px] items-center gap-3 rounded-2xl border p-3 text-left transition ${formaPagamento === "pix" ? "border-[#0e7775] bg-[#0e7775] text-white shadow-md" : "border-black/[.1] bg-white/65 text-black"}`}
                         >
                           <Banknote size={19} />
-                          <span><b className="block text-sm">Pix agora</b><small className={formaPagamento === "pix" ? "text-white/75" : "text-black/50"}>O pedido só vai para a cozinha após a confirmação.</small></span>
+                          <span><b className="block text-sm">Pix</b><small className={formaPagamento === "pix" ? "text-white/75" : "text-black/50"}>{pixAutomatico ? "O pedido só vai para a cozinha após a confirmação." : "Pague na entrega. A cozinha recebe o pedido agora."}</small></span>
                         </button>
                       )}
                       <button
@@ -2590,11 +2592,6 @@ function CarrinhoSheet({
                   >
                     {dividirPagamento ? "Pagar com uma forma só" : "Quero pagar em duas formas"}
                   </button>
-                  {!dividirPagamento && formaPagamento === "pix" && (
-                    <div className="rounded-2xl border border-coral-100 bg-coral-050 p-3 text-sm leading-5 text-black/65">
-                      Você receberá um QR Code Pix válido por 30 minutos. A cozinha só receberá a comanda após a confirmação do pagamento.
-                    </div>
-                  )}
                   {!dividirPagamento && formaPagamento === "cartao" ? (
                     <Campo label="Tipo de cartão">
                       <div className="grid grid-cols-2 gap-2">
@@ -2606,6 +2603,12 @@ function CarrinhoSheet({
                     <div className="rounded-2xl border border-black/[.09] bg-white/55 p-3">
                       <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium text-black/75">Precisa de troco?</span><div className="flex rounded-xl bg-black/[.05] p-1"><button type="button" onClick={() => setPrecisaTroco(false)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${!precisaTroco ? "bg-white text-[#0e7775] shadow-sm" : "text-black/50"}`}>Não</button><button type="button" onClick={() => setPrecisaTroco(true)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${precisaTroco ? "bg-white text-[#0e7775] shadow-sm" : "text-black/50"}`}>Sim</button></div></div>
                       {precisaTroco && <label className="mt-3 block"><span className="mb-2 block text-sm font-semibold text-black/65">Troco para:</span><span className="flex overflow-hidden rounded-xl border border-black/[.1] bg-white"><span className="px-3 py-3 text-sm font-semibold text-black/45">R$</span><input inputMode="decimal" value={trocoPara} onChange={(evento) => setTrocoPara(mascararMoeda(evento.target.value))} placeholder="50,00" className="min-w-0 flex-1 bg-transparent py-3 pr-3 text-sm outline-none" /></span></label>}
+                    </div>
+                  ) : !dividirPagamento && formaPagamento === "pix" ? (
+                    <div className="rounded-2xl border border-coral-100 bg-coral-050 p-3 text-sm leading-5 text-black/65">
+                      {pixAutomatico
+                        ? "Você verá um QR Code Pix válido por 30 minutos. O pedido só seguirá para a cozinha e será impresso depois da confirmação do pagamento."
+                        : "O Pix é pago na entrega. A equipe recebe o pedido agora e confirma o pagamento depois."}
                     </div>
                   ) : null}
                   {dividirPagamento && (
@@ -2638,7 +2641,7 @@ function CarrinhoSheet({
                         <div className="mb-2 flex items-center justify-between gap-3">
                           <b className="text-xs font-semibold uppercase tracking-wide text-black/45">2ª forma</b>
                           <div className="flex gap-1.5">
-                            {(["cartao", "dinheiro", "pix"] as const).filter((f) => f !== formaPagamento && (f !== "pix" || pixAutomaticoDisponivel)).map((f) => (
+                            {(["cartao", "dinheiro", "pix"] as const).filter((f) => f !== formaPagamento && (f !== "pix" || pixDisponivel)).map((f) => (
                               <button key={f} type="button" onClick={() => setForma2(f)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${forma2Efetiva === f ? "bg-[#0e7775] text-white" : "bg-black/[.05] text-black/55"}`}>{f === "cartao" ? "Cartão" : f === "pix" ? "Pix" : "Dinheiro"}</button>
                             ))}
                           </div>
@@ -2662,7 +2665,7 @@ function CarrinhoSheet({
                         {forma2Efetiva === "dinheiro" && precisaTroco2 && (
                           <label className="mt-2 flex items-center overflow-hidden rounded-xl border border-black/[.1] bg-white"><span className="px-3 text-sm font-semibold text-black/45">Troco p/ R$</span><input inputMode="decimal" value={trocoPara2} onChange={(evento) => setTrocoPara2(mascararMoeda(evento.target.value))} placeholder="0,00" className="min-w-0 flex-1 bg-transparent py-3 pr-3 text-sm outline-none" /></label>
                         )}
-                        {forma2Efetiva === "pix" && dados.pix?.modo === "mercado_pago" && (
+                        {forma2Efetiva === "pix" && pixAutomatico && (
                           <p className="mt-2 text-xs leading-4 text-black/45">Você receberá um QR Code Pix só desse valor.</p>
                         )}
                       </div>
@@ -2700,177 +2703,6 @@ function CarrinhoSheet({
     </div>
   );
 }
-/*
-                  <button
-                    type="button"
-                    onClick={() => setFormaPagamento("cartao")}
-                    className={`flex min-h-[76px] items-center gap-3 rounded-2xl border p-3 text-left transition ${formaPagamento === "cartao" ? "border-[#0e7775] bg-[#0e7775] text-white shadow-md" : "border-black/[.1] bg-white/65 text-black"}`}
-                  >
-                    <CreditCard size={19} />
-                    <span className="text-sm font-semibold">Cartão</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormaPagamento("dinheiro")}
-                    className={`flex min-h-[76px] items-center gap-3 rounded-2xl border p-3 text-left transition ${formaPagamento === "dinheiro" ? "border-[#0e7775] bg-[#0e7775] text-white shadow-md" : "border-black/[.1] bg-white/65 text-black"}`}
-                  >
-                    <Banknote size={19} />
-                    <span className="text-sm font-semibold">Dinheiro</span>
-                  </button>
-                </div>
-                {formaPagamento === "cartao" ? (
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setTipoCartao("credito")}
-                      style={
-                        tipoCartao === "credito"
-                          ? {
-                              borderColor: "#0e7775",
-                              backgroundColor: "rgba(14,119,117,.1)",
-                              color: "#0e7775",
-                            }
-                          : undefined
-                      }
-                      className={`rounded-xl border px-3 py-3 text-sm font-semibold ${tipoCartao === "credito" ? "" : "border-black/[.1] bg-white/55 text-black/65"}`}
-                    >
-                      Crédito
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTipoCartao("debito")}
-                      style={
-                        tipoCartao === "debito"
-                          ? {
-                              borderColor: "#0e7775",
-                              backgroundColor: "rgba(14,119,117,.1)",
-                              color: "#0e7775",
-                            }
-                          : undefined
-                      }
-                      className={`rounded-xl border px-3 py-3 text-sm font-semibold ${tipoCartao === "debito" ? "" : "border-black/[.1] bg-white/55 text-black/65"}`}
-                    >
-                      Débito
-                    </button>
-                  </div>
-                ) : formaPagamento === "dinheiro" ? (
-                  <div className="mt-2 rounded-2xl border border-black/[.09] bg-white/55 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm font-medium text-black/75">
-                        Precisa de troco?
-                      </span>
-                      <div className="flex rounded-xl bg-black/[.05] p-1">
-                        <button
-                          type="button"
-                          onClick={() => setPrecisaTroco(false)}
-                          className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${!precisaTroco ? "bg-white text-[#0e7775] shadow-sm" : "text-black/50"}`}
-                        >
-                          Não
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPrecisaTroco(true)}
-                          className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${precisaTroco ? "bg-white text-[#0e7775] shadow-sm" : "text-black/50"}`}
-                        >
-                          Sim
-                        </button>
-                      </div>
-                    </div>
-                    {precisaTroco && (
-                      <label className="mt-3 block">
-                        <span className="mb-2 block text-sm font-semibold text-black/65">
-                          Troco para:
-                        </span>
-                        <span className="flex overflow-hidden rounded-xl border border-black/[.1] bg-white">
-                          <span className="px-3 py-3 text-sm font-semibold text-black/45">
-                            R$
-                          </span>
-                          <input
-                            inputMode="decimal"
-                            value={trocoPara}
-                            onChange={(evento) =>
-                              setTrocoPara(mascararMoeda(evento.target.value))
-                            }
-                            placeholder="50,00"
-                            className="min-w-0 flex-1 bg-transparent py-3 pr-3 text-sm outline-none"
-                          />
-                        </span>
-                      </label>
-                    )}
-                  </div>
-                ) : (
-                  <div className="mt-2 rounded-2xl border border-coral-100 bg-coral-050 p-3 text-sm leading-5 text-black/65">
-                    Você verá um QR Code Pix válido por 30 minutos. O pedido só seguirá para a cozinha e será impresso depois da confirmação do pagamento.
-                  </div>
-                )}
-              </Campo>
-              <Campo label="Observações do pedido (opcional)">
-                <textarea
-                  value={observacoes}
-                  onChange={(evento) => setObservacoes(evento.target.value)}
-                  placeholder="Ex.: sem cebola ou ponto da carne"
-                  rows={3}
-                  maxLength={1000}
-                  className="menu-field resize-none"
-                />
-              </Campo>
-              {erro && (
-                <p className="rounded-xl bg-red-500/10 p-3 text-xs text-red-700">
-                  {erro}
-                </p>
-              )}
-            </div>
-            <footer className="border-t border-black/[.08] p-5">
-              <div className="mb-4 space-y-1">
-                <div className="flex items-end justify-between">
-                  <span className="text-xs text-black/50">Subtotal</span>
-                  <span className="text-sm text-black/60">
-                    {moeda(totalValor)}
-                  </span>
-                </div>
-                {entregaSelecionada && (
-                  <div className="flex items-end justify-between">
-                    <span className="text-xs text-black/50">
-                      Taxa de entrega
-                    </span>
-                    <span className="text-sm text-black/60">
-                      {taxaEntrega > 0 ? moeda(taxaEntrega) : "Grátis"}
-                    </span>
-                  </div>
-                )}
-                <div className="flex items-end justify-between">
-                  <span className="text-xs font-semibold text-black/50">
-                    Total
-                  </span>
-                  <strong className="font-display text-2xl text-[#0e7775]">
-                    {moeda(totalComTaxa)}
-                  </strong>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setEtapa("itens")}
-                  className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-white"
-                  aria-label="Voltar"
-                >
-                  <ArrowLeft size={18} />
-                </button>
-                <button
-                  onClick={confirmar}
-                  disabled={enviando}
-                  className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-full bg-[#0e7775] text-sm font-semibold text-white disabled:opacity-50"
-                >
-                  {enviando ? "Enviando..." : "Confirmar pedido"}
-                  <Check size={16} />
-                </button>
-              </div>
-            </footer>
-          </>
-        )}
-      </section>
-    </div>
-  );
-*/
 
 function Campo({
   label,
