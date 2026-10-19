@@ -50,6 +50,16 @@ function quebrarLinha(texto: string, largura = LARGURA_TICKET) {
   return linhas.length ? linhas : [""];
 }
 
+// Acima desse tempo parado no "pendente", algo impediu a impressão de verdade
+// (estação sem QZ conectado, impressão automática desligada, impressora offline
+// ou sem papel) — não basta mostrar a contagem da fila discretamente, precisa
+// chamar atenção, porque o cliente continua esperando o pedido sem ninguém saber.
+const LIMITE_ATRASO_MINUTOS = 5;
+
+function minutosDesde(iso: string) {
+  return (Date.now() - new Date(iso).getTime()) / 60_000;
+}
+
 function moedaTermica(valor: number) {
   return `R$ ${Number(valor || 0).toFixed(2).replace(".", ",")}`;
 }
@@ -518,7 +528,13 @@ export function ImpressaoQzTray({ compacta = false }: ImpressaoQzTrayProps) {
 
   const IconeStatus = conectado ? (modoAssinado ? CheckCircle2 : Radio) : WifiOff;
   const pendentes = jobs?.length ?? 0;
+  // jobs vem ordenado por created_at asc (API), então o primeiro é o mais antigo
+  // parado na fila — a métrica que importa é "há quanto tempo o mais velho espera",
+  // não quantos há no total (um pico momentâneo de 5 pedidos recém-chegados não é
+  // atraso; 1 pedido parado há 20 minutos é).
+  const atrasado = Boolean(jobs?.[0] && minutosDesde(jobs[0].createdAt) >= LIMITE_ATRASO_MINUTOS);
   const painel = <section className="of-panel overflow-hidden">
+    {atrasado && <p className="flex items-center gap-2 border-b border-danger-400/20 bg-danger-050 px-4 py-3 text-xs font-semibold leading-5 text-danger-700"><TriangleAlert size={16} className="shrink-0" />{pendentes} {pendentes === 1 ? "pedido está" : "pedidos estão"} esperando impressão há mais de {LIMITE_ATRASO_MINUTOS} minutos. Confira se a estação da cozinha está com o QZ Tray conectado e a impressão automática ligada.</p>}
     <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 items-start gap-3"><span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${conectado ? "bg-emerald-500/10 text-emerald-700" : "bg-cream-100 text-ink-500"}`}><IconeStatus size={18} /></span><div><p className="text-sm font-semibold text-ink-900">Estação de impressão</p><p className="mt-0.5 text-xs leading-5 text-ink-500">{mensagem}</p><p className="mt-1 text-[10px] font-medium uppercase tracking-[.1em] text-ink-400">{estaAbaLider ? "Esta aba coordena a fila" : "Outra aba coordena a fila"}</p></div></div>
       <div className="flex flex-wrap items-center gap-2"><button onClick={() => void conectar()} disabled={ocupado} className="of-btn-secondary min-h-10 px-3">{ocupado ? <LoaderCircle size={15} className="animate-spin" /> : <Radio size={15} />}{conectado ? "Atualizar" : "Conectar QZ"}</button><button onClick={alternarAutomatico} disabled={!conectado || !impressora} className={automatico ? "of-btn-primary min-h-10 px-3" : "of-btn-secondary min-h-10 px-3"}>{automatico ? "Impressão automática ativa" : "Ativar impressão automática"}</button></div>
@@ -535,9 +551,10 @@ export function ImpressaoQzTray({ compacta = false }: ImpressaoQzTrayProps) {
   // os pedidos feitos por este aparelho já entram na fila e imprimem normalmente na
   // estação. Trocamos o pill de status por um aviso neutro, sem tentativa de conexão.
   if (dispositivoTatil) return <>
-    <button onClick={() => setPainelAberto((atual) => !atual)} className="fixed right-3 top-3 z-40 flex items-center gap-2 rounded-full bg-ink-900 px-3.5 py-2.5 text-xs font-semibold text-white shadow-xl transition sm:right-5 sm:top-5" title="Sobre a impressão dos pedidos"><Printer size={16} />Impressão pela estação{pendentes > 0 && <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px]">{pendentes}</span>}<ChevronDown size={15} className={painelAberto ? "rotate-180 transition-transform" : "transition-transform"} /></button>
+    <button onClick={() => setPainelAberto((atual) => !atual)} className={`fixed right-3 top-3 z-40 flex items-center gap-2 rounded-full px-3.5 py-2.5 text-xs font-semibold text-white shadow-xl transition sm:right-5 sm:top-5 ${atrasado ? "animate-pulse bg-danger-600" : "bg-ink-900"}`} title="Sobre a impressão dos pedidos"><Printer size={16} />{atrasado ? `${pendentes} ${pendentes === 1 ? "pedido atrasado" : "pedidos atrasados"}` : "Impressão pela estação"}{pendentes > 0 && !atrasado && <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px]">{pendentes}</span>}<ChevronDown size={15} className={painelAberto ? "rotate-180 transition-transform" : "transition-transform"} /></button>
     {painelAberto && <div className="fixed inset-x-3 top-16 z-40 mx-auto w-auto max-w-sm sm:left-auto sm:right-5 sm:top-20">
       <section className="of-panel overflow-hidden p-4">
+        {atrasado && <p className="mb-3 flex items-center gap-2 rounded-xl bg-danger-050 px-3 py-2.5 text-xs font-semibold leading-5 text-danger-700"><TriangleAlert size={15} className="shrink-0" />{pendentes} {pendentes === 1 ? "pedido está" : "pedidos estão"} esperando impressão há mais de {LIMITE_ATRASO_MINUTOS} minutos. Avise quem cuida da impressora na loja.</p>}
         <p className="text-sm font-semibold text-ink-900">A impressão roda no computador da loja</p>
         <p className="mt-1.5 text-xs leading-5 text-ink-500">Celular e tablet não conectam direto na impressora. Configure o QZ Tray uma vez no computador ligado à impressora — os pedidos feitos por aqui entram na fila e saem impressos lá normalmente.{pendentes > 0 && ` Agora mesmo há ${pendentes} ${pendentes === 1 ? "pedido" : "pedidos"} na fila.`}</p>
         <a href="/configuracoes/impressao" className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-coral-600 hover:text-coral-700"><Settings2 size={14} /> Ver como configurar a estação</a>
@@ -547,7 +564,7 @@ export function ImpressaoQzTray({ compacta = false }: ImpressaoQzTrayProps) {
   </>;
 
   return <>
-    <button onClick={() => setPainelAberto((atual) => !atual)} className={`fixed right-3 top-3 z-40 flex items-center gap-2 rounded-full px-3.5 py-2.5 text-xs font-semibold shadow-xl transition sm:right-5 sm:top-5 ${conectado ? "bg-ink-900 text-white" : "bg-coral-600 text-white"}`} title="Abrir estação de impressão"><IconeStatus size={16} />{conectado ? "Impressora conectada" : "Impressora desconectada"}{pendentes > 0 && <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px]">{pendentes}</span>}<ChevronDown size={15} className={painelAberto ? "rotate-180 transition-transform" : "transition-transform"} /></button>
+    <button onClick={() => setPainelAberto((atual) => !atual)} className={`fixed right-3 top-3 z-40 flex items-center gap-2 rounded-full px-3.5 py-2.5 text-xs font-semibold shadow-xl transition sm:right-5 sm:top-5 ${atrasado ? "animate-pulse bg-danger-600 text-white" : conectado ? "bg-ink-900 text-white" : "bg-coral-600 text-white"}`} title="Abrir estação de impressão">{atrasado ? <TriangleAlert size={16} /> : <IconeStatus size={16} />}{atrasado ? `${pendentes} ${pendentes === 1 ? "pedido atrasado" : "pedidos atrasados"}` : conectado ? "Impressora conectada" : "Impressora desconectada"}{pendentes > 0 && !atrasado && <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px]">{pendentes}</span>}<ChevronDown size={15} className={painelAberto ? "rotate-180 transition-transform" : "transition-transform"} /></button>
     {painelAberto && <div className="fixed inset-x-3 top-16 z-40 mx-auto w-auto max-w-2xl sm:left-auto sm:right-5 sm:top-20 sm:w-[min(42rem,calc(100vw-2.5rem))]">{painel}<div className="flex items-center justify-between border-t border-cream-200 bg-white px-4 py-3"><a href="/configuracoes/impressao" className="inline-flex items-center gap-1.5 text-xs font-semibold text-coral-600 hover:text-coral-700"><Settings2 size={14} /> Configuração guiada</a><span className="text-[10px] text-ink-400">{ultimoPedidoImpresso ? `Último: #${ultimoPedidoImpresso}` : ultimoContato ? "Estação monitorada" : "Aguardando estação"}</span></div><button onClick={() => setPainelAberto(false)} className="of-icon-btn absolute right-3 top-3 !h-8 !min-h-8 !w-8" aria-label="Fechar configuração da impressão"><X size={15} /></button></div>}
   </>;
 }
