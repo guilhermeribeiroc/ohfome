@@ -7,12 +7,17 @@ const PEDIDO_IMPRESSAO_SELECT = `
     j.id, j.pedido_id as "pedidoId", j.status, j.tentativas, j.erro, j.created_at as "createdAt",
     json_build_object(
       'id', p.id,
-      'codigo', p.codigo,
+      'codigo', coalesce(pai.codigo, p.codigo),
       'tipo', p.tipo,
       'origem', p.origem,
       'status', p.status,
-      'total', p.total,
-      'taxaEntrega', p.taxa_entrega,
+      'total', (
+        select coalesce(sum(pp.total), p.total)
+        from pedidos pp
+        where pp.id = coalesce(p.pedido_pai_id, p.id)
+           or pp.pedido_pai_id = coalesce(p.pedido_pai_id, p.id)
+      ),
+      'taxaEntrega', coalesce(pai.taxa_entrega, p.taxa_entrega),
       'observacoes', p.observacoes,
       'formaRecebimento', p.forma_recebimento,
       'formaPagamento', p.forma_pagamento,
@@ -26,6 +31,7 @@ const PEDIDO_IMPRESSAO_SELECT = `
       'enderecoEntrega', e.endereco,
       'estabelecimentoNome', est.nome,
       'usuarioNome', u.nome,
+      'ehAdicional', p.pedido_pai_id is not null,
       'itens', coalesce((
         select json_agg(json_build_object(
           'id', ip.id,
@@ -37,6 +43,7 @@ const PEDIDO_IMPRESSAO_SELECT = `
           'precoUnitario', ip.preco_unitario,
           'observacoes', ip.observacoes,
           'status', ip.status,
+          'ehNovo', ip.pedido_id = p.id,
           -- Sabor/tamanho da pizza e opções (pão, adicionais...) precisam ir para a comanda.
           'pizza', (select json_build_object(
             'tamanhoNome', ipp.tamanho_nome,
@@ -56,16 +63,21 @@ const PEDIDO_IMPRESSAO_SELECT = `
         ) order by ip.created_at)
         from itens_pedido ip
         join produtos pr on pr.id = ip.produto_id
-        where ip.pedido_id = p.id
+        where ip.pedido_id in (
+          select pp.id from pedidos pp
+          where pp.id = coalesce(p.pedido_pai_id, p.id)
+             or pp.pedido_pai_id = coalesce(p.pedido_pai_id, p.id)
+        )
       ), '[]'::json)
     ) as pedido
   from impressao_jobs j
   join pedidos p on p.id = j.pedido_id
   join estabelecimentos est on est.id = p.estabelecimento_id
+  left join pedidos pai on pai.id = p.pedido_pai_id
   left join comandas cm on cm.id = p.comanda_id
   left join mesas m on m.id = cm.mesa_id
   left join clientes c on c.id = p.cliente_id
-  left join entregas e on e.pedido_id = p.id
+  left join entregas e on e.pedido_id = coalesce(p.pedido_pai_id, p.id)
   left join usuarios u on u.id = p.usuario_id
 `;
 

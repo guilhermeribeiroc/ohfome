@@ -119,27 +119,47 @@ export function dadosEscPosPedido(pedido: Pedido, largura = LARGURA_TICKET, cort
     linhas.push(...quebrarLinha(`CLIENTE: ${pedido.clienteNome.trim()}`, largura).map((linha) => `${linha}\n`), "\n");
   }
 
-  for (const item of pedido.itens) {
-    // Título do item (negrito, altura dupla, preço na mesma linha quando couber):
-    //   pizza -> "1X PIZZA - G"   (os sabores vêm logo abaixo)
-    //   outros -> "1X SANDUICHE - AMERICANO" (a categoria vem antes do nome)
+  const itensNovos = pedido.ehAdicional ? pedido.itens.filter((i) => i.ehNovo) : pedido.itens;
+  const itensOriginais = pedido.ehAdicional ? pedido.itens.filter((i) => !i.ehNovo) : [];
+
+  if (pedido.ehAdicional) {
+    linhas.push("\x1D\x21\x11", "\x1B\x45\x01", ...quebrarLinha("** PEDIDO ATUALIZADO **", larguraTotal).map((l) => `${l}\n`), "\x1B\x45\x00", "\x1D\x21\x00");
+    linhas.push(`${"-".repeat(largura)}\n`);
+    linhas.push("\x1B\x45\x01", ...quebrarLinha("ACRESCIMOS:", largura).map((l) => `${l}\n`), "\x1B\x45\x00");
+  }
+
+  const imprimirItem = (item: (typeof pedido.itens)[number], destaque: boolean) => {
     const categoria = item.categoriaNome?.trim() ?? "";
     const nomeSemCategoria = textoTermico(item.produtoNome).startsWith(textoTermico(categoria));
-    // Tamanho sem a palavra "TAMANHO": "1X PIZZA - M". Produtos com o tamanho no nome ("X (M)") ficam "X - M".
     const nomeItem = item.produtoNome.replace(/\s*\((P|M|G)\)\s*$/i, " - $1");
     const titulo = item.pizza
       ? `${item.quantidade}X ${nomeItem} - ${item.pizza.tamanhoNome}`
       : `${item.quantidade}X ${categoria && !nomeSemCategoria ? `${categoria} - ` : ""}${nomeItem}`;
-    linhas.push("\x1D\x21\x01", "\x1B\x45\x01", ...linhaComValor(titulo, moedaTermica(item.precoUnitario * item.quantidade), largura), "\x1B\x45\x00", "\x1D\x21\x00");
-    // Sabor(es) e tamanho da pizza, e as respostas das perguntas (pão, adicionais...),
-    // em negrito e com altura dupla para a cozinha ler de longe.
-    const destaque = (texto: string) => ["\x1B\x45\x01", "\x1D\x21\x01", ...quebrarLinha(texto, largura).map((linha) => `${linha}\n`), "\x1D\x21\x00", "\x1B\x45\x00"];
-    if (item.pizza) {
-      linhas.push(...destaque(item.pizza.saborDoisNome ? `1/2 ${item.pizza.saborUmNome} + 1/2 ${item.pizza.saborDoisNome}` : `SABOR: ${item.pizza.saborUmNome}`));
+    if (destaque) {
+      linhas.push("\x1D\x21\x01", "\x1B\x45\x01", ...linhaComValor(titulo, moedaTermica(item.precoUnitario * item.quantidade), largura), "\x1B\x45\x00", "\x1D\x21\x00");
+    } else {
+      linhas.push("\x1B\x45\x01", ...linhaComValor(titulo, moedaTermica(item.precoUnitario * item.quantidade), largura), "\x1B\x45\x00");
     }
-    for (const opcao of item.opcoes ?? []) linhas.push(...destaque(`${opcao.grupoNome}: ${opcao.opcaoNome}`));
-    if (item.observacoes) linhas.push("\x1B\x45\x01", ...quebrarLinha(`  OBS: ${item.observacoes}`, largura).map((linha) => `${linha}\n`), "\x1B\x45\x00");
-    linhas.push("\x1D\x21\x00");
+    const destaqueItem = (texto: string) => destaque
+      ? ["\x1B\x45\x01", "\x1D\x21\x01", ...quebrarLinha(texto, largura).map((l) => `${l}\n`), "\x1D\x21\x00", "\x1B\x45\x00"]
+      : ["\x1B\x45\x01", ...quebrarLinha(texto, largura).map((l) => `${l}\n`), "\x1B\x45\x00"];
+    if (item.pizza) {
+      linhas.push(...destaqueItem(item.pizza.saborDoisNome ? `1/2 ${item.pizza.saborUmNome} + 1/2 ${item.pizza.saborDoisNome}` : `SABOR: ${item.pizza.saborUmNome}`));
+    }
+    for (const opcao of item.opcoes ?? []) linhas.push(...destaqueItem(`${opcao.grupoNome}: ${opcao.opcaoNome}`));
+    if (item.observacoes) linhas.push(...destaqueItem(`>> OBS: ${item.observacoes} <<`));
+    linhas.push("\x1D\x21\x00", "\n");
+  };
+
+  for (const item of itensNovos) imprimirItem(item, true);
+
+  if (itensOriginais.length > 0) {
+    linhas.push(`${"-".repeat(largura)}\n`, ...quebrarLinha("JA NA COZINHA:", largura).map((l) => `${l}\n`));
+    for (const item of itensOriginais) imprimirItem(item, false);
+  }
+
+  if (pedido.observacoes) {
+    linhas.push(`${"-".repeat(largura)}\n`, "\x1D\x21\x10", ...quebrarLinha(`OBS: ${pedido.observacoes}`, largura).map((linha) => `${linha}\n`), "\x1D\x21\x00");
   }
 
   if (pedido.formaRecebimento === "entrega") {
@@ -165,10 +185,6 @@ export function dadosEscPosPedido(pedido: Pedido, largura = LARGURA_TICKET, cort
     linhas.push(...quebrarLinha(`PAGAMENTO: ${descricaoPagamento(pedido)}`, largura).map((linha) => `${linha}\n`));
   }
   linhas.push("\x1D\x21\x00");
-
-  if (pedido.observacoes) {
-    linhas.push(`${"-".repeat(largura)}\n`, "\x1D\x21\x10", ...quebrarLinha(`OBS: ${pedido.observacoes}`, largura).map((linha) => `${linha}\n`), "\x1D\x21\x00");
-  }
 
   linhas.push(`${"-".repeat(largura)}\n`, ...quebrarLinha(`ORIGEM: ${pedido.origem === "app" ? "CARDAPIO DIGITAL" : pedido.usuarioNome || "ATENDIMENTO"}`, largura).map((linha) => `${linha}\n`));
   linhas.push(`${new Date(pedido.createdAt).toLocaleString("pt-BR")}\n`, "\x1B\x64\x06");

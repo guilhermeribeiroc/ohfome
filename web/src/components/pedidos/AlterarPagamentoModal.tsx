@@ -2,14 +2,13 @@
 
 import { useState } from "react";
 import { Loader2, X } from "lucide-react";
-import type { FormaPagamento, PedidoTipo, TipoCartao } from "@/lib/types";
+import type { FormaPagamento, TipoCartao } from "@/lib/types";
 
 type Forma = "dinheiro" | "cartao" | "pix";
 
-export function AlterarPagamentoModal({ pedidoId, codigo, tipo, formaAtual, tipoCartaoAtual, onFechar, onSalvo }: {
+export function AlterarPagamentoModal({ pedidoId, codigo, formaAtual, tipoCartaoAtual, onFechar, onSalvo }: {
   pedidoId: string;
   codigo: number;
-  tipo: PedidoTipo;
   formaAtual?: FormaPagamento;
   tipoCartaoAtual?: TipoCartao;
   onFechar: () => void;
@@ -23,7 +22,7 @@ export function AlterarPagamentoModal({ pedidoId, codigo, tipo, formaAtual, tipo
   const formas: { id: Forma; rotulo: string }[] = [
     { id: "dinheiro", rotulo: "Dinheiro" },
     { id: "cartao", rotulo: "Cartão" },
-    ...(tipo === "delivery" ? [] : [{ id: "pix" as const, rotulo: "Pix" }]),
+    { id: "pix", rotulo: "Pix" },
   ];
 
   async function salvar() {
@@ -57,7 +56,7 @@ export function AlterarPagamentoModal({ pedidoId, codigo, tipo, formaAtual, tipo
         <div><p className="of-eyebrow">Pedido #{codigo}</p><h2 className="font-display text-xl font-bold tracking-tight text-ink-900">Alterar pagamento</h2></div>
         <button onClick={onFechar} className="of-icon-btn" aria-label="Fechar"><X size={17} /></button>
       </header>
-      <div className={`grid gap-2 ${formas.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+      <div className="grid grid-cols-3 gap-2">
         {formas.map((opcao) => <button key={opcao.id} type="button" aria-pressed={forma === opcao.id} onClick={() => setForma(opcao.id)} className={botao(forma === opcao.id)}>{opcao.rotulo}</button>)}
       </div>
       {forma === "cartao" && <div className="mt-3 grid grid-cols-2 gap-2">

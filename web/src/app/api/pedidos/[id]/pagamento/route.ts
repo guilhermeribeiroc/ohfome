@@ -28,10 +28,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       const pedido = rows[0];
       if (!pedido) return { erro: "Pedido não encontrado.", status: 404 };
       if (pedido.status === "cancelado") return { erro: "Pedido cancelado não pode mudar de pagamento.", status: 409 };
-      if (forma === "pix" && pedido.tipo === "delivery") {
-        return { erro: "Pix na entrega não está disponível. Use o Pix automático ao criar o pedido.", status: 400 };
-      }
-
       // Um atendimento = o pedido original + os adicionais dele. A forma vale para todos, senão o
       // financeiro mostraria o mesmo cliente pagando de jeitos diferentes.
       const raiz = pedido.pedidoPaiId ?? pedido.id;

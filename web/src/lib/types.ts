@@ -127,6 +127,8 @@ export interface ItemPedido {
   status: ItemPedidoStatus;
   opcoes?: { grupoNome: string; opcaoNome: string; acrescimo: number }[];
   pizza?: { tamanhoNome: string; saborUmNome: string; saborDoisNome?: string | null; regraMeioAMeio?: "maior_valor" | "media" | "preco_fixo" | null } | null;
+  /** True quando o item pertence ao pedido adicional (não ao pedido original do atendimento). */
+  ehNovo?: boolean;
 }
 
 export interface Pedido {
@@ -155,6 +157,8 @@ export interface Pedido {
   notificadoEm?: string;
   notificacaoAutomatica?: boolean;
   pedidoPaiCodigo?: number;
+  /** True quando este job é de um pedido adicional (acréscimo a um pedido já existente). */
+  ehAdicional?: boolean;
 }
 
 export type ImpressaoJobStatus = "pendente" | "imprimindo" | "impresso" | "falhou";
