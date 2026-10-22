@@ -6,7 +6,7 @@ import { Check, ChevronDown, HandCoins, MapPin, MapPinned, Plus, Printer, Trash2
 import type { BairroEntrega, Entrega, Entregador, EntregaStatus } from "@/lib/types";
 import { ENTREGA_STATUS_LABEL } from "@/lib/types";
 import { usePolling } from "@/lib/use-polling";
-import { imprimirEntrega, textoPagamento } from "@/lib/impressao";
+import { textoPagamento } from "@/lib/impressao";
 import { useTenant } from "@/lib/tenant-context";
 
 const COLUNAS: EntregaStatus[] = ["aguardando", "em_rota", "entregue"];
@@ -436,11 +436,24 @@ function BairrosModal({ onFechar }: { onFechar: () => void }) {
 
 function EntregaDetalheModal({ entrega, entregadorNome, onFechar }: { entrega: Entrega; entregadorNome?: string; onFechar: () => void }) {
   const pagamento = textoPagamento(entrega);
+  const [enfileirando, setEnfileirando] = useState(false);
+  const [mensagemImpressao, setMensagemImpressao] = useState("");
+  async function imprimirNaFila() {
+    setEnfileirando(true); setMensagemImpressao("");
+    try {
+      const resposta = await fetch("/api/impressao/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pedidoId: entrega.pedidoId }) });
+      const dados = await resposta.json().catch(() => null);
+      if (!resposta.ok) throw new Error(dados?.erro ?? "Não foi possível enfileirar a impressão.");
+      setMensagemImpressao("Impressão enviada para a fila da cozinha.");
+    } catch (erro) {
+      setMensagemImpressao((erro as Error).message || "Não foi possível enfileirar a impressão.");
+    } finally { setEnfileirando(false); }
+  }
   return <div className="of-modal-backdrop z-50" role="dialog" aria-modal="true" aria-label={`Detalhes da entrega ${entrega.pedidoCodigo}`}>
     <section className="of-modal-panel flex h-[min(90dvh,820px)] max-w-lg flex-col overflow-hidden">
       <header className="flex items-start justify-between border-b border-cream-200 p-5"><div><p className="of-eyebrow">Entrega · Pedido #{entrega.pedidoCodigo}</p><h2 className="font-display text-xl font-bold tracking-tight text-ink-900">Ficha do entregador</h2></div><button onClick={onFechar} className="of-icon-btn" aria-label="Fechar detalhes"><X size={17} /></button></header>
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5"><div className="rounded-2xl bg-cream-50 p-3.5"><p className="font-semibold text-ink-900">{entrega.clienteNome}</p>{entrega.clienteTelefone && <p className="mt-1 text-xs text-ink-500">WhatsApp: {entrega.clienteTelefone}</p>}{entregadorNome && <p className="mt-1 text-xs text-ink-500">Entregador: {entregadorNome}</p>}<p className="mt-2 flex gap-2 text-base font-semibold leading-6 text-ink-800"><MapPin size={17} className="mt-1 shrink-0 text-coral-600" />{entrega.endereco}</p>{pagamento && <p className="mt-2 text-xs font-medium text-ink-700">Pagamento: {pagamento}</p>}{entrega.observacoes && <p className="mt-2 text-xs leading-5 text-ink-600">Obs.: {entrega.observacoes}</p>}</div><div><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-ink-400">Itens do pedido</p><ul className="divide-y divide-cream-100 rounded-2xl border border-cream-200 bg-surface px-3.5">{(entrega.itens ?? []).map((item, indice) => <li key={`${item.produtoNome}-${indice}`} className="flex items-center justify-between gap-3 py-3 text-sm"><span><b className="mr-2 text-ink-900">{item.quantidade}×</b>{item.produtoNome}</span><b className="shrink-0 text-ink-900">R$ {(item.precoUnitario * item.quantidade).toFixed(2).replace(".", ",")}</b></li>)}</ul></div></div>
-      <footer className="flex items-center justify-between gap-3 border-t border-cream-200 bg-surface p-5"><button onClick={() => { if (!imprimirEntrega(entrega, entregadorNome)) alert("Não foi possível abrir a impressão. Tente novamente."); }} className="of-btn-secondary min-h-11 px-3"><Printer size={16} /> Imprimir</button><div className="text-right"><span className="block text-xs text-ink-400">{ENTREGA_STATUS_LABEL[entrega.status]}</span><strong className="font-display text-xl font-bold text-ink-900">R$ {entrega.total.toFixed(2).replace(".", ",")}</strong></div></footer>
+      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-cream-200 bg-surface p-5"><div className="flex flex-wrap items-center gap-2"><button onClick={() => void imprimirNaFila()} disabled={enfileirando} className="of-btn-secondary min-h-11 px-3"><Printer size={16} /> {enfileirando ? "Enviando..." : "Imprimir"}</button>{mensagemImpressao && <p className="basis-full text-xs text-ink-500">{mensagemImpressao}</p>}</div><div className="text-right"><span className="block text-xs text-ink-400">{ENTREGA_STATUS_LABEL[entrega.status]}</span><strong className="font-display text-xl font-bold text-ink-900">R$ {entrega.total.toFixed(2).replace(".", ",")}</strong></div></footer>
     </section>
   </div>;
 }

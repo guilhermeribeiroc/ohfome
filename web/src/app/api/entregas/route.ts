@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     const { rows } = await client.query(
       `select
          en.id,
+         p.id as "pedidoId",
          p.codigo as "pedidoCodigo",
          c.nome as "clienteNome",
          c.telefone as "clienteTelefone",

@@ -238,6 +238,7 @@ export interface Entregador {
 
 export interface Entrega {
   id: string;
+  pedidoId: string;
   pedidoCodigo: number;
   clienteNome: string;
   clienteTelefone?: string;

@@ -4,7 +4,6 @@ import { memo, useCallback, useMemo, useState } from "react";
 import { ArrowRight, Banknote, Check, CreditCard, DoorOpen, Minus, Plus, Printer, QrCode, Search, Settings2, Users, X } from "lucide-react";
 import type { Mesa, MesaStatus, PagamentoParte, Pedido, Produto } from "@/lib/types";
 import { MESA_STATUS_LABEL, nomeProdutoComTamanho } from "@/lib/types";
-import { imprimirHtmlEmJanela } from "@/lib/impressao";
 import { mascararMoeda, numeroDaMoeda } from "@/lib/moeda";
 import { usePolling } from "@/lib/use-polling";
 
@@ -163,9 +162,7 @@ export function MesasModule() {
 
   async function confirmarFechamento(pagamento: { formaPagamento: "dinheiro" | "pix" | "cartao" | "misto"; tipoCartao?: "credito" | "debito"; trocoPara?: number; texto: string; pagamentoDividido?: [PagamentoParte, PagamentoParte] }) {
     if (!mesaAberta) return;
-    // Imprime primeiro (ainda dentro do clique do usuario, senao o navegador
-    // bloqueia o popup) e so depois libera a mesa no servidor.
-    imprimirComanda(pagamento.texto);
+    void imprimirComanda();
     const resposta = await fetch(`/api/mesas/${mesaAberta.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -182,15 +179,22 @@ export function MesasModule() {
     recarregarMesas();
   }
 
-  function imprimirComanda(pagamentoTexto?: string) {
+  async function imprimirComanda() {
     if (!mesaAberta) return;
-    const escapar = (valor: string) => valor.replace(/[&<>"']/g, (caractere) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[caractere] ?? caractere);
-    const itens = [
-      ...pedidosDaMesa.flatMap((pedido) => pedido.itens.map((item) => ({ nome: item.produtoNome, quantidade: item.quantidade, valor: item.precoUnitario * item.quantidade }))),
-      ...itensAtuais.map((item) => ({ nome: item.nome, quantidade: item.quantidade, valor: item.precoUnitario * item.quantidade })),
-    ];
-    const impresso = imprimirHtmlEmJanela(`<!doctype html><html><head><title>Comanda mesa ${mesaAberta.numero}</title><style>body{font:14px Arial,sans-serif;color:#171717;padding:20px}h1{font-size:22px;margin:0 0 4px}p{margin:0 0 16px;color:#666}.pagamento{display:inline-block;background:#f3eee7;border-radius:99px;padding:5px 12px;font-size:12px;font-weight:700;color:#8d3c29;margin-bottom:14px}.item{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px dashed #bbb}.total{display:flex;justify-content:space-between;font-size:18px;font-weight:700;margin-top:18px;padding-top:12px;border-top:2px solid #171717}@media print{body{padding:0}}</style></head><body><h1>Comanda · Mesa ${mesaAberta.numero}</h1><p>${new Date().toLocaleString("pt-BR")}</p>${pagamentoTexto ? `<span class="pagamento">Pagamento: ${escapar(pagamentoTexto)}</span>` : ""}${itens.length ? itens.map((item) => `<div class="item"><span>${item.quantidade}× ${escapar(item.nome)}</span><strong>R$ ${item.valor.toFixed(2).replace(".", ",")}</strong></div>`).join("") : "<p>Sem itens lançados.</p>"}<div class="total"><span>Total${pagamentoTexto ? "" : " parcial"}</span><span>R$ ${totalComanda.toFixed(2).replace(".", ",")}</span></div></body></html>`);
-    if (!impresso) alert("Não foi possível abrir a impressão. Tente novamente.");
+    // Pedido raiz da mesa: aquele sem pedido pai. A comanda enfileirada traz
+    // automaticamente os itens dele e de todos os adicionais do atendimento.
+    const raiz = pedidosDaMesa.find((pedido) => !pedido.pedidoPaiCodigo) ?? pedidosDaMesa[0];
+    if (!raiz) {
+      alert("Nada para imprimir ainda. Lance ao menos um pedido na mesa.");
+      return;
+    }
+    try {
+      const resposta = await fetch("/api/impressao/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pedidoId: raiz.id }) });
+      const dados = await resposta.json().catch(() => null);
+      if (!resposta.ok) throw new Error(dados?.erro ?? "Não foi possível enfileirar a impressão.");
+    } catch (erro) {
+      alert((erro as Error).message || "Não foi possível enfileirar a impressão.");
+    }
   }
 
   return (
@@ -346,7 +350,7 @@ export function MesasModule() {
             </div>
             {trocoAtualInvalido && <p className="mb-2 text-xs font-medium text-coral-600">Informe o valor que o cliente vai pagar.</p>}
             {erroLancamento && <p role="alert" className="mb-2 rounded-xl bg-danger-050 px-3 py-2 text-xs font-medium text-danger-700">{erroLancamento}</p>}
-            <div className="flex gap-2"><button onClick={() => imprimirComanda()} className="of-btn-secondary min-h-12 shrink-0 px-4" aria-label="Imprimir comanda"><Printer size={17} /><span className="hidden sm:inline">Imprimir</span></button><button onClick={lancarPedido} disabled={itensAtuais.length === 0 || enviando || trocoAtualInvalido} className="of-btn-primary flex-1">{enviando ? "Lançando..." : enviados[mesaAbertaId ?? ""] ? <><Check size={17} /> Pedido lançado</> : <>Lançar pedido <ArrowRight size={17} /></>}</button></div>
+            <div className="flex gap-2"><button onClick={() => void imprimirComanda()} className="of-btn-secondary min-h-12 shrink-0 px-4" aria-label="Imprimir comanda"><Printer size={17} /><span className="hidden sm:inline">Imprimir</span></button><button onClick={lancarPedido} disabled={itensAtuais.length === 0 || enviando || trocoAtualInvalido} className="of-btn-primary flex-1">{enviando ? "Lançando..." : enviados[mesaAbertaId ?? ""] ? <><Check size={17} /> Pedido lançado</> : <>Lançar pedido <ArrowRight size={17} /></>}</button></div>
           </div>
         </div>
       )}
