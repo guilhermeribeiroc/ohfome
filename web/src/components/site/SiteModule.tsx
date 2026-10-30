@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { KanbanBoard } from "@/components/pedidos/KanbanBoard";
 import { PrecificacaoCalculadora } from "@/components/estoque/PrecificacaoCalculadora";
 import { EditorBannerCardapio } from "@/components/site/EditorBannerCardapio";
+import { ControleAberturaCardapio } from "@/components/site/ControleAberturaCardapio";
 import { useTenant } from "@/lib/tenant-context";
 import { EXEMPLO_CELULAR, formatarWhatsappBrasil, normalizarWhatsappBrasil } from "@/lib/whatsapp";
 import { Check, Clipboard, ExternalLink, Globe2, ImagePlus, Link2, MessageCircle, PackageOpen, Trash2, Upload } from "lucide-react";
@@ -136,6 +137,8 @@ export function SiteModule() {
         <div><p className="of-eyebrow">Canal próprio</p><h1 className="of-title">Cardápio Digital</h1>
         <p className="of-subtitle">Seu link público para bio, WhatsApp e QR code, sem intermediários.</p></div>
       </div>
+
+      <ControleAberturaCardapio />
 
       <div
         className="relative mb-6 flex flex-col gap-4 overflow-hidden rounded-[1.4rem] bg-ink-900 p-5 text-white shadow-xl shadow-ink-900/15 sm:flex-row sm:items-center sm:justify-between sm:p-6"

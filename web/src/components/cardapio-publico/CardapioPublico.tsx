@@ -146,7 +146,7 @@ interface CardapioData {
   bannerModo?: "padrao" | "fixo" | "carrossel";
   banners?: { id: string; url: string; ordem: number; enquadramento?: "topo" | "centro" | "base" }[];
   pix?: { modo: "manual" | "mercado_pago" } | null;
-  disponibilidade?: { aberto: boolean; pausado: boolean; configurado?: boolean; motivo?: string | null; turnos: Record<string, { inicio: string; fim: string }[]> };
+  disponibilidade?: { aberto: boolean; pausado: boolean; forcarAberto?: boolean; configurado?: boolean; motivo?: string | null; turnos: Record<string, { inicio: string; fim: string }[]> };
   produtos: ProdutoPublico[];
 }
 
@@ -420,6 +420,35 @@ export function CardapioPublico({ slug }: { slug: string }) {
     return () => { ativo = false; window.clearInterval(intervalo); document.removeEventListener("visibilitychange", aoVisivel); };
   }, [dados?.id, slug]);
 
+  // Reavalia aberto/fechado enquanto a página está aberta, para o cardápio
+  // mostrar "Restaurante fechado" assim que o horário de fechamento chega.
+  useEffect(() => {
+    const cardapioId = dados?.id;
+    if (!cardapioId) return;
+    let ativo = true;
+    async function atualizarStatus() {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const resposta = await fetch(`/api/publico/${slug}/status`, { cache: "no-store" });
+        if (!resposta.ok) return;
+        const corpo = await resposta.json() as { disponibilidade?: CardapioData["disponibilidade"] };
+        const nova = corpo.disponibilidade;
+        if (!ativo || !nova) return;
+        setDados((atual) => {
+          if (!atual) return atual;
+          const antiga = atual.disponibilidade;
+          if (antiga && antiga.aberto === nova.aberto && antiga.motivo === nova.motivo && antiga.pausado === nova.pausado && JSON.stringify(antiga.turnos) === JSON.stringify(nova.turnos)) return atual;
+          return { ...atual, disponibilidade: nova };
+        });
+      } catch { /* a validação final permanece no servidor ao confirmar */ }
+    }
+    const aoVisivel = () => void atualizarStatus();
+    void atualizarStatus();
+    const intervalo = window.setInterval(() => void atualizarStatus(), 20_000);
+    document.addEventListener("visibilitychange", aoVisivel);
+    return () => { ativo = false; window.clearInterval(intervalo); document.removeEventListener("visibilitychange", aoVisivel); };
+  }, [dados?.id, slug]);
+
   useEffect(() => {
     const restaurar = window.setTimeout(() => {
       const salvo = carregarCarrinho(slug);
@@ -684,7 +713,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
   function adicionarAoCarrinho(produto: ProdutoPublico, args: { quantidade: number; opcoes: OpcaoEscolhida[]; pizza?: PizzaEscolhida; observacao: string }) {
     if (!cardapioDisponivel) {
       setAvisoCarrinho(
-        dados?.disponibilidade?.motivo ?? "O delivery está fechado no momento.",
+        dados?.disponibilidade?.motivo ?? "Restaurante fechado no momento.",
       );
       return;
     }
@@ -997,7 +1026,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
           </h1>
           <span className={`mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-semibold ${cardapioDisponivel ? "bg-coral-050 text-coral-600" : "bg-danger-050 text-danger-600"}`}>
             <i className={`h-2 w-2 rounded-full ${cardapioDisponivel ? "bg-[#0e7775]" : "bg-[#941c42]"}`} />
-            {cardapioDisponivel ? "Delivery aberto agora" : dados.disponibilidade?.motivo ?? "Delivery fechado no momento"}
+            {cardapioDisponivel ? "Restaurante aberto agora" : dados.disponibilidade?.motivo ?? "Restaurante fechado"}
           </span>
           {dados.disponibilidade?.configurado && <details className="mt-3 w-full max-w-md rounded-2xl border border-black/[.07] bg-white/45 px-4 py-3 text-left text-xs text-black/65"><summary className="cursor-pointer list-none text-center font-semibold text-[#0e7775]">Ver horários de delivery</summary><div className="mt-3 grid gap-2 border-t border-black/[.06] pt-3">{DIAS_SEMANA.map((dia, indice) => { const turnos = dados.disponibilidade?.turnos[String(indice)] ?? []; return <div key={dia} className="grid grid-cols-[3.2rem_minmax(0,1fr)] gap-3"><span className="font-medium text-black/70">{dia}</span><span className="text-right break-words">{turnos.length ? turnos.map((turno) => `${turno.inicio}–${turno.fim}`).join(" · ") : "Fechado"}</span></div>; })}</div></details>}
         </div>
@@ -1176,7 +1205,7 @@ export function CardapioPublico({ slug }: { slug: string }) {
           onFechar={fecharOverlay}
           onAdicionar={(args) => adicionarAoCarrinho(produtoSelecionado, args)}
           disponivel={cardapioDisponivel && !(produtoSelecionado.controlaEstoqueUnidades && (produtoSelecionado.estoqueDisponivel ?? 0) <= 0)}
-          motivoIndisponivel={produtoSelecionado.controlaEstoqueUnidades && (produtoSelecionado.estoqueDisponivel ?? 0) <= 0 ? "Este item está esgotado no momento." : dados.disponibilidade?.motivo ?? "O delivery está fechado no momento."}
+          motivoIndisponivel={produtoSelecionado.controlaEstoqueUnidades && (produtoSelecionado.estoqueDisponivel ?? 0) <= 0 ? "Este item está esgotado no momento." : dados.disponibilidade?.motivo ?? "Restaurante fechado no momento."}
         />
       )}
       {overlay === "carrinho" && (

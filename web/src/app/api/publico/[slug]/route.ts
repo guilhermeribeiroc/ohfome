@@ -16,11 +16,28 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     "select fn_cardapio_publico($1)",
     [slug]
   );
-  const cardapio = linhas[0]?.fn_cardapio_publico;
+  const cardapioBase = linhas[0]?.fn_cardapio_publico;
 
-  if (!cardapio) {
+  if (!cardapioBase) {
     return NextResponse.json({ erro: "Estabelecimento não encontrado." }, { status: 404 });
   }
+
+  // Migrations posteriores à 022 redefiniram fn_cardapio_publico sem o campo
+  // `disponibilidade`; sem ele o cardápio nunca aparecia como fechado. Buscamos
+  // direto da função de horário (ausente antes da migration 022: segue aberto).
+  let disponibilidade: unknown = cardapioBase.disponibilidade;
+  if (!disponibilidade) {
+    try {
+      const status = await queryPublico<{ fn_disponibilidade_cardapio_publico: unknown }>(
+        "select fn_disponibilidade_cardapio_publico($1)",
+        [slug]
+      );
+      disponibilidade = status[0]?.fn_disponibilidade_cardapio_publico ?? undefined;
+    } catch (erro) {
+      if ((erro as { code?: string }).code !== "42883") throw erro;
+    }
+  }
+  const cardapio = disponibilidade ? { ...cardapioBase, disponibilidade } : cardapioBase;
 
   const produtos = cardapio.produtos;
   const cardapioComImagensPersistentes = Array.isArray(produtos)

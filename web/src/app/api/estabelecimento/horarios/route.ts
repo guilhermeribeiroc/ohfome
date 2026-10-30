@@ -4,10 +4,11 @@ import { respostaAdministradorObrigatorio, sessaoEhAdministrador } from "@/lib/a
 import { comEstabelecimento } from "@/lib/db";
 
 type Turno = { inicio: string; fim: string };
-type Horarios = { pausado: boolean; mensagemPausa: string; turnos: Record<string, Turno[]> };
+type Horarios = { pausado: boolean; forcarAberto: boolean; mensagemPausa: string; turnos: Record<string, Turno[]> };
 
 const padrao: Horarios = {
   pausado: false,
+  forcarAberto: false,
   mensagemPausa: "Não estamos recebendo pedidos no momento.",
   turnos: { "0": [], "1": [], "2": [], "3": [], "4": [], "5": [], "6": [] },
 };
@@ -30,7 +31,8 @@ function normalizar(body: unknown): Horarios | null {
     if (normalizados.some((turno, index) => index > 0 && turno.inicio < normalizados[index - 1].fim)) return null;
     turnos[String(dia)] = normalizados;
   }
-  return { pausado: dados.pausado === true, mensagemPausa: mensagemPausa || padrao.mensagemPausa, turnos };
+  const pausado = dados.pausado === true;
+  return { pausado, forcarAberto: !pausado && dados.forcarAberto === true, mensagemPausa: mensagemPausa || padrao.mensagemPausa, turnos };
 }
 
 async function admin(request: NextRequest) {
