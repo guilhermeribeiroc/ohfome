@@ -31,7 +31,8 @@ const PEDIDO_IMPRESSAO_SELECT = `
       'enderecoEntrega', e.endereco,
       'estabelecimentoNome', est.nome,
       'usuarioNome', u.nome,
-      'ehAdicional', p.pedido_pai_id is not null,
+      -- Comanda de acréscimo: pedido ligado (modo antigo) ou rodada > 1 dentro do mesmo pedido.
+      'ehAdicional', p.pedido_pai_id is not null or j.rodada > 1,
       'itens', coalesce((
         select json_agg(json_build_object(
           'id', ip.id,
@@ -43,7 +44,7 @@ const PEDIDO_IMPRESSAO_SELECT = `
           'precoUnitario', ip.preco_unitario,
           'observacoes', ip.observacoes,
           'status', ip.status,
-          'ehNovo', ip.pedido_id = p.id,
+          'ehNovo', case when j.rodada > 1 then ip.rodada = j.rodada else ip.pedido_id = p.id end,
           -- Sabor/tamanho da pizza e opções (pão, adicionais...) precisam ir para a comanda.
           'pizza', (select json_build_object(
             'tamanhoNome', ipp.tamanho_nome,

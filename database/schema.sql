@@ -632,7 +632,8 @@ create table impressao_jobs (
   estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade,
   pedido_id uuid not null references pedidos(id) on delete cascade,
   tipo text not null default 'cozinha' check (tipo in ('cozinha')),
-  origem text not null default 'automatico' check (origem in ('automatico', 'reimpressao')),
+  origem text not null default 'automatico' check (origem in ('automatico', 'reimpressao', 'acrescimo')),
+  rodada integer not null default 1 check (rodada >= 1), -- >1 = comanda de acréscimo (só os itens dessa rodada)
   status text not null default 'pendente' check (status in ('pendente', 'imprimindo', 'impresso', 'falhou')),
   tentativas integer not null default 0 check (tentativas >= 0),
   estacao_id text,
@@ -668,6 +669,7 @@ create table itens_pedido (
   tamanho tamanho_produto, -- snapshot do tamanho no momento do pedido
   observacoes text,
   status item_pedido_status not null default 'pendente',
+  rodada integer not null default 1 check (rodada >= 1), -- 1 = pedido original; 2+ = acréscimos
   created_at timestamptz not null default now(),
   constraint fk_itens_pedido_pedido_tenant foreign key (pedido_id, estabelecimento_id) references pedidos(id, estabelecimento_id) on delete cascade,
   constraint fk_itens_pedido_produto_tenant foreign key (produto_id, estabelecimento_id) references produtos(id, estabelecimento_id)

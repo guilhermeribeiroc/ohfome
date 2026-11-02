@@ -123,6 +123,9 @@ export async function POST(request: NextRequest) {
   if (pai?.status === "cancelado") return NextResponse.json({ erro: "Não é possível adicionar itens a um pedido cancelado." }, { status: 409 });
   if (pai?.tipo === "mesa" && pai.comandaStatus !== "aberta") return NextResponse.json({ erro: "A comanda desta mesa já foi fechada. Abra um novo pedido para a mesa." }, { status: 409 });
   if (pai?.tipo === "delivery" && !pai.endereco) return NextResponse.json({ erro: "O pedido original não tem endereço de entrega." }, { status: 409 });
+  // Acréscimo em delivery/retirada/balcão entra no MESMO pedido (mesmo número, um card, uma entrega). Mesa segue em
+  // rodadas na comanda, e pedido pago por Pix automático gera um pedido ligado (outro pagamento).
+  const acrescentar = Boolean(pai) && pai?.tipo !== "mesa" && !pai?.pixAutomatico;
   const tipo = pai ? pai.tipo : body?.tipo;
   const mesaId = pai ? pai.mesaId : body?.mesaId;
   const clienteNome = pai ? undefined : typeof body?.clienteNome === "string" ? body.clienteNome.trim() : undefined;
@@ -289,7 +292,14 @@ export async function POST(request: NextRequest) {
         taxaEntrega = bairroRows[0].taxa;
       }
 
-      const { rows: pedidoRows } = await client.query(
+      if (acrescentar && pai) {
+        const { rows: raizRows } = await client.query<{ status: string }>(`select status from pedidos where id = $1 for update`, [pai.raizId]);
+        const statusRaiz = raizRows[0]?.status;
+        if (!statusRaiz) throw Object.assign(new Error("Pedido original não encontrado."), { status: 404 });
+        if (statusRaiz === "saiu_para_entrega") throw Object.assign(new Error("Este pedido já saiu para entrega. Crie um novo pedido para os itens extras."), { status: 409 });
+        if (statusRaiz === "finalizado" || statusRaiz === "cancelado") throw Object.assign(new Error(`Não é possível acrescentar itens a um pedido ${statusRaiz === "cancelado" ? "cancelado" : "já finalizado"}.`), { status: 409 });
+      }
+      const pedidoRows = acrescentar && pai ? [{ id: pai.raizId }] : (await client.query(
         `insert into pedidos (estabelecimento_id, tipo, origem, status, enviado_cozinha, enviado_cozinha_em, comanda_id, cliente_id, usuario_id, taxa_entrega, forma_pagamento, tipo_cartao, troco_para, modalidade_atendimento, pagamento_status, forma_recebimento, whatsapp_consentimento, cliente_nome_avulso, observacoes, pedido_pai_id)
          values ($1, $2, 'presencial', $3, $4, case when $4 then now() else null end, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
          returning id`,
@@ -305,8 +315,14 @@ export async function POST(request: NextRequest) {
           clienteId ? null : clienteNomeAvulso,
           observacoesPedido, pai?.raizId ?? null,
         ]
-      );
-      const pedidoId = pedidoRows[0].id;
+      )).rows;
+      const pedidoId: string = pedidoRows[0].id;
+      // Rodada do item: 1 no pedido original, 2+ nos acréscimos (a comanda de acréscimo imprime só a rodada nova).
+      let rodada = 1;
+      if (acrescentar) {
+        const { rows: ultima } = await client.query<{ rodada: number }>(`select coalesce(max(rodada), 1) + 1 as rodada from itens_pedido where pedido_id = $1`, [pedidoId]);
+        rodada = Number(ultima[0].rodada);
+      }
 
       for (const item of itensValidos) {
         const produto = produtoPorId.get(item.produtoId);
@@ -384,9 +400,9 @@ export async function POST(request: NextRequest) {
         const acrescimo = opcoes.reduce((total, opcao) => total + Number(opcao.acrescimo), 0);
         const baseDoItem = opcoes.some((opcao) => opcao.definePreco) ? 0 : precoPizza;
         const { rows: itensCriados } = await client.query(
-          `insert into itens_pedido (pedido_id, produto_id, quantidade, preco_unitario, observacoes)
-           values ($1, $2, $3, $4, $5) returning id`,
-          [pedidoId, item.produtoId, item.quantidade, baseDoItem + acrescimo, item.observacoes ?? null]
+          `insert into itens_pedido (pedido_id, produto_id, quantidade, preco_unitario, observacoes, rodada)
+           values ($1, $2, $3, $4, $5, $6) returning id`,
+          [pedidoId, item.produtoId, item.quantidade, baseDoItem + acrescimo, item.observacoes ?? null, rodada]
         );
         if (pizzaSnapshot) await client.query(`insert into itens_pedido_pizza (item_pedido_id, estabelecimento_id, tamanho_nome, sabor_um_nome, sabor_dois_nome, regra_meio_a_meio, preco_calculado) values ($1,$2,$3,$4,$5,$6,$7)`, [itensCriados[0].id, sessao.estabelecimentoId, pizzaSnapshot.tamanhoNome, pizzaSnapshot.saborUmNome, pizzaSnapshot.saborDoisNome, pizzaSnapshot.regraMeioAMeio, precoPizza]);
         for (const opcao of opcoes) {
@@ -398,13 +414,23 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      if (tipo === "delivery") {
+      if (tipo === "delivery" && !acrescentar) {
         await client.query(`insert into entregas (pedido_id, endereco, bairro) values ($1, $2, $3)`, [pedidoId, endereco, bairroNome]);
       }
 
       if (tipo !== "mesa" && formaPagamento === "dinheiro" && trocoPara > 0) {
         const { rows: totais } = await client.query<{ total: string }>(`select total from pedidos where id = $1`, [pedidoId]);
         if (trocoPara < Number(totais[0]?.total)) throw Object.assign(new Error(`O troco precisa ser para um valor igual ou maior que o total do pedido (R$ ${Number(totais[0]?.total).toFixed(2).replace(".", ",")}).`), { status: 400 });
+      }
+      if (acrescentar) {
+        // O que já estava "pronto" volta para o preparo (há item novo), e um troco que ficou menor que o total é limpo.
+        await client.query(`update pedidos set status = 'em_preparo' where id = $1 and status = 'pronto'`, [pedidoId]);
+        await client.query(`update pedidos set troco_para = null where id = $1 and troco_para is not null and troco_para < total`, [pedidoId]);
+        await client.query(
+          `insert into impressao_jobs (estabelecimento_id, pedido_id, tipo, origem, rodada)
+           select estabelecimento_id, id, 'cozinha', 'acrescimo', $2 from pedidos where id = $1 and enviado_cozinha`,
+          [pedidoId, rodada]
+        );
       }
       await client.query(`select fn_comprometer_estoque_pedido($1, 'comprometido')`, [pedidoId]);
       if (modalidade === "imediata" && !pixAutomatico) await client.query(`select fn_consumir_estoque_pedido($1)`, [pedidoId]);
