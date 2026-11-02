@@ -1,12 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, sessaoPodeGerirClientes } from "@/lib/api-auth";
+import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, sessaoPodeUsarCrediario } from "@/lib/api-auth";
 import { comEstabelecimento } from "@/lib/db";
 
 // Clientes com crediário e quanto cada um deve hoje. Quem deve fica primeiro.
 export async function GET(request: NextRequest) {
   const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
-  if (!sessaoPodeGerirClientes(sessao)) return respostaAcessoNegado();
+  if (!sessaoPodeUsarCrediario(sessao)) return respostaAcessoNegado();
 
   const clientes = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     const { rows } = await client.query(

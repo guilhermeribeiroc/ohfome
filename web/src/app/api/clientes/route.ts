@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       const { rows } = await client.query(
         `insert into clientes (estabelecimento_id, nome, telefone, endereco, bairro, ponto_referencia, email, notificar_pedido, crediario, limite_crediario)
          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning ${CAMPOS}`,
-        [sessao.estabelecimentoId, cliente.nome, cliente.telefone, cliente.endereco || null, cliente.bairro || null, cliente.pontoReferencia || null, cliente.email || null, cliente.notificarPedido, cliente.crediario, cliente.limiteCrediario]
+        [sessao.estabelecimentoId, cliente.nome, cliente.telefone, cliente.endereco || null, cliente.bairro || null, cliente.pontoReferencia || null, cliente.email || null, cliente.notificarPedido, sessao.role === "admin" && cliente.crediario, sessao.role === "admin" ? cliente.limiteCrediario : null]
       );
       return rows[0];
     });

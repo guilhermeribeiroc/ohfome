@@ -275,7 +275,7 @@ export interface Cliente {
   pontoReferencia?: string | null;
   email?: string | null;
   notificarPedido: boolean;
-  /** Cliente fixo que compra no crediário (fiado); limite vazio = sem limite. */
+  /** Cliente fixo que compra no crediário; limite vazio = sem limite. */
   crediario?: boolean;
   limiteCrediario?: number | null;
   createdAt?: string;

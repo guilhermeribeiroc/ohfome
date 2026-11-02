@@ -4,6 +4,7 @@ import { memo, useMemo, useState } from "react";
 import { Pencil, Plus, Search, UsersRound } from "lucide-react";
 import type { Cliente } from "@/lib/types";
 import { usePolling } from "@/lib/use-polling";
+import { useTenant } from "@/lib/tenant-context";
 import { ClienteFormModal } from "./ClienteFormModal";
 import { CrediarioPanel } from "./CrediarioPanel";
 
@@ -21,6 +22,8 @@ export function ClientesModule() {
   const { dados, setDados, recarregar } = usePolling<Cliente[]>("/api/clientes", 30000);
   const [busca, setBusca] = useState("");
   const [editando, setEditando] = useState<Cliente | null | undefined>(undefined);
+  const { usuarioAtual } = useTenant();
+  const souAdmin = usuarioAtual?.role === "admin";
   const [aba, setAba] = useState<"clientes" | "crediario">("clientes");
   const clientes = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -30,11 +33,11 @@ export function ClientesModule() {
 
   return <section className="of-page">
     <header className="of-page-header"><div><p className="of-eyebrow">Relacionamento</p><h1 className="of-title">Clientes</h1><p className="of-subtitle">Cadastre e encontre rapidamente quem já pediu no seu estabelecimento.</p></div><button onClick={() => setEditando(null)} className="of-btn-primary"><Plus size={17} />Novo cliente</button></header>
-    <div className="of-tabs mb-4 max-w-sm" role="tablist" aria-label="Clientes e crediário">
+    {souAdmin && <div className="of-tabs mb-4 max-w-sm" role="tablist" aria-label="Clientes e crediário">
       <button type="button" role="tab" aria-selected={aba === "clientes"} data-active={aba === "clientes"} onClick={() => setAba("clientes")} className="of-tab">Clientes</button>
       <button type="button" role="tab" aria-selected={aba === "crediario"} data-active={aba === "crediario"} onClick={() => setAba("crediario")} className="of-tab">Crediário</button>
-    </div>
-    {aba === "crediario" ? <CrediarioPanel /> : <section className="of-panel overflow-hidden">
+    </div>}
+    {souAdmin && aba === "crediario" ? <CrediarioPanel /> : <section className="of-panel overflow-hidden">
       <div className="border-b border-cream-200 p-4"><div className="relative max-w-lg"><Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" /><input value={busca} onChange={(evento) => setBusca(evento.target.value)} placeholder="Buscar por nome ou telefone" className="of-field !pl-10" /></div></div>
       {!clientes.length ? <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cream-100 text-coral-600"><UsersRound size={22} /></span><p className="mt-4 text-sm font-semibold text-ink-900">{busca ? "Nenhum cliente encontrado" : "Nenhum cliente cadastrado"}</p><p className="mt-1 max-w-sm text-xs leading-5 text-ink-400">{busca ? "Confira o nome ou telefone informado." : "Cadastre clientes para acelerar os próximos pedidos delivery."}</p></div> : <ul className="divide-y divide-cream-100">{clientes.map((cliente) => <ClienteRow key={cliente.id} cliente={cliente} onEditar={setEditando} />)}</ul>}
     </section>}

@@ -19,7 +19,7 @@ export function textoPagamento(pedido: Pick<Pedido, "formaPagamento" | "tipoCart
   }
   if (pedido.formaPagamento === "cartao") return `Cartão · ${pedido.tipoCartao === "credito" ? "Crédito" : "Débito"}`;
   if (pedido.formaPagamento === "dinheiro") return pedido.trocoPara ? `Dinheiro · troco para ${moeda(pedido.trocoPara)}` : "Dinheiro · sem troco";
-  if (pedido.formaPagamento === "crediario") return "CREDIARIO (FIADO)";
+  if (pedido.formaPagamento === "crediario") return "CREDIARIO";
   if (pedido.formaPagamento === "pix") return "PIX";
   return undefined;
 }

@@ -177,6 +177,9 @@ export async function POST(request: NextRequest) {
     if (!["dinheiro", "cartao", "pix", "crediario"].includes(formaPagamento)) {
       return NextResponse.json({ erro: "Forma de pagamento inválida." }, { status: 400 });
     }
+    if (formaPagamento === "crediario" && sessao.role !== "admin") {
+      return NextResponse.json({ erro: "Só o administrador pode lançar no crediário." }, { status: 403 });
+    }
     if (formaPagamento === "cartao" && tipoCartao !== "credito" && tipoCartao !== "debito") {
       return NextResponse.json({ erro: "Informe crédito ou débito." }, { status: 400 });
     }

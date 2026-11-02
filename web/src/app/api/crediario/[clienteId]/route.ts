@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, sessaoPodeGerirClientes } from "@/lib/api-auth";
+import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, sessaoPodeUsarCrediario } from "@/lib/api-auth";
 import { comEstabelecimento } from "@/lib/db";
 import { saldoDoCliente } from "@/lib/crediario";
 
@@ -7,7 +7,7 @@ import { saldoDoCliente } from "@/lib/crediario";
 export async function GET(request: NextRequest, { params }: { params: Promise<{ clienteId: string }> }) {
   const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
-  if (!sessaoPodeGerirClientes(sessao)) return respostaAcessoNegado();
+  if (!sessaoPodeUsarCrediario(sessao)) return respostaAcessoNegado();
   const { clienteId } = await params;
 
   const extrato = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ clienteId: string }> }) {
   const sessao = await autenticarRequisicao(request);
   if (!sessao) return respostaNaoAutenticado();
-  if (!sessaoPodeGerirClientes(sessao)) return respostaAcessoNegado();
+  if (!sessaoPodeUsarCrediario(sessao)) return respostaAcessoNegado();
   const { clienteId } = await params;
   const body = await request.json().catch(() => null);
   const valor = Math.round(Number(body?.valor) * 100) / 100;

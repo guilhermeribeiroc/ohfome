@@ -37,6 +37,11 @@ export function sessaoPodeAcessarModulo(sessao: SessaoAutenticada, modulo: Modul
   return sessao.role === "admin" || (sessao.role === modulo && sessao.modulosAtivos.includes(modulo));
 }
 
+/** Crediário (contas a receber, limite, pagar no crediário): só o administrador. */
+export function sessaoPodeUsarCrediario(sessao: SessaoAutenticada): boolean {
+  return sessao.role === "admin";
+}
+
 export function sessaoPodeGerirClientes(sessao: SessaoAutenticada): boolean {
   return sessao.role === "admin" || sessao.role === "balcao" || sessao.role === "delivery";
 }

@@ -17,6 +17,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (forma !== "dinheiro" && forma !== "cartao" && forma !== "pix" && forma !== "misto" && forma !== "crediario") {
     return NextResponse.json({ erro: "Forma de pagamento inválida." }, { status: 400 });
   }
+  if (forma === "crediario" && sessao.role !== "admin") return NextResponse.json({ erro: "Só o administrador pode lançar no crediário." }, { status: 403 });
   // Duas formas (ex.: R$ 20 em dinheiro e o resto no cartão): sempre 2 partes, de formas diferentes.
   type Parte = { forma: "dinheiro" | "cartao" | "pix"; valor: number; tipoCartao?: "credito" | "debito"; trocoPara?: number };
   let partes: Parte[] = [];

@@ -27,11 +27,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (existentes[0]) throw Object.assign(new Error("Já existe um cliente com este telefone."), { status: 409 });
       const { rows } = await client.query(
         `update clientes set nome = $2, telefone = $3, endereco = $4, bairro = $5,
-                ponto_referencia = $6, email = $7, notificar_pedido = $8, crediario = $9, limite_crediario = $10
+                ponto_referencia = $6, email = $7, notificar_pedido = $8, crediario = case when $11 then $9 else crediario end, limite_crediario = case when $11 then $10 else limite_crediario end
          where id = $1 returning id, nome, telefone, endereco, bairro,
                 ponto_referencia as "pontoReferencia", email,
                 notificar_pedido as "notificarPedido", crediario, limite_crediario as "limiteCrediario", created_at as "createdAt"`,
-        [id, cliente.nome, cliente.telefone, cliente.endereco || null, cliente.bairro || null, cliente.pontoReferencia || null, cliente.email || null, cliente.notificarPedido, cliente.crediario, cliente.limiteCrediario]
+        [id, cliente.nome, cliente.telefone, cliente.endereco || null, cliente.bairro || null, cliente.pontoReferencia || null, cliente.email || null, cliente.notificarPedido, cliente.crediario, cliente.limiteCrediario, sessao.role === "admin"]
       );
       return rows[0] ?? null;
     });

@@ -1,4 +1,4 @@
-// Regras do crediário (fiado). O saldo NÃO é guardado: é calculado dos pedidos no crediário menos os pagamentos
+// Regras do crediário. O saldo NÃO é guardado: é calculado dos pedidos no crediário menos os pagamentos
 // recebidos, então continua certo se um pedido for editado, trocado ou cancelado.
 
 type ConsultaSql = { query: <T = unknown>(texto: string, valores?: unknown[]) => Promise<{ rows: T[] }> };

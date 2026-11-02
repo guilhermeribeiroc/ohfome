@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Loader2, X } from "lucide-react";
+import { useTenant } from "@/lib/tenant-context";
 import type { FormaPagamento, TipoCartao } from "@/lib/types";
 
 type Forma = "dinheiro" | "cartao" | "pix";
@@ -23,6 +24,7 @@ export function AlterarPagamentoModal({ pedidoId, codigo, total = 0, formaAtual,
   onFechar: () => void;
   onSalvo: () => void;
 }) {
+  const souAdmin = useTenant().usuarioAtual?.role === "admin";
   const [modo, setModo] = useState<Modo>(formaAtual === "cartao" || formaAtual === "pix" || formaAtual === "crediario" ? formaAtual : "dinheiro");
   const [tipoCartao, setTipoCartao] = useState<TipoCartao>(tipoCartaoAtual ?? "credito");
   const [troco, setTroco] = useState("");
@@ -99,10 +101,10 @@ export function AlterarPagamentoModal({ pedidoId, codigo, total = 0, formaAtual,
       <div className="grid grid-cols-2 gap-2">
         {(["dinheiro", "cartao", "pix"] as const).map((forma) => <button key={forma} type="button" aria-pressed={modo === forma} onClick={() => setModo(forma)} className={botao(modo === forma)}>{ROTULO[forma]}</button>)}
         <button type="button" aria-pressed={modo === "dividir"} onClick={() => setModo("dividir")} className={botao(modo === "dividir")}>Dividir em 2 formas</button>
-        <button type="button" aria-pressed={modo === "crediario"} onClick={() => setModo("crediario")} className={botao(modo === "crediario")}>Crediário</button>
+        {souAdmin && <button type="button" aria-pressed={modo === "crediario"} onClick={() => setModo("crediario")} className={botao(modo === "crediario")}>Crediário</button>}
       </div>
 
-      {modo === "crediario" && <p className="mt-3 rounded-xl bg-cream-50 p-3 text-xs leading-5 text-ink-700">Vai para a conta do cliente do pedido (fiado). O cliente precisa ter crediário ligado em Clientes e o pedido precisa ter um cliente.</p>}
+      {modo === "crediario" && <p className="mt-3 rounded-xl bg-cream-50 p-3 text-xs leading-5 text-ink-700">Vai para a conta do cliente do pedido. O cliente precisa ter crediário ligado em Clientes e o pedido precisa ter um cliente.</p>}
       {modo === "cartao" && tipoDoCartao(tipoCartao, setTipoCartao, "Tipo do cartão")}
       {modo === "dinheiro" && <label className="mt-3 block text-xs font-semibold text-ink-700">Troco para (opcional)
         <input inputMode="decimal" value={troco} onChange={(evento) => setTroco(evento.target.value)} placeholder="R$ 0,00" className="of-field mt-1 !min-h-10" />

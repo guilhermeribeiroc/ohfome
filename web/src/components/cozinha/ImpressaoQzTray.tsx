@@ -80,7 +80,7 @@ function descricaoParte(parte: PagamentoParte) {
 function descricaoPagamento(pedido: Pedido) {
   if (pedido.formaPagamento === "cartao") return `CARTAO - ${pedido.tipoCartao === "credito" ? "CREDITO" : "DEBITO"}`;
   if (pedido.formaPagamento === "dinheiro") return pedido.trocoPara ? `DINHEIRO | TROCO P/ ${moedaTermica(pedido.trocoPara)}` : "DINHEIRO | SEM TROCO";
-  if (pedido.formaPagamento === "crediario") return "CREDIARIO (FIADO)";
+  if (pedido.formaPagamento === "crediario") return "CREDIARIO";
   if (pedido.formaPagamento === "pix") return "PIX";
   return "A COMBINAR";
 }
