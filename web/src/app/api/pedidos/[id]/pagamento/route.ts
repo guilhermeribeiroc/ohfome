@@ -13,8 +13,25 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const forma = body?.formaPagamento;
   const tipoCartao = body?.tipoCartao;
   const trocoPara = Number(body?.trocoPara);
-  if (forma !== "dinheiro" && forma !== "cartao" && forma !== "pix") {
+  if (forma !== "dinheiro" && forma !== "cartao" && forma !== "pix" && forma !== "misto") {
     return NextResponse.json({ erro: "Forma de pagamento inválida." }, { status: 400 });
+  }
+  // Duas formas (ex.: R$ 20 em dinheiro e o resto no cartão): sempre 2 partes, de formas diferentes.
+  type Parte = { forma: "dinheiro" | "cartao" | "pix"; valor: number; tipoCartao?: "credito" | "debito"; trocoPara?: number };
+  let partes: Parte[] = [];
+  if (forma === "misto") {
+    const bruto = Array.isArray(body?.partes) ? body.partes : [];
+    partes = bruto.map((parte: Record<string, unknown>) => ({
+      forma: parte?.forma as Parte["forma"],
+      valor: Math.round(Number(parte?.valor) * 100) / 100,
+      ...(parte?.forma === "cartao" ? { tipoCartao: parte.tipoCartao as Parte["tipoCartao"] } : {}),
+      ...(parte?.forma === "dinheiro" && Number(parte?.trocoPara) > 0 ? { trocoPara: Math.round(Number(parte.trocoPara) * 100) / 100 } : {}),
+    }));
+    if (partes.length !== 2) return NextResponse.json({ erro: "Escolha exatamente duas formas de pagamento." }, { status: 400 });
+    if (partes[0].forma === partes[1].forma) return NextResponse.json({ erro: "As duas formas precisam ser diferentes." }, { status: 400 });
+    if (partes.some((parte) => !["dinheiro", "cartao", "pix"].includes(parte.forma) || !Number.isFinite(parte.valor) || parte.valor <= 0)) return NextResponse.json({ erro: "Informe o valor de cada forma." }, { status: 400 });
+    if (partes.some((parte) => parte.forma === "cartao" && parte.tipoCartao !== "credito" && parte.tipoCartao !== "debito")) return NextResponse.json({ erro: "Informe crédito ou débito na parte do cartão." }, { status: 400 });
+    if (partes.some((parte) => parte.trocoPara !== undefined && parte.trocoPara < parte.valor)) return NextResponse.json({ erro: "O troco precisa ser para um valor igual ou maior que a parte em dinheiro." }, { status: 400 });
   }
   if (forma === "cartao" && tipoCartao !== "credito" && tipoCartao !== "debito") {
     return NextResponse.json({ erro: "Informe crédito ou débito." }, { status: 400 });
@@ -41,6 +58,18 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       );
       if (grupo.some((linha) => linha.pixAutomatico)) {
         return { erro: "Este pedido foi pago pelo Pix automático e a forma de pagamento não pode ser alterada.", status: 409 };
+      }
+
+      if (forma === "misto") {
+        if (grupo.length > 1) return { erro: "Este pedido tem adicionais separados. Use uma única forma de pagamento nele.", status: 409 };
+        const total = Number(grupo[0].total);
+        const soma = partes.reduce((acc, parte) => acc + parte.valor, 0);
+        if (Math.abs(soma - total) > 0.01) return { erro: `A soma das duas formas (R$ ${soma.toFixed(2).replace(".", ",")}) precisa ser igual ao total do pedido (R$ ${total.toFixed(2).replace(".", ",")}).`, status: 400 };
+        await client.query(
+          `update pedidos set forma_pagamento = 'misto', tipo_cartao = null, troco_para = null, pagamento_dividido = $2::jsonb where id = $1`,
+          [grupo[0].id, JSON.stringify(partes)]
+        );
+        return { ok: true as const, atualizados: 1 };
       }
 
       let troco: number | null = null;
