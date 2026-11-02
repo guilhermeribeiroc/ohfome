@@ -4,13 +4,13 @@ export type MesaStatus = "livre" | "ocupada" | "aguardando_conta" | "reservada";
 
 export type PedidoTipo = "mesa" | "balcao" | "delivery";
 export type PedidoOrigem = "presencial" | "whatsapp" | "telefone" | "app";
-export type FormaPagamento = "cartao" | "dinheiro" | "pix" | "misto";
+export type FormaPagamento = "cartao" | "dinheiro" | "pix" | "misto" | "crediario";
 export type TipoCartao = "credito" | "debito";
 
 // Uma parte de um pagamento dividido (forma_pagamento = "misto"). "forma"
 // nunca é "misto" aqui — cada parte é uma forma simples com seu valor.
 export interface PagamentoParte {
-  forma: Exclude<FormaPagamento, "misto">;
+  forma: Exclude<FormaPagamento, "misto" | "crediario">;
   valor: number;
   tipoCartao?: TipoCartao;
   trocoPara?: number;
@@ -275,6 +275,9 @@ export interface Cliente {
   pontoReferencia?: string | null;
   email?: string | null;
   notificarPedido: boolean;
+  /** Cliente fixo que compra no crediário (fiado); limite vazio = sem limite. */
+  crediario?: boolean;
+  limiteCrediario?: number | null;
   createdAt?: string;
 }
 

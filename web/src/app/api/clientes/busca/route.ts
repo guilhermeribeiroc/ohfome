@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
   const clientes = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
     const { rows } = await client.query(
       `select id, nome, telefone, endereco, bairro, ponto_referencia as "pontoReferencia",
-              email, notificar_pedido as "notificarPedido"
+              email, notificar_pedido as "notificarPedido", crediario, limite_crediario as "limiteCrediario"
        from clientes
        where regexp_replace(translate(lower(nome), 'áàãâäéèêëíìîïóòõôöúùûüç', 'aaaaaeeeeiiiiooooouuuuc'), '[^a-z0-9]', '', 'g') like $1
           or regexp_replace(coalesce(telefone, ''), '[^0-9]', '', 'g') like $1

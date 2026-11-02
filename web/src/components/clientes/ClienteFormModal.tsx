@@ -13,14 +13,16 @@ export type ClienteRascunho = {
   pontoReferencia: string;
   email: string;
   notificarPedido: boolean;
+  crediario: boolean;
+  limiteCrediario: string;
 };
 
-const VAZIO: ClienteRascunho = { nome: "", telefone: "", endereco: "", bairro: "", pontoReferencia: "", email: "", notificarPedido: false };
+const VAZIO: ClienteRascunho = { nome: "", telefone: "", endereco: "", bairro: "", pontoReferencia: "", email: "", notificarPedido: false, crediario: false, limiteCrediario: "" };
 
 export function ClienteFormModal({ cliente, onFechar, onSalvo }: { cliente?: Cliente | null; onFechar: () => void; onSalvo: (cliente: Cliente) => void }) {
   const { dados: bairros } = usePolling<BairroEntrega[]>("/api/entrega/bairros", 60000);
   const [formulario, setFormulario] = useState<ClienteRascunho>(cliente ? {
-    nome: cliente.nome, telefone: cliente.telefone ?? "", endereco: cliente.endereco ?? "", bairro: cliente.bairro ?? "", pontoReferencia: cliente.pontoReferencia ?? "", email: cliente.email ?? "", notificarPedido: cliente.notificarPedido,
+    nome: cliente.nome, telefone: cliente.telefone ?? "", endereco: cliente.endereco ?? "", bairro: cliente.bairro ?? "", pontoReferencia: cliente.pontoReferencia ?? "", email: cliente.email ?? "", notificarPedido: cliente.notificarPedido, crediario: Boolean(cliente.crediario), limiteCrediario: cliente.limiteCrediario ? String(cliente.limiteCrediario).replace(".", ",") : "",
   } : VAZIO);
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
@@ -32,7 +34,7 @@ export function ClienteFormModal({ cliente, onFechar, onSalvo }: { cliente?: Cli
   async function salvar() {
     setSalvando(true); setErro("");
     const resposta = await fetch(cliente ? `/api/clientes/${cliente.id}` : "/api/clientes", {
-      method: cliente ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(formulario),
+      method: cliente ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...formulario, limiteCrediario: formulario.crediario && formulario.limiteCrediario.trim() ? Number(formulario.limiteCrediario.replace(/\./g, "").replace(",", ".")) : null }),
     });
     const dados = await resposta.json().catch(() => null);
     setSalvando(false);
@@ -52,6 +54,10 @@ export function ClienteFormModal({ cliente, onFechar, onSalvo }: { cliente?: Cli
         <label className="block"><span className="mb-1.5 block text-xs font-semibold text-ink-600">Ponto de referência</span><input value={formulario.pontoReferencia} onChange={(evento) => atualizar("pontoReferencia", evento.target.value)} className="of-field" /></label>
         <label className="block"><span className="mb-1.5 block text-xs font-semibold text-ink-600">E-mail</span><input value={formulario.email} onChange={(evento) => atualizar("email", evento.target.value)} inputMode="email" className="of-field" /></label>
         <label className="flex items-start gap-2 rounded-xl bg-cream-50 p-3 text-xs text-ink-700"><input type="checkbox" checked={formulario.notificarPedido} onChange={(evento) => atualizar("notificarPedido", evento.target.checked)} className="mt-0.5" />Aceita receber atualizações do pedido.</label>
+        <div className="rounded-xl border border-cream-200 bg-cream-50/60 p-3">
+          <label className="flex cursor-pointer items-start gap-2 text-xs font-semibold text-ink-800"><input type="checkbox" checked={formulario.crediario} onChange={(evento) => atualizar("crediario", evento.target.checked)} className="mt-0.5" /><span>Cliente de crediário (fiado)<span className="mt-0.5 block font-normal text-ink-500">Pode comprar agora e pagar depois, aos poucos. O saldo aparece na aba Crediário.</span></span></label>
+          {formulario.crediario && <label className="mt-3 block"><span className="mb-1.5 block text-xs font-semibold text-ink-600">Limite do crediário <span className="font-normal text-ink-400">(opcional, vazio = sem limite)</span></span><input value={formulario.limiteCrediario} onChange={(evento) => atualizar("limiteCrediario", evento.target.value)} inputMode="decimal" placeholder="R$ 0,00" className="of-field" /></label>}
+        </div>
         </div>
       </div>
       <footer className="shrink-0 border-t border-cream-200 bg-surface p-5">{erro && <p className="mb-3 rounded-xl bg-danger-050 px-3 py-2 text-xs font-medium text-danger-700">{erro}</p>}<button onClick={() => void salvar()} disabled={salvando} className="of-btn-primary w-full">{salvando ? "Salvando..." : cliente ? "Salvar alterações" : "Cadastrar cliente"}</button></footer>

@@ -1,3 +1,4 @@
+import { validarPedidoNoCrediario } from "@/lib/crediario";
 import { NextResponse, type NextRequest } from "next/server";
 import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, sessaoPodeAcessarModulo } from "@/lib/api-auth";
 import { comEstabelecimento } from "@/lib/db";
@@ -13,7 +14,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const forma = body?.formaPagamento;
   const tipoCartao = body?.tipoCartao;
   const trocoPara = Number(body?.trocoPara);
-  if (forma !== "dinheiro" && forma !== "cartao" && forma !== "pix" && forma !== "misto") {
+  if (forma !== "dinheiro" && forma !== "cartao" && forma !== "pix" && forma !== "misto" && forma !== "crediario") {
     return NextResponse.json({ erro: "Forma de pagamento inválida." }, { status: 400 });
   }
   // Duas formas (ex.: R$ 20 em dinheiro e o resto no cartão): sempre 2 partes, de formas diferentes.
@@ -48,8 +49,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       // Um atendimento = o pedido original + os adicionais dele. A forma vale para todos, senão o
       // financeiro mostraria o mesmo cliente pagando de jeitos diferentes.
       const raiz = pedido.pedidoPaiId ?? pedido.id;
-      const { rows: grupo } = await client.query<{ id: string; total: string; pixAutomatico: boolean }>(
-        `select p.id, p.total,
+      const { rows: grupo } = await client.query<{ id: string; total: string; clienteId: string | null; statusPedido: string; pixAutomatico: boolean }>(
+        `select p.id, p.total, p.cliente_id as "clienteId", p.status as "statusPedido",
                 exists (select 1 from pagamentos_pix px where px.pedido_id = p.id) as "pixAutomatico"
            from pedidos p
           where (p.id = $1 or p.pedido_pai_id = $1) and p.status <> 'cancelado'
@@ -60,13 +61,28 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         return { erro: "Este pedido foi pago pelo Pix automático e a forma de pagamento não pode ser alterada.", status: 409 };
       }
 
+      if (forma === "crediario") {
+        // Vai para a conta do cliente: precisa de cliente com crediário e respeitar o limite dele.
+        const raizDoGrupo = grupo.find((linha) => linha.id === raiz) ?? grupo[0];
+        const totalGrupo = grupo.reduce((soma, linha) => soma + Number(linha.total), 0);
+        await validarPedidoNoCrediario(client, grupo.map((linha) => linha.id), raizDoGrupo.clienteId, totalGrupo);
+        await client.query(
+          `update pedidos set forma_pagamento = 'crediario', tipo_cartao = null, troco_para = null, pagamento_dividido = null,
+                  pagamento_status = case when status = 'finalizado' then 'pendente' else pagamento_status end
+            where id = any($1::uuid[])`,
+          [grupo.map((linha) => linha.id)]
+        );
+        return { ok: true as const, atualizados: grupo.length };
+      }
       if (forma === "misto") {
         if (grupo.length > 1) return { erro: "Este pedido tem adicionais separados. Use uma única forma de pagamento nele.", status: 409 };
         const total = Number(grupo[0].total);
         const soma = partes.reduce((acc, parte) => acc + parte.valor, 0);
         if (Math.abs(soma - total) > 0.01) return { erro: `A soma das duas formas (R$ ${soma.toFixed(2).replace(".", ",")}) precisa ser igual ao total do pedido (R$ ${total.toFixed(2).replace(".", ",")}).`, status: 400 };
         await client.query(
-          `update pedidos set forma_pagamento = 'misto', tipo_cartao = null, troco_para = null, pagamento_dividido = $2::jsonb where id = $1`,
+          `update pedidos set forma_pagamento = 'misto', tipo_cartao = null, troco_para = null, pagamento_dividido = $2::jsonb,
+                pagamento_status = case when status = 'finalizado' and forma_pagamento = 'crediario' then 'pago' else pagamento_status end
+            where id = $1`,
           [grupo[0].id, JSON.stringify(partes)]
         );
         return { ok: true as const, atualizados: 1 };
@@ -83,7 +99,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
       await client.query(
         `update pedidos
-            set forma_pagamento = $2, tipo_cartao = $3, troco_para = $4, pagamento_dividido = null
+            set forma_pagamento = $2, tipo_cartao = $3, troco_para = $4, pagamento_dividido = null,
+                pagamento_status = case when status = 'finalizado' and forma_pagamento = 'crediario' then 'pago' else pagamento_status end
           where id = any($1::uuid[])`,
         [grupo.map((linha) => linha.id), forma, forma === "cartao" ? tipoCartao : null, troco]
       );

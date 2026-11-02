@@ -33,7 +33,7 @@ export interface DadosRelatorio {
 }
 
 const FUSO = "America/Fortaleza";
-const FORMAS = ["Dinheiro", "Cartão de crédito", "Cartão de débito", "Pix", "Forma não informada"] as const;
+const FORMAS = ["Dinheiro", "Cartão de crédito", "Cartão de débito", "Pix", "Crediário (a receber)", "Forma não informada"] as const;
 type Forma = (typeof FORMAS)[number];
 
 const arredondar = (valor: number) => Math.round((valor + Number.EPSILON) * 100) / 100;
@@ -41,6 +41,7 @@ const arredondar = (valor: number) => Math.round((valor + Number.EPSILON) * 100)
 export function formaDaParte(forma: string | null, tipoCartao?: string | null): Forma {
   if (forma === "dinheiro") return "Dinheiro";
   if (forma === "pix") return "Pix";
+  if (forma === "crediario") return "Crediário (a receber)";
   if (forma === "cartao") return tipoCartao === "debito" ? "Cartão de débito" : "Cartão de crédito";
   return "Forma não informada";
 }

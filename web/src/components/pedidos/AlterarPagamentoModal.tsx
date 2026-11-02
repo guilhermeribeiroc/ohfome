@@ -5,7 +5,7 @@ import { Loader2, X } from "lucide-react";
 import type { FormaPagamento, TipoCartao } from "@/lib/types";
 
 type Forma = "dinheiro" | "cartao" | "pix";
-type Modo = Forma | "dividir";
+type Modo = Forma | "dividir" | "crediario";
 
 const ROTULO: Record<Forma, string> = { dinheiro: "Dinheiro", cartao: "Cartão", pix: "Pix" };
 
@@ -23,7 +23,7 @@ export function AlterarPagamentoModal({ pedidoId, codigo, total = 0, formaAtual,
   onFechar: () => void;
   onSalvo: () => void;
 }) {
-  const [modo, setModo] = useState<Modo>(formaAtual === "cartao" || formaAtual === "pix" ? formaAtual : "dinheiro");
+  const [modo, setModo] = useState<Modo>(formaAtual === "cartao" || formaAtual === "pix" || formaAtual === "crediario" ? formaAtual : "dinheiro");
   const [tipoCartao, setTipoCartao] = useState<TipoCartao>(tipoCartaoAtual ?? "credito");
   const [troco, setTroco] = useState("");
   // Dividir em duas formas: a 2ª parte é sempre o que sobra do total.
@@ -58,6 +58,8 @@ export function AlterarPagamentoModal({ pedidoId, codigo, total = 0, formaAtual,
           { forma: forma2, valor: resto, tipoCartao: forma2 === "cartao" ? cartao2 : undefined },
         ],
       };
+    } else if (modo === "crediario") {
+      corpo = { formaPagamento: "crediario" };
     } else {
       const valorTroco = paraNumero(troco);
       corpo = { formaPagamento: modo, tipoCartao: modo === "cartao" ? tipoCartao : undefined, trocoPara: modo === "dinheiro" && valorTroco > 0 ? valorTroco : undefined };
@@ -97,8 +99,10 @@ export function AlterarPagamentoModal({ pedidoId, codigo, total = 0, formaAtual,
       <div className="grid grid-cols-2 gap-2">
         {(["dinheiro", "cartao", "pix"] as const).map((forma) => <button key={forma} type="button" aria-pressed={modo === forma} onClick={() => setModo(forma)} className={botao(modo === forma)}>{ROTULO[forma]}</button>)}
         <button type="button" aria-pressed={modo === "dividir"} onClick={() => setModo("dividir")} className={botao(modo === "dividir")}>Dividir em 2 formas</button>
+        <button type="button" aria-pressed={modo === "crediario"} onClick={() => setModo("crediario")} className={botao(modo === "crediario")}>Crediário</button>
       </div>
 
+      {modo === "crediario" && <p className="mt-3 rounded-xl bg-cream-50 p-3 text-xs leading-5 text-ink-700">Vai para a conta do cliente do pedido (fiado). O cliente precisa ter crediário ligado em Clientes e o pedido precisa ter um cliente.</p>}
       {modo === "cartao" && tipoDoCartao(tipoCartao, setTipoCartao, "Tipo do cartão")}
       {modo === "dinheiro" && <label className="mt-3 block text-xs font-semibold text-ink-700">Troco para (opcional)
         <input inputMode="decimal" value={troco} onChange={(evento) => setTroco(evento.target.value)} placeholder="R$ 0,00" className="of-field mt-1 !min-h-10" />

@@ -5,7 +5,7 @@ import { comEstabelecimento } from "@/lib/db";
 function ler(body: unknown) {
   const dados = body as Record<string, unknown> | null;
   const texto = (chave: string) => typeof dados?.[chave] === "string" ? dados[chave].trim() : "";
-  return { nome: texto("nome"), telefone: texto("telefone").replace(/\D/g, ""), endereco: texto("endereco"), bairro: texto("bairro"), pontoReferencia: texto("pontoReferencia"), email: texto("email"), notificarPedido: dados?.notificarPedido === true };
+  return { nome: texto("nome"), telefone: texto("telefone").replace(/\D/g, ""), endereco: texto("endereco"), bairro: texto("bairro"), pontoReferencia: texto("pontoReferencia"), email: texto("email"), notificarPedido: dados?.notificarPedido === true, crediario: dados?.crediario === true, limiteCrediario: (() => { const valor = Number(dados?.limiteCrediario); return dados?.crediario === true && Number.isFinite(valor) && valor > 0 ? Math.round(valor * 100) / 100 : null; })() };
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -27,11 +27,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (existentes[0]) throw Object.assign(new Error("Já existe um cliente com este telefone."), { status: 409 });
       const { rows } = await client.query(
         `update clientes set nome = $2, telefone = $3, endereco = $4, bairro = $5,
-                ponto_referencia = $6, email = $7, notificar_pedido = $8
+                ponto_referencia = $6, email = $7, notificar_pedido = $8, crediario = $9, limite_crediario = $10
          where id = $1 returning id, nome, telefone, endereco, bairro,
                 ponto_referencia as "pontoReferencia", email,
-                notificar_pedido as "notificarPedido", created_at as "createdAt"`,
-        [id, cliente.nome, cliente.telefone, cliente.endereco || null, cliente.bairro || null, cliente.pontoReferencia || null, cliente.email || null, cliente.notificarPedido]
+                notificar_pedido as "notificarPedido", crediario, limite_crediario as "limiteCrediario", created_at as "createdAt"`,
+        [id, cliente.nome, cliente.telefone, cliente.endereco || null, cliente.bairro || null, cliente.pontoReferencia || null, cliente.email || null, cliente.notificarPedido, cliente.crediario, cliente.limiteCrediario]
       );
       return rows[0] ?? null;
     });

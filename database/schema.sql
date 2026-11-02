@@ -514,6 +514,8 @@ create table clientes (
   cpf text,
   email text,
   notificar_pedido boolean not null default false,
+  crediario boolean not null default false, -- cliente fixo que compra no crediário (fiado)
+  limite_crediario numeric(10, 2) check (limite_crediario is null or limite_crediario > 0), -- vazio = sem limite
   created_at timestamptz not null default now(),
   unique (estabelecimento_id, telefone)
 );
@@ -543,7 +545,7 @@ create table pedidos (
   pedido_pai_id uuid references pedidos(id) on delete set null,
   observacoes text,
   forma_recebimento text check (forma_recebimento is null or forma_recebimento in ('entrega', 'retirada')),
-  forma_pagamento text check (forma_pagamento is null or forma_pagamento in ('cartao', 'dinheiro', 'pix', 'misto')),
+  forma_pagamento text check (forma_pagamento is null or forma_pagamento in ('cartao', 'dinheiro', 'pix', 'misto', 'crediario')),
   tipo_cartao text check (tipo_cartao is null or tipo_cartao in ('credito', 'debito')),
   troco_para numeric(10, 2) check (troco_para is null or troco_para > 0),
   -- Preenchido só quando forma_pagamento = 'misto': array com exatamente 2
@@ -2559,4 +2561,23 @@ begin
   perform recalcular_totais_pedido(v_item.pedido_id);
 end;
 $$;
+
+-- Crediário (migração 059): pagamentos recebidos. O saldo é calculado: pedidos no crediário - pagamentos.
+create table crediario_pagamentos (
+  id uuid primary key default gen_random_uuid(),
+  estabelecimento_id uuid not null references estabelecimentos(id) on delete cascade,
+  cliente_id uuid not null references clientes(id) on delete restrict,
+  valor numeric(10, 2) not null check (valor > 0),
+  forma_pagamento text not null check (forma_pagamento in ('dinheiro', 'pix', 'cartao')),
+  observacao text,
+  usuario_id uuid references usuarios(id),
+  created_at timestamptz not null default now()
+);
+create index idx_crediario_pagamentos_cliente on crediario_pagamentos(estabelecimento_id, cliente_id, created_at desc);
+
+alter table crediario_pagamentos enable row level security;
+create policy tenant_isolation on crediario_pagamentos
+  using (estabelecimento_id = current_setting('app.estabelecimento_id', true)::uuid)
+  with check (estabelecimento_id = current_setting('app.estabelecimento_id', true)::uuid);
+grant select, insert, update, delete on crediario_pagamentos to ohfome_app;
 

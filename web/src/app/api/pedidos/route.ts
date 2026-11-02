@@ -1,3 +1,4 @@
+import { validarPedidoNoCrediario } from "@/lib/crediario";
 import { NextResponse, type NextRequest } from "next/server";
 import { createHash, randomUUID } from "crypto";
 import { autenticarRequisicao, respostaAcessoNegado, respostaNaoAutenticado, sessaoPodeAcessarModulo } from "@/lib/api-auth";
@@ -173,7 +174,7 @@ export async function POST(request: NextRequest) {
   }
   if (chaveIdempotencia.length < 16 || chaveIdempotencia.length > 200) return NextResponse.json({ erro: "Chave de confirmação inválida." }, { status: 400 });
   if (formaPagamento !== undefined) {
-    if (!["dinheiro", "cartao", "pix"].includes(formaPagamento)) {
+    if (!["dinheiro", "cartao", "pix", "crediario"].includes(formaPagamento)) {
       return NextResponse.json({ erro: "Forma de pagamento inválida." }, { status: 400 });
     }
     if (formaPagamento === "cartao" && tipoCartao !== "credito" && tipoCartao !== "debito") {
@@ -312,7 +313,7 @@ export async function POST(request: NextRequest) {
           formaPagamento ?? null,
           formaPagamento === "cartao" ? tipoCartao : null,
           formaPagamento === "dinheiro" && trocoPara > 0 ? trocoPara : null,
-          modalidade, modalidade === "imediata" && !pixAutomatico ? "pago" : "pendente",
+          modalidade, modalidade === "imediata" && !pixAutomatico && formaPagamento !== "crediario" ? "pago" : "pendente",
           formaRecebimento, whatsappConsentimento && clienteId !== null,
           clienteId ? null : clienteNomeAvulso,
           observacoesPedido, pai?.raizId ?? null,
@@ -446,6 +447,11 @@ export async function POST(request: NextRequest) {
            select estabelecimento_id, id, 'cozinha', 'acrescimo', $2, $3 from pedidos where id = $1 and enviado_cozinha`,
           [pedidoId, rodada, avisos.length ? avisos.join("\n") : null]
         );
+      }
+      // Crediário: o cliente precisa ter crediário e o pedido (com os itens novos) não pode passar do limite dele.
+      if (formaPagamento === "crediario") {
+        const { rows: dadosPedido } = await client.query<{ clienteId: string | null; total: string }>(`select cliente_id as "clienteId", total from pedidos where id = $1`, [pedidoId]);
+        await validarPedidoNoCrediario(client, [pedidoId], dadosPedido[0]?.clienteId ?? null, Number(dadosPedido[0]?.total ?? 0));
       }
       await client.query(`select fn_comprometer_estoque_pedido($1, 'comprometido')`, [pedidoId]);
       if (modalidade === "imediata" && !pixAutomatico) await client.query(`select fn_consumir_estoque_pedido($1)`, [pedidoId]);

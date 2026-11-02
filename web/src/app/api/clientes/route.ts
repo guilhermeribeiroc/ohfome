@@ -12,7 +12,10 @@ function dadosCliente(body: unknown) {
   const pontoReferencia = texto("pontoReferencia");
   const email = texto("email");
   const notificarPedido = dados?.notificarPedido === true;
-  return { nome, telefone, endereco, bairro, pontoReferencia, email, notificarPedido };
+  const crediario = dados?.crediario === true;
+  const limiteBruto = Number(dados?.limiteCrediario);
+  const limiteCrediario = crediario && Number.isFinite(limiteBruto) && limiteBruto > 0 ? Math.round(limiteBruto * 100) / 100 : null;
+  return { nome, telefone, endereco, bairro, pontoReferencia, email, notificarPedido, crediario, limiteCrediario };
 }
 
 function validarCliente(cliente: ReturnType<typeof dadosCliente>) {
@@ -24,7 +27,7 @@ function validarCliente(cliente: ReturnType<typeof dadosCliente>) {
 
 const CAMPOS = `id, nome, telefone, endereco, bairro,
   ponto_referencia as "pontoReferencia", email,
-  notificar_pedido as "notificarPedido", created_at as "createdAt"`;
+  notificar_pedido as "notificarPedido", crediario, limite_crediario as "limiteCrediario", created_at as "createdAt"`;
 
 export async function GET(request: NextRequest) {
   const sessao = await autenticarRequisicao(request);
@@ -62,9 +65,9 @@ export async function POST(request: NextRequest) {
       );
       if (existentes[0]) throw Object.assign(new Error("Já existe um cliente com este telefone."), { status: 409 });
       const { rows } = await client.query(
-        `insert into clientes (estabelecimento_id, nome, telefone, endereco, bairro, ponto_referencia, email, notificar_pedido)
-         values ($1, $2, $3, $4, $5, $6, $7, $8) returning ${CAMPOS}`,
-        [sessao.estabelecimentoId, cliente.nome, cliente.telefone, cliente.endereco || null, cliente.bairro || null, cliente.pontoReferencia || null, cliente.email || null, cliente.notificarPedido]
+        `insert into clientes (estabelecimento_id, nome, telefone, endereco, bairro, ponto_referencia, email, notificar_pedido, crediario, limite_crediario)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning ${CAMPOS}`,
+        [sessao.estabelecimentoId, cliente.nome, cliente.telefone, cliente.endereco || null, cliente.bairro || null, cliente.pontoReferencia || null, cliente.email || null, cliente.notificarPedido, cliente.crediario, cliente.limiteCrediario]
       );
       return rows[0];
     });
