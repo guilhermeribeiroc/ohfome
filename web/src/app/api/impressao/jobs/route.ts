@@ -33,6 +33,8 @@ const PEDIDO_IMPRESSAO_SELECT = `
       'usuarioNome', u.nome,
       -- Comanda de acréscimo: pedido ligado (modo antigo) ou rodada > 1 dentro do mesmo pedido.
       'ehAdicional', p.pedido_pai_id is not null or j.rodada > 1,
+      -- Itens retirados/alterados (ex.: RETIRAR: 1X GUARANA 1L): impressos no topo da comanda.
+      'aviso', j.aviso,
       'itens', coalesce((
         select json_agg(json_build_object(
           'id', ip.id,
@@ -64,7 +66,7 @@ const PEDIDO_IMPRESSAO_SELECT = `
         ) order by ip.created_at)
         from itens_pedido ip
         join produtos pr on pr.id = ip.produto_id
-        where ip.pedido_id in (
+        where ip.status <> 'cancelado' and ip.pedido_id in (
           select pp.id from pedidos pp
           where pp.id = coalesce(p.pedido_pai_id, p.id)
              or pp.pedido_pai_id = coalesce(p.pedido_pai_id, p.id)

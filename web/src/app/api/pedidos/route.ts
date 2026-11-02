@@ -44,7 +44,7 @@ const PEDIDOS_ATIVOS_QUERY = `
         ) order by ip.created_at)
         from itens_pedido ip
         join produtos pr on pr.id = ip.produto_id
-        where ip.pedido_id = p.id
+        where ip.pedido_id = p.id and ip.status <> 'cancelado'
       ),
       '[]'
     ) as itens
@@ -126,6 +126,8 @@ export async function POST(request: NextRequest) {
   // Acréscimo em delivery/retirada/balcão entra no MESMO pedido (mesmo número, um card, uma entrega). Mesa segue em
   // rodadas na comanda, e pedido pago por Pix automático gera um pedido ligado (outro pagamento).
   const acrescentar = Boolean(pai) && pai?.tipo !== "mesa" && !pai?.pixAutomatico;
+  // "Trocar item": junto com os itens novos, a tela manda os itens que saem do pedido (só no acréscimo).
+  const removerItens: string[] = acrescentar && Array.isArray(body?.removerItens) ? body.removerItens.filter((id: unknown): id is string => typeof id === "string").slice(0, 30) : [];
   const tipo = pai ? pai.tipo : body?.tipo;
   const mesaId = pai ? pai.mesaId : body?.mesaId;
   const clienteNome = pai ? undefined : typeof body?.clienteNome === "string" ? body.clienteNome.trim() : undefined;
@@ -194,7 +196,7 @@ export async function POST(request: NextRequest) {
   try {
     const criado = await comEstabelecimento(sessao.estabelecimentoId, async (client) => {
       const hashConteudo = createHash("sha256").update(JSON.stringify({
-        tipo, mesaId, pedidoPaiId: pai?.raizId ?? null, observacoesPedido, clienteIdInformado, clienteNome, clienteNomeAvulso, clienteTelefone, endereco, bairroId, itens: itensValidos,
+        tipo, mesaId, pedidoPaiId: pai?.raizId ?? null, removerItens, observacoesPedido, clienteIdInformado, clienteNome, clienteNomeAvulso, clienteTelefone, endereco, bairroId, itens: itensValidos,
         formaPagamento, tipoCartao, trocoPara: Number.isFinite(trocoPara) ? trocoPara : null, modalidade,
         formaRecebimento, whatsappConsentimento, pixAutomatico,
       })).digest("hex");
@@ -426,10 +428,23 @@ export async function POST(request: NextRequest) {
         // O que já estava "pronto" volta para o preparo (há item novo), e um troco que ficou menor que o total é limpo.
         await client.query(`update pedidos set status = 'em_preparo' where id = $1 and status = 'pronto'`, [pedidoId]);
         await client.query(`update pedidos set troco_para = null where id = $1 and troco_para is not null and troco_para < total`, [pedidoId]);
+        // Itens trocados saem do pedido (ficam como cancelados no histórico) e a comanda leva o aviso RETIRAR.
+        const avisos: string[] = [];
+        for (const itemRemovido of removerItens) {
+          const { rows: antigo } = await client.query<{ nome: string; quantidade: number }>(
+            `select pr.nome || case when ip.tamanho is not null then ' (' || ip.tamanho::text || ')' else '' end as nome, ip.quantidade
+               from itens_pedido ip join produtos pr on pr.id = ip.produto_id
+              where ip.id = $1 and ip.pedido_id = $2 and ip.status <> 'cancelado'`,
+            [itemRemovido, pedidoId]
+          );
+          if (!antigo[0]) throw Object.assign(new Error("O item a trocar não está mais neste pedido."), { status: 409 });
+          await client.query(`select fn_cancelar_item_pedido($1::uuid)`, [itemRemovido]);
+          avisos.push(`RETIRAR: ${antigo[0].quantidade}X ${antigo[0].nome}`);
+        }
         await client.query(
-          `insert into impressao_jobs (estabelecimento_id, pedido_id, tipo, origem, rodada)
-           select estabelecimento_id, id, 'cozinha', 'acrescimo', $2 from pedidos where id = $1 and enviado_cozinha`,
-          [pedidoId, rodada]
+          `insert into impressao_jobs (estabelecimento_id, pedido_id, tipo, origem, rodada, aviso)
+           select estabelecimento_id, id, 'cozinha', 'acrescimo', $2, $3 from pedidos where id = $1 and enviado_cozinha`,
+          [pedidoId, rodada, avisos.length ? avisos.join("\n") : null]
         );
       }
       await client.query(`select fn_comprometer_estoque_pedido($1, 'comprometido')`, [pedidoId]);

@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
              'precoUnitario', ip.preco_unitario
            ) order by ip.created_at)
            from itens_pedido ip join produtos pr on pr.id = ip.produto_id
-           where ip.pedido_id = p.id
+           where ip.pedido_id = p.id and ip.status <> 'cancelado'
          ), '[]') as itens
        from entregas en
        join pedidos p on p.id = en.pedido_id

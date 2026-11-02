@@ -159,6 +159,8 @@ export interface Pedido {
   pedidoPaiCodigo?: number;
   /** True quando este job é de um pedido adicional (acréscimo a um pedido já existente). */
   ehAdicional?: boolean;
+  /** Linhas de aviso de alteração do pedido (itens retirados/trocados), impressas no topo da comanda. */
+  aviso?: string | null;
 }
 
 export type ImpressaoJobStatus = "pendente" | "imprimindo" | "impresso" | "falhou";

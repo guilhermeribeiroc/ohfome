@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
         `select p.codigo, p.tipo, p.created_at as "createdAt", m.numero as "mesaNumero", coalesce(c.nome, p.cliente_nome_avulso) as "clienteNome",
                 p.forma_pagamento as "formaPagamento", p.tipo_cartao as "tipoCartao", p.pagamento_dividido as "pagamentoDividido",
                 p.total, p.taxa_entrega as "taxaEntrega", px.taxa as "taxaPix", px.valor_liquido as "valorLiquidoPix",
-                coalesce((select sum(ip.quantidade * coalesce(pr.preco_custo, 0)) from itens_pedido ip left join produtos pr on pr.id = ip.produto_id where ip.pedido_id = p.id), 0) as "custoProdutos"
+                coalesce((select sum(ip.quantidade * coalesce(pr.preco_custo, 0)) from itens_pedido ip left join produtos pr on pr.id = ip.produto_id where ip.pedido_id = p.id and ip.status <> 'cancelado'), 0) as "custoProdutos"
            from pedidos p
            left join comandas cm on cm.id = p.comanda_id
            left join mesas m on m.id = cm.mesa_id

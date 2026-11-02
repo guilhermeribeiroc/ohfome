@@ -122,6 +122,14 @@ export function dadosEscPosPedido(pedido: Pedido, largura = LARGURA_TICKET, cort
   const itensNovos = pedido.ehAdicional ? pedido.itens.filter((i) => i.ehNovo) : pedido.itens;
   const itensOriginais = pedido.ehAdicional ? pedido.itens.filter((i) => !i.ehNovo) : [];
 
+  if (pedido.aviso?.trim()) {
+    // Pedido alterado depois de ir para a cozinha: avisa o que mudou antes da lista atual.
+    linhas.push("\x1D\x21\x11", "\x1B\x45\x01", ...quebrarLinha("** PEDIDO ALTERADO **", larguraTotal).map((l) => `${l}\n`), "\x1B\x45\x00", "\x1D\x21\x00");
+    linhas.push(`${"-".repeat(largura)}\n`);
+    for (const linhaAviso of pedido.aviso.split("\n")) linhas.push("\x1B\x45\x01", "\x1D\x21\x01", ...quebrarLinha(linhaAviso, largura).map((l) => `${l}\n`), "\x1D\x21\x00", "\x1B\x45\x00");
+    linhas.push(`${"-".repeat(largura)}\n`);
+  }
+
   if (pedido.ehAdicional) {
     linhas.push("\x1D\x21\x11", "\x1B\x45\x01", ...quebrarLinha("** PEDIDO ATUALIZADO **", larguraTotal).map((l) => `${l}\n`), "\x1B\x45\x00", "\x1D\x21\x00");
     linhas.push(`${"-".repeat(largura)}\n`);
